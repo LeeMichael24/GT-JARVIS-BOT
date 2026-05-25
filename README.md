@@ -1,36 +1,120 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GT Bot — WhatsApp AI para Grupo Terranova SV
 
-## Getting Started
+Bot de WhatsApp que atiende leads como "Daniela", asesora virtual de Grupo Terranova. Califica leads automáticamente con Claude Sonnet y guarda todo en Supabase.
 
-First, run the development server:
+## Stack
+
+- **Next.js 14** (App Router) en Vercel
+- **Claude Sonnet** (`claude-sonnet-4-6`) via Anthropic API
+- **WhatsApp Cloud API** (Meta)
+- **Supabase** (PostgreSQL)
+- **grupoterranovasv.com/api** para contexto de proyectos
+
+## Setup rápido
+
+### 1. Cuentas necesarias
+
+| Servicio | Dónde crear | Costo |
+|----------|------------|-------|
+| Meta for Developers | developers.facebook.com | Gratis |
+| Anthropic | console.anthropic.com | Pay-as-you-go |
+| Supabase | supabase.com | Free tier disponible |
+| Vercel | vercel.com | Hobby $20/mes recomendado |
+
+### 2. WhatsApp Cloud API
+
+1. Ir a https://developers.facebook.com → Create App → Business
+2. Agregar el producto "WhatsApp"
+3. En **API Setup**: copiar el Phone Number ID y generar un Access Token permanente
+4. En **App Settings → Basic**: copiar el App Secret
+5. El webhook URL se configura después del deploy (Paso 6)
+
+### 3. Base de datos (Supabase)
+
+1. Crear proyecto en https://supabase.com
+2. Ir a **SQL Editor → New Query**
+3. Pegar el contenido de `database/schema.sql` y ejecutar
+4. Ir a **Settings → API** y copiar `Project URL` y `service_role` key
+
+### 4. Variables de entorno local
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
+# Editar .env.local con los valores reales
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 5. Deploy a Vercel
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install -g vercel
+vercel login
+vercel --prod
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Después del deploy, copiar la URL del proyecto (e.g. `https://gt-bot.vercel.app`).
 
-## Learn More
+### 6. Configurar el webhook en Meta
 
-To learn more about Next.js, take a look at the following resources:
+1. Meta for Developers → tu App → WhatsApp → Configuration
+2. **Callback URL**: `https://tu-url.vercel.app/api/webhook/whatsapp`
+3. **Verify Token**: el valor que pusiste en `WA_WEBHOOK_VERIFY_TOKEN`
+4. Click en **Verify and Save**
+5. Suscribirse al campo `messages`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 7. Variables de entorno en Vercel
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+En Vercel → tu proyecto → Settings → Environment Variables, agregar todas las variables de `.env.example` con sus valores reales.
 
-## Deploy on Vercel
+### 8. Test del flujo completo
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Enviar un mensaje de WhatsApp al número configurado y verificar en Supabase → Table Editor:
+- ✅ `leads`: nuevo registro con el número del remitente
+- ✅ `conversations`: 2 filas (user + assistant)
+- ✅ `leads.stage` actualizado según la calificación de Claude
+- ✅ Daniela responde en WhatsApp
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Desarrollo local con ngrok
+
+```bash
+# Terminal 1: Next.js dev server
+npm run dev
+
+# Terminal 2: túnel público
+ngrok http 3000
+```
+
+Usar la URL de ngrok como Callback URL en Meta durante el desarrollo.
+
+## Tests
+
+```bash
+npm run test:run   # todos los tests una vez (34 tests)
+npm run test       # modo watch
+```
+
+## Estructura del código
+
+| Archivo | Responsabilidad |
+|---------|----------------|
+| `app/api/webhook/whatsapp/route.ts` | Recibe y procesa webhooks de WhatsApp |
+| `services/whatsapp/webhook.ts` | Parsea el payload del webhook, verifica firma HMAC |
+| `services/whatsapp/client.ts` | Envía mensajes con typing delay realista |
+| `services/claude/client.ts` | Llama a Claude Sonnet, parsea respuesta JSON |
+| `services/claude/prompts.ts` | Construye el prompt de Daniela con contexto dinámico |
+| `services/projects/gt-api.ts` | Fetch de proyectos desde grupoterranovasv.com |
+| `services/projects/cache.ts` | Cache en memoria con TTL (1 hora para proyectos) |
+| `lib/supabase.ts` | Todas las queries a la base de datos |
+| `types/index.ts` | Tipos TypeScript compartidos |
+| `database/schema.sql` | Schema de Supabase (ejecutar manualmente) |
+
+## Roadmap post-MVP
+
+| Fase | Feature |
+|------|---------|
+| B | Rich media — PDFs y brochures por proyecto |
+| B | Handoff humano — pausar bot, notificar asesor |
+| C | Google Calendar — agendamiento de citas + Meet |
+| D | Meta CAPI — atribución de leads calificados |
+| D | Re-contacto automático — cola de seguimiento |
+| E | Dashboard Next.js — CRM con Supabase realtime |
+| F | n8n — migrar flujos para configuración visual |
