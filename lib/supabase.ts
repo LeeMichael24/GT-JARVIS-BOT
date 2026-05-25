@@ -1,12 +1,15 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Lead, Conversation } from '@/types'
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getSupabase() {
+  return createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
 
 export async function upsertLead(phone: string): Promise<Lead> {
+  const supabase = getSupabase()
   const { data: existing } = await supabase
     .from('leads')
     .select('*')
@@ -35,6 +38,7 @@ export async function updateLead(
   id: string,
   updates: Partial<Pick<Lead, 'stage' | 'name' | 'qualification_data' | 'project_interest' | 'last_message_at'>>
 ): Promise<void> {
+  const supabase = getSupabase()
   const { error } = await supabase
     .from('leads')
     .update(updates)
@@ -49,6 +53,7 @@ export async function saveConversation(params: {
   content: string
   waMessageId?: string
 }): Promise<void> {
+  const supabase = getSupabase()
   const { error } = await supabase
     .from('conversations')
     .insert({
@@ -65,6 +70,7 @@ export async function saveConversation(params: {
 }
 
 export async function getConversationHistory(leadId: string, limit = 15): Promise<Conversation[]> {
+  const supabase = getSupabase()
   const { data, error } = await supabase
     .from('conversations')
     .select('*')
@@ -77,6 +83,7 @@ export async function getConversationHistory(leadId: string, limit = 15): Promis
 }
 
 export async function isMessageProcessed(waMessageId: string): Promise<boolean> {
+  const supabase = getSupabase()
   const { data } = await supabase
     .from('conversations')
     .select('id')

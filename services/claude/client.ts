@@ -1,8 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { ClaudeResponse, Conversation, QualificationData } from '@/types'
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
 const MODEL = 'claude-sonnet-4-6'
 const MAX_TOKENS = 1024
 
@@ -10,6 +8,7 @@ export async function callClaude(
   systemPrompt: string,
   history: Conversation[]
 ): Promise<string> {
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   const messages = history.map(msg => ({
     role: msg.role as 'user' | 'assistant',
     content: msg.content,
