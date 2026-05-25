@@ -1,29 +1,31 @@
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 import type { ClaudeResponse, Conversation, QualificationData } from '@/types'
 
-const MODEL = 'claude-sonnet-4-6'
+const MODEL = 'gpt-4o'
 const MAX_TOKENS = 1024
 
 export async function callClaude(
   systemPrompt: string,
   history: Conversation[]
 ): Promise<string> {
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  const messages = history.map(msg => ({
-    role: msg.role as 'user' | 'assistant',
-    content: msg.content,
-  }))
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt },
+    ...history.map(msg => ({
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+    })),
+  ]
 
-  const response = await anthropic.messages.create({
+  const response = await openai.chat.completions.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
-    system: systemPrompt,
     messages,
   })
 
-  const block = response.content[0]
-  if (block.type !== 'text') throw new Error('Claude returned non-text response')
-  return block.text
+  const content = response.choices[0]?.message?.content
+  if (!content) throw new Error('OpenAI returned empty response')
+  return content
 }
 
 export function parseClaudeResponse(raw: string): ClaudeResponse {
