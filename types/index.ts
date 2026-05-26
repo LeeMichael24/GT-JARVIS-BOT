@@ -51,6 +51,7 @@ export interface GTProject {
   deliveryDate?: string
   description: string
   status: string
+  entityType?: 'project' | 'residency' | 'investment'
 }
 
 export interface ClaudeResponse {

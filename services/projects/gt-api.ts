@@ -15,24 +15,17 @@ function gtApiHeaders(): Record<string, string> {
 
 export async function getAllProjects(): Promise<GTProject[]> {
   return projectsCache.get('all', async () => {
-    const url = `${gtApiUrl()}/projects?status=active`
-    console.log('[gt-api] Fetching projects from:', url)
+    const url = `${gtApiUrl()}/listings`
     const res = await fetch(url, { headers: gtApiHeaders() })
-    console.log('[gt-api] Response status:', res.status, res.statusText)
-    if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      console.error('[gt-api] Error body:', body)
-      throw new Error(`GT API error: ${res.status} ${res.statusText}`)
-    }
-    const data = await res.json() as { projects?: GTProject[] } | GTProject[]
-    console.log('[gt-api] Projects received:', Array.isArray(data) ? data.length : (data as { projects?: GTProject[] }).projects?.length ?? 0)
-    return Array.isArray(data) ? data : (data.projects ?? [])
+    if (!res.ok) throw new Error(`GT API error: ${res.status} ${res.statusText}`)
+    const data = await res.json() as GTProject[]
+    return Array.isArray(data) ? data : []
   })
 }
 
 export async function getProjectBySlug(slug: string): Promise<GTProject | null> {
   return projectCache.get(slug, async () => {
-    const res = await fetch(`${gtApiUrl()}/projects/${slug}`, {
+    const res = await fetch(`${gtApiUrl()}/listings/${slug}`, {
       headers: gtApiHeaders(),
     })
     if (res.status === 404) return null
