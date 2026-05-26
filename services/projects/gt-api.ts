@@ -39,9 +39,8 @@ export function detectProjectFromMessage(message: string, projects: GTProject[])
   const msg = message.toLowerCase()
   const match = projects.find(p => {
     const nameMatch = msg.includes(p.name.toLowerCase())
-    const slugWords = p.slug.replace(/-/g, ' ')
-    const slugMatch = msg.includes(slugWords)
-    // Also check individual words from the name (min 4 chars to avoid noise)
+    const slugWords = p.slug ? p.slug.replace(/-/g, ' ') : ''
+    const slugMatch = slugWords ? msg.includes(slugWords) : false
     const nameWords = p.name.toLowerCase().split(/\s+/).filter(w => w.length >= 4)
     const wordMatch = nameWords.some(w => msg.includes(w))
     return nameMatch || slugMatch || wordMatch
