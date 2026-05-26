@@ -116,6 +116,7 @@ async function processMessage(payload: unknown): Promise<void> {
     console.log(`[processMessage] Done — lead ${lead.id} | stage: ${claudeResponse.stage} | qualified: ${claudeResponse.qualified}`)
   } catch (error) {
     // Log but don't rethrow — we already sent 200 OK to WhatsApp
-    console.error('[processMessage] Unhandled error:', error)
+    console.error('[processMessage] Unhandled error:', error instanceof Error ? error.message : error)
+    if (error instanceof Error) console.error('[processMessage] Stack:', error.stack)
   }
 }

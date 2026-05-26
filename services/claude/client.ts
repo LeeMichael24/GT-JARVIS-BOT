@@ -21,6 +21,7 @@ export async function callClaude(
     model: MODEL,
     max_tokens: MAX_TOKENS,
     messages,
+    response_format: { type: 'json_object' },
   })
 
   const content = response.choices[0]?.message?.content
