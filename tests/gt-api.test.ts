@@ -23,6 +23,18 @@ const projects: GTProject[] = [
     description: 'Casas en zona verde.',
     status: 'active',
   },
+  {
+    slug: undefined as unknown as string,
+    name: 'Proyecto Foresta Townhomes - El Encanto',
+    type: 'inversion',
+    priceFrom: 576200,
+    priceTo: 704000,
+    currency: 'USD',
+    location: 'San José Villanueva',
+    description: 'Townhomes de lujo con amenidades de golf.',
+    status: 'active',
+    entityType: 'investment',
+  },
 ]
 
 describe('detectProjectFromMessage', () => {
@@ -48,6 +60,28 @@ describe('detectProjectFromMessage', () => {
 
   it('returns null when project list is empty', () => {
     const result = detectProjectFromMessage('hola', [])
+    expect(result).toBeNull()
+  })
+
+  // ─── Synonym normalisation ───────────────────────────────
+  it('matches "townhouses" to project named "Townhomes"', () => {
+    const result = detectProjectFromMessage('dame mas detalles sobre el de los townhouses', projects)
+    expect(result?.name).toBe('Proyecto Foresta Townhomes - El Encanto')
+  })
+
+  it('matches "town houses" (two words) to project named "Townhomes"', () => {
+    const result = detectProjectFromMessage('info sobre los town houses foresta', projects)
+    expect(result?.name).toBe('Proyecto Foresta Townhomes - El Encanto')
+  })
+
+  it('matches by significant word "foresta" in project name', () => {
+    const result = detectProjectFromMessage('quiero mas info sobre los de foresta porfavor', projects)
+    expect(result?.name).toBe('Proyecto Foresta Townhomes - El Encanto')
+  })
+
+  it('does not match on generic words shorter than 4 chars', () => {
+    // "los", "de", "el" are < 4 chars and should not trigger a match
+    const result = detectProjectFromMessage('los de el', projects)
     expect(result).toBeNull()
   })
 })

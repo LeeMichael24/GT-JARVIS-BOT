@@ -42,15 +42,25 @@ const CONTINUATION_STARTS = [
 
 const INVESTMENT_SIGNALS = [
   'roi', 'rendimiento', 'retorno', 'rentabilidad',
+  // annual / yield queries
   'renta anual', 'inversión anual', 'inversion anual',
+  'retorno anual', 'porcentaje anual', 'porcentaje de retorno',
+  // how-much questions
   'cuánto genera', 'cuanto genera', 'cuánto produce', 'cuanto produce',
   'cuánto gano', 'cuanto gano', 'cuánto me da', 'cuanto me da',
   'cuánto rinde', 'cuanto rinde',
-  'airbnb', 'alquiler vacacional', 'turismo', 'renta corta', 'renta larga',
+  // investment purpose variants (as / for / of investment)
+  'para inversión', 'para inversion',
+  'como inversión', 'como inversion',
+  'de inversión', 'de inversion',
+  'es inversión', 'es inversion',
+  // rental / airbnb
+  'airbnb', 'alquiler vacacional', 'turismo vacacional',
+  'renta corta', 'renta larga',
   'inquilino', 'flujo mensual', 'cash flow',
+  // value appreciation
   'plusvalía', 'plusvalia', 'revalorización', 'revalorizacion',
-  'ganancia', 'utilidad', 'porcentaje de retorno', 'porcentaje anual',
-  'para inversión', 'para inversion', 'inversión anual', 'inversion anual',
+  'ganancia', 'utilidad', 'dividendo',
 ]
 
 const CATALOG_SIGNALS = [

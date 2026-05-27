@@ -64,7 +64,7 @@ describe('classifyIntent — continuation', () => {
 // ─────────────────────────────────────────────────────────────
 
 describe('classifyIntent — investment_query', () => {
-  it('detects ROI query', () => {
+  it('detects "para inversión anual" query', () => {
     expect(classifyIntent('para inversión anual no tienes?', noHistory)).toBe('investment_query')
   })
 
@@ -86,6 +86,19 @@ describe('classifyIntent — investment_query', () => {
 
   it('detects "cuánto genera" query', () => {
     expect(classifyIntent('cuánto genera al mes?', noHistory)).toBe('investment_query')
+  })
+
+  // New variants added in v3
+  it('detects "como inversión" (as investment) query', () => {
+    expect(classifyIntent('como inversión no tienes?', noHistory)).toBe('investment_query')
+  })
+
+  it('detects "como inversion" (sin acento)', () => {
+    expect(classifyIntent('como inversion', noHistory)).toBe('investment_query')
+  })
+
+  it('detects "de inversión" query', () => {
+    expect(classifyIntent('algo de inversión tienes?', noHistory)).toBe('investment_query')
   })
 })
 

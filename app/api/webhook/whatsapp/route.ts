@@ -101,8 +101,9 @@ async function processMessage(payload: unknown): Promise<void> {
         ? (projects.find(p => p.name === lead.project_interest) ?? null)
         : null)
 
-    // Save project interest on first detection
-    if (detectedProject && !lead.project_interest) {
+    // Update project interest whenever a new project is explicitly detected
+    // (allows topic switching when user mentions a different project)
+    if (detectedProject && detectedProject.name !== lead.project_interest) {
       await updateLead(lead.id, { project_interest: detectedProject.name })
     }
 

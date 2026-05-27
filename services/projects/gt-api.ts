@@ -34,16 +34,50 @@ export async function getProjectBySlug(slug: string): Promise<GTProject | null> 
   })
 }
 
+/**
+ * Canonicalises common spelling/synonym variants so that
+ * "townhouses" matches a project named "Townhomes", etc.
+ */
+const SYNONYMS: [RegExp, string][] = [
+  [/\btownhouses?\b/g, 'townhomes'],
+  [/\btown\s+homes?\b/g, 'townhomes'],
+  [/\btown\s+houses?\b/g, 'townhomes'],
+  [/\bportaceli\b/g, 'portacelli'],       // common typo
+  [/\bterranova\b/g, 'terranova'],        // already canonical, kept for consistency
+  [/\bquintas?\b/g, 'quinta'],
+]
+
+function normalise(text: string): string {
+  let t = text.toLowerCase()
+  for (const [pattern, replacement] of SYNONYMS) {
+    t = t.replace(pattern, replacement)
+  }
+  return t
+}
+
 export function detectProjectFromMessage(message: string, projects: GTProject[]): GTProject | null {
   if (!projects.length) return null
-  const msg = message.toLowerCase()
+
+  const msg = normalise(message)
+
   const match = projects.find(p => {
-    const nameMatch = msg.includes(p.name.toLowerCase())
-    const slugWords = p.slug ? p.slug.replace(/-/g, ' ') : ''
-    const slugMatch = slugWords ? msg.includes(slugWords) : false
-    const nameWords = p.name.toLowerCase().split(/\s+/).filter(w => w.length >= 4)
-    const wordMatch = nameWords.some(w => msg.includes(w))
-    return nameMatch || slugMatch || wordMatch
+    const normName = normalise(p.name)
+
+    // 1. Full name match
+    if (msg.includes(normName)) return true
+
+    // 2. Slug words match (e.g. "portacelli nuevo cuscatlan")
+    if (p.slug) {
+      const slugWords = p.slug.replace(/-/g, ' ')
+      if (msg.includes(slugWords)) return true
+    }
+
+    // 3. Significant word match (words ≥ 4 chars from the project name)
+    const nameWords = normName.split(/\s+/).filter(w => w.length >= 4)
+    if (nameWords.some(w => msg.includes(w))) return true
+
+    return false
   })
+
   return match ?? null
 }

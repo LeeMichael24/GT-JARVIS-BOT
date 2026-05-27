@@ -118,8 +118,8 @@ describe('buildSystemPrompt — project focus', () => {
       project: null,
       projects: [mockProject, investmentProject],
     })
-    expect(prompt).toContain('RESIDENCIALES')
-    expect(prompt).toContain('INVERSIÓN')
+    expect(prompt).toContain('COMPRA RESIDENCIAL')
+    expect(prompt).toContain('INVERSIÓN / ROI')
   })
 })
 
@@ -196,5 +196,66 @@ describe('buildSystemPrompt — no catalog', () => {
     const prompt = buildSystemPrompt({ lead: mockLead, project: null, projects: [] })
     expect(prompt).toContain('Grupo Terranova')
     expect(prompt).not.toContain('Portacelli')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// History poisoning disclaimer
+// ─────────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — history poisoning guard', () => {
+  it('always includes FUENTE DE VERDAD disclaimer', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+    expect(prompt).toContain('FUENTE DE VERDAD')
+    expect(prompt).toContain('ÚNICA fuente válida')
+  })
+
+  it('instructs to ignore history inaccuracies', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+    expect(prompt).toContain('historial puede contener errores')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Price type labels
+// ─────────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — price type clarity', () => {
+  const rentalProject: GTProject = {
+    slug: 'local-escalon',
+    name: 'Local Escalón',
+    type: 'alquiler',
+    priceFrom: 1400,
+    currency: 'USD',
+    location: 'San Salvador',
+    description: 'Local comercial en alquiler.',
+    status: 'active',
+  }
+
+  it('labels rental price with /mes in catalog', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, projects: [rentalProject] })
+    expect(prompt).toContain('/mes')
+    expect(prompt).toContain('ALQUILER MENSUAL')
+  })
+
+  it('labels rental price in focus block', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: rentalProject, projects: [rentalProject] })
+    expect(prompt).toContain('Renta mensual')
+    expect(prompt).toContain('/mes')
+  })
+
+  it('separates purchase properties from rental in catalog', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: null,
+      projects: [mockProject, rentalProject],
+    })
+    expect(prompt).toContain('ALQUILER MENSUAL')
+    expect(prompt).toContain('COMPRA RESIDENCIAL')
+  })
+
+  it('includes price type warning about incomparable prices', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+    expect(prompt).toContain('INCOMPARABLES')
   })
 })
