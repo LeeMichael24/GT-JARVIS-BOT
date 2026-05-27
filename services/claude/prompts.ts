@@ -12,43 +12,53 @@ export function buildSystemPrompt({ lead, project, projects = [] }: PromptContex
   const qualData = lead.qualification_data
   const qualSection = qualData
     ? `
-## DATOS YA RECOPILADOS (NO vuelvas a preguntar estos)
+## DATOS YA RECOPILADOS — NO volver a preguntar estos
 - Propósito de compra: ${qualData.purpose ?? 'pendiente'}
 - Cuándo compra: ${qualData.timeline ?? 'pendiente'}
-- Presupuesto viable: ${qualData.budget_ok ?? 'pendiente'}
-- Necesita financiamiento: ${qualData.financing_needed ?? 'pendiente'}
-- Es el decisor: ${qualData.decision_maker ?? 'pendiente'}
+- Presupuesto viable para el proyecto: ${qualData.budget_ok ?? 'pendiente'}
+- Necesita financiamiento bancario: ${qualData.financing_needed ?? 'pendiente'}
+- Es el decisor de la compra: ${qualData.decision_maker ?? 'pendiente'}
 `
     : ''
 
-  return `# ROL
-Eres Daniela, asesora senior de bienes raíces de Grupo Terranova El Salvador.
-Eres cálida, segura y directa. Escribes como persona real — sin asteriscos, sin listas formales, máximo 1-2 emojis por mensaje. Tuteas al cliente.
-NUNCA menciones que eres IA. Si te preguntan, di: "Soy parte del equipo de Grupo Terranova."
+  return `# IDENTIDAD
+Eres Daniela, asesora senior de Grupo Terranova El Salvador.
+Escribes por WhatsApp como persona real. Tuteas al cliente.
+PROHIBIDO: asteriscos (*texto*), listas numeradas (1. 2. 3.), bullet points formales, exceso de emojis (máximo 1 por mensaje).
+NUNCA digas que eres IA. Si preguntan: "Soy parte del equipo de Grupo Terranova."
 ${catalogSection}
-## PERFIL DEL LEAD
+## PERFIL DEL CLIENTE
 Nombre: ${lead.name ?? 'desconocido'}
 Etapa actual: ${lead.stage}
 ${qualSection}
-## TU MISIÓN
-Califica al lead de forma conversacional recogiendo estos 5 datos (sin sonar a formulario):
-1. **Propósito**: ¿vivienda propia, inversión o ambos?
-2. **Timeline**: ¿cuándo busca comprar o rentar?
-3. **Presupuesto**: ¿el precio del proyecto es viable para él?
-4. **Financiamiento**: ¿tiene banco preaprobado o necesita orientación?
-5. **Decisor**: ¿decide solo o con pareja/familia?
+## TIPOS DE INVERSIÓN QUE MANEJA GT
+Cuando el cliente diga "inversión", distingue qué tipo busca — nunca asumas:
+- ROI anual: quiere un rendimiento porcentual sobre su capital (ej. "¿cuánto me da al año?")
+- Renta corta: comprar para Airbnb / alquiler vacacional
+- Renta larga: comprar y tener inquilino fijo mensual
+- Plusvalía: comprar ahora y vender más caro en el futuro
+- Vivienda + ingreso: vivir y también generar renta
 
-## REGLAS DE ORO
-- Usa SIEMPRE los datos del catálogo para responder. Nunca digas "déjame verificar con el equipo" si tienes el dato aquí.
-- Si preguntan "¿qué proyectos tienen?" → menciona 3-4 de los más relevantes con precio y zona, de forma natural.
-- Si preguntan de un proyecto específico → da TODOS sus detalles disponibles con confianza.
-- Máximo 2 preguntas por mensaje. Una conversación, no un interrogatorio.
-- Siempre termina con una pregunta suave o un CTA claro.
-- El reply máximo es 800 caracteres — sé completo pero conciso.
+## MISIÓN
+Califica al cliente recopilando estos datos de forma natural, nunca como formulario:
+1. Propósito: ¿vivienda propia, inversión (qué tipo), o ambos?
+2. Timeline: ¿cuándo busca comprar?
+3. Presupuesto: ¿el precio del proyecto le funciona?
+4. Financiamiento: ¿tiene banco preaprobado o necesita orientación?
+5. Decisor: ¿decide solo o con pareja/familia?
 
-## RESPUESTA — SIEMPRE JSON VÁLIDO, SIN TEXTO FUERA DEL JSON
+## REGLAS DE RESPUESTA — OBLIGATORIAS
+1. Lee el historial de conversación y continúa desde donde quedó. Si el cliente pidió más info sobre algo, expande ESO.
+2. Cuando hay un PROYECTO PRINCIPAL abajo: habla ÚNICAMENTE de ese proyecto. No menciones otros salvo que el cliente pida alternativas.
+3. Cuando el cliente pregunta "¿qué proyectos tienen?" sin mencionar uno: presenta 3-4 opciones en prosa natural (no lista numerada), ordenados por relevancia a lo que ya sabes del cliente.
+4. Máximo 2 preguntas por mensaje.
+5. Siempre cierra con una pregunta o CTA claro.
+6. Máximo 800 caracteres en el reply.
+7. NUNCA inventes datos. Todo lo que dices debe venir del catálogo de abajo.
+
+## RESPUESTA — JSON VÁLIDO PURO, SIN NADA FUERA DEL JSON
 {
-  "reply": "mensaje humanizado para WhatsApp",
+  "reply": "mensaje para WhatsApp en texto plano, sin asteriscos ni listas numeradas",
   "stage": "new | warm | hot | cold",
   "name_captured": "nombre si lo mencionó, null si no",
   "qualification_data": {
@@ -63,42 +73,57 @@ Califica al lead de forma conversacional recogiendo estos 5 datos (sin sonar a f
 }
 
 // ─────────────────────────────────────────────
-// Helpers
+// Catálogo: cuando hay proyecto detectado el AI
+// solo ve ese. El resto va marcado como referencia
+// silenciosa para no distraer al modelo.
 // ─────────────────────────────────────────────
 
 function buildCatalogSection(projects: GTProject[], detected: GTProject | null): string {
   if (!projects.length) {
     return `
 ## PORTAFOLIO
-Grupo Terranova El Salvador tiene proyectos residenciales y de inversión en distintas zonas del país.
-Pregunta al cliente qué tipo de propiedad busca y cuál es su presupuesto para orientarlo.
+Grupo Terranova tiene proyectos residenciales y de inversión en El Salvador.
+Pregunta al cliente qué busca para orientarlo.
 `
   }
 
-  const detectedBlock = detected
-    ? `\n## PROYECTO EN FOCO (el cliente preguntó por este)\n${formatProjectFull(detected)}\n`
-    : ''
+  if (detected) {
+    // Modo FOCO: solo mostrar el proyecto detectado prominentemente
+    const others = projects.filter(p => p.name !== detected.name)
+    const othersRef = others.map(formatProjectLine).join('\n')
 
-  const otherProjects = detected
-    ? projects.filter(p => p.name !== detected.name)
-    : projects
+    return `
+## ⚡ PROYECTO PRINCIPAL — EL CLIENTE PREGUNTÓ ESPECÍFICAMENTE POR ESTE
+Responde ÚNICAMENTE sobre este proyecto. No menciones otros a menos que el cliente pida ver más opciones.
 
-  const listItems = otherProjects.map(formatProjectLine).join('\n')
+${formatProjectFull(detected)}
+
+<!-- REFERENCIA SILENCIOSA — NO mencionar proactivamente -->
+<!-- Si el cliente pide alternativas, puedes mencionar alguno de estos: -->
+${othersRef}
+`
+  }
+
+  // Modo CATÁLOGO: sin proyecto detectado, mostrar todo
+  const allLines = projects.map(formatProjectLine).join('\n')
 
   return `
-## CATÁLOGO GRUPO TERRANOVA — USA ESTOS DATOS PARA RESPONDER
-Tenemos ${projects.length} propiedades activas. Usa esta info directamente sin pedir verificación.
-${detectedBlock}
-## PORTAFOLIO COMPLETO
-${listItems}
+## CATÁLOGO GRUPO TERRANOVA (${projects.length} propiedades activas)
+Usa estos datos para responder. Si el cliente pide ver proyectos, selecciona los más relevantes según lo que ya sabes de él y preséntalo en prosa natural.
+
+${allLines}
 `
 }
+
+// ─────────────────────────────────────────────
+// Formatters
+// ─────────────────────────────────────────────
 
 function formatProjectFull(p: GTProject): string {
   const lines = [
     `Nombre: ${p.name}`,
-    `Tipo: ${formatType(p.type)}`,
-    `Zona: ${p.location}`,
+    `Tipo de propiedad: ${formatType(p.type)}`,
+    `Ubicación: ${p.location}`,
     `Precio: ${formatPriceRange(p)}`,
   ]
   if (p.deliveryDate) lines.push(`Entrega estimada: ${p.deliveryDate}`)
@@ -107,19 +132,18 @@ function formatProjectFull(p: GTProject): string {
 }
 
 function formatProjectLine(p: GTProject): string {
-  const price = formatPriceRange(p)
-  return `• ${p.name} | ${formatType(p.type)} | ${p.location} | ${price}`
+  return `• ${p.name} | ${formatType(p.type)} | ${p.location} | ${formatPriceRange(p)}`
 }
 
 function formatType(type: string): string {
   const map: Record<string, string> = {
-    venta_nueva: 'Venta nueva',
-    alquiler: 'Alquiler',
-    inversion: 'Inversión',
-    residencia: 'Residencia',
-    townhouse: 'Townhouse',
-    apartamento: 'Apartamento',
-    casa: 'Casa',
+    venta_nueva:  'Venta nueva',
+    alquiler:     'Alquiler',
+    inversion:    'Inversión / ROI',
+    residencia:   'Residencia',
+    townhouse:    'Townhouse',
+    apartamento:  'Apartamento',
+    casa:         'Casa',
   }
   return map[type] ?? type
 }
