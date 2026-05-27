@@ -28,58 +28,144 @@ const mockProject: GTProject = {
   status: 'active',
 }
 
-describe('buildSystemPrompt', () => {
-  it('includes project name in the prompt when project is the focus', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
-    expect(prompt).toContain('Portacelli Nuevo Cuscatlán')
+const secondProject: GTProject = {
+  slug: 'quintas-campestres',
+  name: 'Quintas Campestres',
+  type: 'venta_nueva',
+  priceFrom: 75000,
+  location: 'Sonsonate',
+  description: 'Casas en zona verde.',
+  status: 'active',
+}
+
+const investmentProject: GTProject = {
+  slug: 'foresta-townhomes',
+  name: 'Foresta Townhomes',
+  type: 'inversion',
+  priceFrom: 400000,
+  priceTo: 700000,
+  currency: 'USD',
+  location: 'San José Villanueva',
+  description: 'Townhouses de lujo con potencial de renta vacacional.',
+  status: 'active',
+  entityType: 'investment',
+}
+
+// ─────────────────────────────────────────────────────────────
+// Identity & format
+// ─────────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — identity and format', () => {
+  it('includes Daniela identity', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+    expect(prompt).toContain('Daniela')
+    expect(prompt).toContain('Grupo Terranova')
   })
 
-  it('includes formatted price range for detected project', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
-    expect(prompt).toContain('95,000')
-    expect(prompt).toContain('180,000')
+  it('includes format prohibition (asterisks and numbered lists)', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+    expect(prompt).toContain('PROHIBIDO')
+    expect(prompt).toContain('asteriscos')
   })
 
   it('includes lead name when known', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
     expect(prompt).toContain('Carlos')
   })
 
   it('uses "desconocido" when lead has no name', () => {
-    const leadNoName = { ...mockLead, name: null }
-    const prompt = buildSystemPrompt({ lead: leadNoName, project: mockProject, projects: [mockProject] })
+    const prompt = buildSystemPrompt({ lead: { ...mockLead, name: null }, project: null })
     expect(prompt).toContain('desconocido')
   })
 
-  it('includes required JSON response fields in instructions', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
+  it('includes JSON response fields', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
     expect(prompt).toContain('"reply"')
     expect(prompt).toContain('"stage"')
     expect(prompt).toContain('"qualified"')
     expect(prompt).toContain('"qualification_data"')
   })
+})
 
-  it('includes generic GT context when no project and empty catalog', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: null, projects: [] })
-    expect(prompt).toContain('Grupo Terranova')
-    expect(prompt).not.toContain('Portacelli')
+// ─────────────────────────────────────────────────────────────
+// Project focus — critical: no other project data when focused
+// ─────────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — project focus', () => {
+  it('includes focus project details', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject, secondProject] })
+    expect(prompt).toContain('Portacelli Nuevo Cuscatlán')
+    expect(prompt).toContain('95,000')
+    expect(prompt).toContain('180,000')
   })
 
-  it('lists all catalog projects when no specific project is detected', () => {
-    const secondProject: GTProject = {
-      slug: 'quintas-campestres',
-      name: 'Quintas Campestres',
-      type: 'venta_nueva',
-      priceFrom: 75000,
-      location: 'Sonsonate',
-      description: 'Casas en zona verde.',
-      status: 'active',
-    }
+  it('does NOT include other project data when there is a focus project', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject, secondProject] })
+    // Focus is Portacelli — Quintas should NOT appear in the prompt body
+    expect(prompt).not.toContain('Quintas Campestres')
+    expect(prompt).not.toContain('Sonsonate')
+  })
+
+  it('shows catalog when no focus project', () => {
     const prompt = buildSystemPrompt({ lead: mockLead, project: null, projects: [mockProject, secondProject] })
     expect(prompt).toContain('Portacelli Nuevo Cuscatlán')
     expect(prompt).toContain('Quintas Campestres')
   })
 
+  it('separates residential from investment in catalog mode', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: null,
+      projects: [mockProject, investmentProject],
+    })
+    expect(prompt).toContain('RESIDENCIALES')
+    expect(prompt).toContain('INVERSIÓN')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Intent instructions
+// ─────────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — intent instructions', () => {
+  it('includes continuation instruction when intent is continuation', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, intent: 'continuation' })
+    expect(prompt).toContain('CONTINUACIÓN')
+    expect(prompt).toContain('NO reinicies')
+  })
+
+  it('includes last bot message in continuation context', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: mockProject,
+      intent: 'continuation',
+      lastBotMessage: 'Te interesa visitar el proyecto?',
+    })
+    expect(prompt).toContain('Te interesa visitar el proyecto?')
+  })
+
+  it('includes investment guidance when intent is investment_query', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, intent: 'investment_query' })
+    expect(prompt).toContain('INVERSIÓN')
+    expect(prompt).toContain('ROI')
+  })
+
+  it('includes catalog instruction when intent is catalog_request', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, intent: 'catalog_request' })
+    expect(prompt).toContain('CATÁLOGO')
+  })
+
+  it('includes no special instruction block for general intent', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, intent: 'general' })
+    expect(prompt).not.toContain('INSTRUCCIÓN DE ESTE TURNO')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Qualification data
+// ─────────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — qualification data', () => {
   it('includes already-qualified data when present', () => {
     const leadWithData = {
       ...mockLead,
@@ -89,9 +175,26 @@ describe('buildSystemPrompt', () => {
         timeline: null,
         financing_needed: null,
         decision_maker: null,
-      }
+      },
     }
-    const prompt = buildSystemPrompt({ lead: leadWithData, project: mockProject, projects: [mockProject] })
+    const prompt = buildSystemPrompt({ lead: leadWithData, project: mockProject })
     expect(prompt).toContain('inversion')
+  })
+
+  it('does not include qualification block when no data', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+    expect(prompt).not.toContain('NO volver a preguntar')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Fallback (no projects loaded)
+// ─────────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — no catalog', () => {
+  it('gives generic GT context when no projects and no focus', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, projects: [] })
+    expect(prompt).toContain('Grupo Terranova')
+    expect(prompt).not.toContain('Portacelli')
   })
 })

@@ -2,6 +2,7 @@ import { waitUntil } from '@vercel/functions'
 import { parseWebhook, verifySignature } from '@/services/whatsapp/webhook'
 import { callClaude, parseClaudeResponse } from '@/services/claude/client'
 import { buildSystemPrompt } from '@/services/claude/prompts'
+import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
 import { sendText } from '@/services/whatsapp/client'
 import {
@@ -84,7 +85,13 @@ async function processMessage(payload: unknown): Promise<void> {
       console.warn('[processMessage] Could not fetch GT projects, continuing without context:', err)
     }
 
-    // 7. Detect which project the lead is asking about in this message
+    // 7. Classify the message intent and extract conversation state
+    const intent = classifyIntent(parsed.body, history)
+    const lastBotMessage = extractLastBotMessage(history)
+
+    console.log(`[processMessage] Intent: ${intent} | History length: ${history.length}`)
+
+    // 8. Detect which project the lead is asking about in this message
     const detectedProject = detectProjectFromMessage(parsed.body, projects)
 
     // Fallback: if nothing detected in this message but lead has a prior interest, restore it
@@ -99,12 +106,14 @@ async function processMessage(payload: unknown): Promise<void> {
       await updateLead(lead.id, { project_interest: detectedProject.name })
     }
 
-    // 8. Build the Daniela system prompt with full catalog and call Claude
-    const systemPrompt = buildSystemPrompt({ lead, project, projects })
+    console.log(`[processMessage] Project: ${project?.name ?? 'none'} | Detected: ${detectedProject?.name ?? 'none'}`)
+
+    // 9. Build the Daniela system prompt with full catalog and call Claude
+    const systemPrompt = buildSystemPrompt({ lead, project, projects, intent, lastBotMessage })
     const rawResponse = await callClaude(systemPrompt, history)
     const claudeResponse = parseClaudeResponse(rawResponse)
 
-    // 9. Update lead with Claude's analysis
+    // 10. Update lead with Claude's analysis
     await updateLead(lead.id, {
       stage: claudeResponse.stage,
       ...(claudeResponse.name_captured ? { name: claudeResponse.name_captured } : {}),
@@ -112,14 +121,14 @@ async function processMessage(payload: unknown): Promise<void> {
       last_message_at: new Date().toISOString(),
     })
 
-    // 10. Save the bot's response
+    // 11. Save the bot's response
     await saveConversation({
       leadId: lead.id,
       role: 'assistant',
       content: claudeResponse.reply,
     })
 
-    // 11. Send the reply to WhatsApp (with human-like typing delay)
+    // 12. Send the reply to WhatsApp (with human-like typing delay)
     await sendText(parsed.from, claudeResponse.reply)
 
     console.log(`[processMessage] Done — lead ${lead.id} | stage: ${claudeResponse.stage} | qualified: ${claudeResponse.qualified}`)
