@@ -29,40 +29,55 @@ const mockProject: GTProject = {
 }
 
 describe('buildSystemPrompt', () => {
-  it('includes project name in the prompt', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject })
+  it('includes project name in the prompt when project is the focus', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
     expect(prompt).toContain('Portacelli Nuevo Cuscatlán')
   })
 
-  it('includes formatted price range', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject })
+  it('includes formatted price range for detected project', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
     expect(prompt).toContain('95,000')
     expect(prompt).toContain('180,000')
   })
 
   it('includes lead name when known', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject })
+    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
     expect(prompt).toContain('Carlos')
   })
 
   it('uses "desconocido" when lead has no name', () => {
     const leadNoName = { ...mockLead, name: null }
-    const prompt = buildSystemPrompt({ lead: leadNoName, project: mockProject })
+    const prompt = buildSystemPrompt({ lead: leadNoName, project: mockProject, projects: [mockProject] })
     expect(prompt).toContain('desconocido')
   })
 
   it('includes required JSON response fields in instructions', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject })
+    const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
     expect(prompt).toContain('"reply"')
     expect(prompt).toContain('"stage"')
     expect(prompt).toContain('"qualified"')
     expect(prompt).toContain('"qualification_data"')
   })
 
-  it('includes generic GT context when no project provided', () => {
-    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+  it('includes generic GT context when no project and empty catalog', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, projects: [] })
     expect(prompt).toContain('Grupo Terranova')
     expect(prompt).not.toContain('Portacelli')
+  })
+
+  it('lists all catalog projects when no specific project is detected', () => {
+    const secondProject: GTProject = {
+      slug: 'quintas-campestres',
+      name: 'Quintas Campestres',
+      type: 'venta_nueva',
+      priceFrom: 75000,
+      location: 'Sonsonate',
+      description: 'Casas en zona verde.',
+      status: 'active',
+    }
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, projects: [mockProject, secondProject] })
+    expect(prompt).toContain('Portacelli Nuevo Cuscatlán')
+    expect(prompt).toContain('Quintas Campestres')
   })
 
   it('includes already-qualified data when present', () => {
@@ -76,7 +91,7 @@ describe('buildSystemPrompt', () => {
         decision_maker: null,
       }
     }
-    const prompt = buildSystemPrompt({ lead: leadWithData, project: mockProject })
+    const prompt = buildSystemPrompt({ lead: leadWithData, project: mockProject, projects: [mockProject] })
     expect(prompt).toContain('inversion')
   })
 })

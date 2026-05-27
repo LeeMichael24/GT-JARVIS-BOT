@@ -45,5 +45,5 @@ export function detectProjectFromMessage(message: string, projects: GTProject[])
     const wordMatch = nameWords.some(w => msg.includes(w))
     return nameMatch || slugMatch || wordMatch
   })
-  return match ?? projects[0]
+  return match ?? null
 }

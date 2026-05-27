@@ -41,9 +41,9 @@ describe('detectProjectFromMessage', () => {
     expect(result?.slug).toBe('quintas-campestres')
   })
 
-  it('returns first project when no match found', () => {
+  it('returns null when no specific project is mentioned', () => {
     const result = detectProjectFromMessage('hola quiero una propiedad', projects)
-    expect(result?.slug).toBe('portacelli-nuevo-cuscatlan')
+    expect(result).toBeNull()
   })
 
   it('returns null when project list is empty', () => {

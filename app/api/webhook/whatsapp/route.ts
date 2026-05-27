@@ -76,22 +76,31 @@ async function processMessage(payload: unknown): Promise<void> {
     // 5. Load conversation history (last 15 messages for Claude context)
     const history = await getConversationHistory(lead.id, 15)
 
-    // 6. Detect which GT project the lead is asking about
+    // 6. Fetch full GT project catalog
     let projects: Awaited<ReturnType<typeof getAllProjects>> = []
     try {
       projects = await getAllProjects()
     } catch (err) {
       console.warn('[processMessage] Could not fetch GT projects, continuing without context:', err)
     }
-    const project = detectProjectFromMessage(parsed.body, projects)
 
-    // 7. Update project interest on the lead if detected for the first time
-    if (project && !lead.project_interest) {
-      await updateLead(lead.id, { project_interest: project.name })
+    // 7. Detect which project the lead is asking about in this message
+    const detectedProject = detectProjectFromMessage(parsed.body, projects)
+
+    // Fallback: if nothing detected in this message but lead has a prior interest, restore it
+    const project =
+      detectedProject ??
+      (lead.project_interest
+        ? (projects.find(p => p.name === lead.project_interest) ?? null)
+        : null)
+
+    // Save project interest on first detection
+    if (detectedProject && !lead.project_interest) {
+      await updateLead(lead.id, { project_interest: detectedProject.name })
     }
 
-    // 8. Build the Daniela system prompt and call Claude
-    const systemPrompt = buildSystemPrompt({ lead, project })
+    // 8. Build the Daniela system prompt with full catalog and call Claude
+    const systemPrompt = buildSystemPrompt({ lead, project, projects })
     const rawResponse = await callClaude(systemPrompt, history)
     const claudeResponse = parseClaudeResponse(rawResponse)
 
