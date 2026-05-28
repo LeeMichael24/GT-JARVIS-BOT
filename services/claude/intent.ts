@@ -42,6 +42,8 @@ const CONTINUATION_STARTS = [
 
 const INVESTMENT_SIGNALS = [
   'roi', 'rendimiento', 'retorno', 'rentabilidad',
+  // standalone investment keywords (catches "inversiones?", "quiero invertir", etc.)
+  'inversion', 'inversión', 'inversiones', 'invertir',
   // annual / yield queries
   'renta anual', 'inversión anual', 'inversion anual',
   'retorno anual', 'porcentaje anual', 'porcentaje de retorno',

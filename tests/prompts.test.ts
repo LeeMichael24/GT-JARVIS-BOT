@@ -99,11 +99,13 @@ describe('buildSystemPrompt — project focus', () => {
     expect(prompt).toContain('180,000')
   })
 
-  it('does NOT include other project data when there is a focus project', () => {
+  it('highlights focus project in PROYECTO ACTUAL while keeping full catalog', () => {
     const prompt = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject, secondProject] })
-    // Focus is Portacelli — Quintas should NOT appear in the prompt body
-    expect(prompt).not.toContain('Quintas Campestres')
-    expect(prompt).not.toContain('Sonsonate')
+    // Focus section present with current project
+    expect(prompt).toContain('PROYECTO ACTUAL')
+    expect(prompt).toContain('Portacelli Nuevo Cuscatlán')
+    // Full catalog available as reference (user explicitly asked for full context)
+    expect(prompt).toContain('Quintas Campestres')
   })
 
   it('shows catalog when no focus project', () => {

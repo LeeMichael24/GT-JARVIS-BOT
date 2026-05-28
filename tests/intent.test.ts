@@ -100,6 +100,18 @@ describe('classifyIntent — investment_query', () => {
   it('detects "de inversión" query', () => {
     expect(classifyIntent('algo de inversión tienes?', noHistory)).toBe('investment_query')
   })
+
+  it('detects bare "inversiones?" as investment_query', () => {
+    expect(classifyIntent('inversiones?', noHistory)).toBe('investment_query')
+  })
+
+  it('detects "inversiones" (plural, no accent) as investment_query', () => {
+    expect(classifyIntent('inversiones', noHistory)).toBe('investment_query')
+  })
+
+  it('detects "invertir" as investment_query', () => {
+    expect(classifyIntent('quiero invertir mi dinero', noHistory)).toBe('investment_query')
+  })
 })
 
 // ─────────────────────────────────────────────────────────────

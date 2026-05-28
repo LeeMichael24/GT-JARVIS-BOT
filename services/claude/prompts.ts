@@ -31,20 +31,21 @@ NUNCA digas que eres IA. Si te preguntan: "Soy parte del equipo de Grupo Terrano
 
 # FUENTE DE VERDAD ← REGLA ABSOLUTA
 Los datos de este prompt (catálogo, precios, proyectos) son la ÚNICA fuente válida.
-Si en el historial de conversación aparecen propiedades, precios o afirmaciones que NO coinciden con el catálogo de abajo, IGNÓRALOS. El historial puede contener errores de mensajes anteriores.
+El historial puede contener errores de mensajes anteriores — los mensajes del asistente pueden incluir propiedades inventadas, precios incorrectos o datos falsos. IGNÓRALOS completamente.
+Si el historial menciona algo que NO está en el catálogo de abajo, descártalo. Usa SOLO los datos de este prompt.
 
 # FORMATO OBLIGATORIO
 Texto plano, prosa natural, como persona real por WhatsApp.
-PROHIBIDO ❌: *asteriscos*, listas numeradas (1. 2. 3.), bullets formales (•⁠ con espacio extraño)
-CORRECTO ✅: "Foresta Townhomes está en San José Villanueva, con townhouses desde $576k hasta $704k. Tiene golf, casa club y restaurantes. ¿Buscas renta vacacional o plusvalía?"
+PROHIBIDO ❌: asteriscos, _subrayados_, listas numeradas (1. 2. 3.), bullets de cualquier tipo (• - *), markdown.
+CORRECTO ✅: "Foresta Townhomes está en San José Villanueva, con townhomes desde $576k hasta $704k. Tiene golf, casa club y restaurantes. ¿Buscas renta vacacional o plusvalía?"
 
-# TIPOS DE PRECIO — MUY IMPORTANTE
-El catálogo tiene dos tipos de precio que son INCOMPARABLES:
-- Precio de COMPRA: $30,000 en adelante (para proyectos de venta)
-- Precio de ALQUILER: $500-$3,000 por mes (para propiedades en alquiler)
-Cuando el cliente diga "$700-$1,400" está buscando ALQUILER MENSUAL, no un precio de compra.
-Cuando diga "$100k+" está buscando precio de COMPRA.
-NUNCA recomiendes una propiedad de compra como respuesta a una búsqueda de alquiler.
+# TIPOS DE PRECIO — REGLA ABSOLUTA
+El catálogo tiene DOS tipos de precio INCOMPARABLES entre sí:
+- ALQUILER MENSUAL: precio por mes, etiquetado con /mes en el catálogo
+- COMPRA (precio total): precio de adquisición total de la propiedad
+REGLA CRÍTICA: Si el cliente menciona renta mensual, alquiler, cuánto al mes → responde SOLO con propiedades de ALQUILER del catálogo.
+REGLA CRÍTICA: Si el cliente menciona precio de compra, inversión en activos, adquirir → responde con propiedades de COMPRA o INVERSIÓN.
+NUNCA cruces los dos tipos. Un apartamento de venta a $370,000 NO es respuesta válida para alguien buscando "$700-$1,400 de renta mensual".
 ${intentBlock}${catalogBlock}
 # PERFIL DEL CLIENTE
 Nombre: ${lead.name ?? 'desconocido'}
@@ -108,7 +109,7 @@ ${ctx}
 # INSTRUCCIÓN DE ESTE TURNO — CONSULTA DE INVERSIÓN
 El cliente pregunta sobre tipo de retorno o modelo de inversión.
 Si hay un PROYECTO ACTUAL abajo: explica primero su potencial de inversión. Luego pregunta qué modelo busca (ROI anual, renta corta Airbnb, renta larga, plusvalía).
-Si no hay proyecto específico: muestra los proyectos de INVERSIÓN del catálogo y pregunta presupuesto y modelo.
+Si no hay proyecto específico: muestra los proyectos de INVERSIÓN Y PREVENTA del catálogo y pregunta presupuesto y modelo.
 `
 
     case 'catalog_request':
@@ -124,8 +125,8 @@ El cliente quiere ver opciones. Selecciona 3-4 proyectos del catálogo relevante
 
 // ─────────────────────────────────────────────────────────────
 // Catalog section
-// REGLA CRÍTICA: cuando hay foco → CERO datos de otros proyectos.
-// El AI no puede ir off-topic si no tiene los datos.
+// Siempre incluye catálogo completo como referencia.
+// Cuando hay foco → destaca el proyecto actual primero.
 // ─────────────────────────────────────────────────────────────
 
 function buildCatalogSection(projects: GTProject[], detected: GTProject | null): string {
@@ -137,17 +138,6 @@ Pregunta al cliente qué tipo (compra/alquiler), zona y presupuesto maneja.
 `
   }
 
-  if (detected) {
-    const othersCount = projects.length - 1
-    return `
-# PROYECTO ACTUAL — EL CLIENTE ESTÁ HABLANDO DE ESTE
-Habla ÚNICAMENTE de este proyecto. Si el cliente pide ver alternativas, dile que tienes ${othersCount} proyectos más y pide zona o presupuesto para filtrar.
-
-${formatProjectFull(detected)}
-`
-  }
-
-  // No focus → full catalog in 3 buckets
   const { rental, residential, investment } = partitionCatalog(projects)
 
   const rentalBlock = rental.length
@@ -163,6 +153,22 @@ ${formatProjectFull(detected)}
     : ''
 
   const blocks = [rentalBlock, residentialBlock, investmentBlock].filter(Boolean).join('\n\n')
+
+  if (detected) {
+    const othersCount = projects.length - 1
+    return `
+# PROYECTO ACTUAL — EL CLIENTE ESTÁ HABLANDO DE ESTE
+Empieza respondiendo sobre este proyecto. Muestra alternativas del catálogo solo si el cliente las pide explícitamente.
+Tienes ${othersCount} propiedades más disponibles en el catálogo de referencia abajo.
+
+${formatProjectFull(detected)}
+
+# CATÁLOGO COMPLETO — referencia para cuando el cliente pida alternativas
+Los precios de ALQUILER son por mes. Los de COMPRA son precio total. Son incomparables — no mezcles.
+
+${blocks}
+`
+  }
 
   return `
 # CATÁLOGO GRUPO TERRANOVA — ${projects.length} propiedades activas
@@ -188,11 +194,25 @@ function buildQualSection(lead: Lead): string {
 }
 
 // ─────────────────────────────────────────────────────────────
+// Rental detection
+// El API real no usa type:'alquiler' — detectamos por precio y slug.
+// Umbral $30,000: todo lo que vale menos es renta mensual en El Salvador.
+// ─────────────────────────────────────────────────────────────
+
+function isRentalProperty(p: GTProject): boolean {
+  if (p.slug?.includes('alquiler')) return true
+  if (/\balquiler\b/i.test(p.name)) return true
+  if (p.type === 'alquiler') return true
+  if (p.priceFrom !== undefined && p.priceFrom < 30_000) return true
+  return false
+}
+
+// ─────────────────────────────────────────────────────────────
 // Formatters
 // ─────────────────────────────────────────────────────────────
 
 function formatProjectFull(p: GTProject): string {
-  const isRental = p.type === 'alquiler'
+  const isRental = isRentalProperty(p)
   const priceLabel = isRental
     ? `Renta mensual: ${formatPriceRange(p)}/mes`
     : `Precio de venta: ${formatPriceRange(p)}`
@@ -222,15 +242,23 @@ function humanizeType(type: string): string {
     inversion:    'Inversión con retorno',
     residencia:   'Residencia',
     townhouse:    'Townhouse',
+    Townhouses:   'Townhouses',
     apartamento:  'Apartamento',
+    Apartamento:  'Apartamento',
+    Apartamentos: 'Apartamentos',
     casa:         'Casa',
+    Casa:         'Casa',
+    Residencial:  'Residencial',
+    Terreno:      'Terreno',
+    Oficina:      'Oficina',
+    Edificio:     'Edificio',
   }
   return map[type] ?? type
 }
 
 function formatPriceRange(p: GTProject): string {
   const cur = p.currency ?? 'USD'
-  if (p.priceFrom && p.priceTo) {
+  if (p.priceFrom && p.priceTo && p.priceFrom !== p.priceTo) {
     return `$${p.priceFrom.toLocaleString()} – $${p.priceTo.toLocaleString()} ${cur}`
   }
   if (p.priceFrom) return `desde $${p.priceFrom.toLocaleString()} ${cur}`
@@ -247,9 +275,9 @@ function partitionCatalog(projects: GTProject[]): {
   const residential: GTProject[] = []
 
   for (const p of projects) {
-    if (p.type === 'alquiler') {
+    if (isRentalProperty(p)) {
       rental.push(p)
-    } else if (p.type === 'inversion' || p.entityType === 'investment') {
+    } else if (p.entityType === 'investment' || p.entityType === 'project') {
       investment.push(p)
     } else {
       residential.push(p)
