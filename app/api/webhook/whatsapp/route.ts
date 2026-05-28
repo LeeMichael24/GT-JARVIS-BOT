@@ -17,6 +17,15 @@ import {
 // On Hobby plan, default is 10s (sufficient for most responses)
 export const maxDuration = 60
 
+// Detects a GT website URL and returns the section ('inversiones' | 'propiedades' | null)
+const GT_URL_RE = /grupoterranovasv\.com\/(inversiones|propiedades)\/[a-zA-Z0-9]+/i
+
+function detectGTUrlSection(text: string): 'inversiones' | 'propiedades' | null {
+  const m = text.match(GT_URL_RE)
+  if (!m) return null
+  return m[1].toLowerCase() as 'inversiones' | 'propiedades'
+}
+
 // GET: WhatsApp webhook verification handshake
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url)
@@ -74,7 +83,7 @@ async function processMessage(payload: unknown): Promise<void> {
       waMessageId: parsed.messageId,
     })
 
-    // 5. Load conversation history (last 15 messages for Claude context)
+    // 5. Load conversation history — last 15 messages, most recent (descending then reversed)
     const history = await getConversationHistory(lead.id, 15)
 
     // 6. Fetch full GT project catalog
@@ -85,11 +94,12 @@ async function processMessage(payload: unknown): Promise<void> {
       console.warn('[processMessage] Could not fetch GT projects, continuing without context:', err)
     }
 
-    // 7. Classify the message intent and extract conversation state
+    // 7. Classify message intent, extract conversation state, and detect GT URL reference
     const intent = classifyIntent(parsed.body, history)
     const lastBotMessage = extractLastBotMessage(history)
+    const gtUrlSection = detectGTUrlSection(parsed.body)
 
-    console.log(`[processMessage] Intent: ${intent} | History length: ${history.length}`)
+    console.log(`[processMessage] Intent: ${intent} | GT URL: ${gtUrlSection ?? 'none'} | History: ${history.length} msgs`)
 
     // 8. Detect which project the lead is asking about in this message
     const detectedProject = detectProjectFromMessage(parsed.body, projects)
@@ -109,12 +119,12 @@ async function processMessage(payload: unknown): Promise<void> {
 
     console.log(`[processMessage] Project: ${project?.name ?? 'none'} | Detected: ${detectedProject?.name ?? 'none'}`)
 
-    // 9. Build the Daniela system prompt with full catalog and call Claude
-    const systemPrompt = buildSystemPrompt({ lead, project, projects, intent, lastBotMessage })
+    // 9. Build the Daniela system prompt with full catalog and call GPT-4o
+    const systemPrompt = buildSystemPrompt({ lead, project, projects, intent, lastBotMessage, gtUrlSection })
     const rawResponse = await callClaude(systemPrompt, history)
     const claudeResponse = parseClaudeResponse(rawResponse)
 
-    // 10. Update lead with Claude's analysis
+    // 10. Update lead with GPT-4o's analysis
     await updateLead(lead.id, {
       stage: claudeResponse.stage,
       ...(claudeResponse.name_captured ? { name: claudeResponse.name_captured } : {}),
@@ -129,7 +139,7 @@ async function processMessage(payload: unknown): Promise<void> {
       content: claudeResponse.reply,
     })
 
-    // 12. Send the reply to WhatsApp (with human-like typing delay)
+    // 12. Send the reply to WhatsApp
     await sendText(parsed.from, claudeResponse.reply)
 
     console.log(`[processMessage] Done — lead ${lead.id} | stage: ${claudeResponse.stage} | qualified: ${claudeResponse.qualified}`)

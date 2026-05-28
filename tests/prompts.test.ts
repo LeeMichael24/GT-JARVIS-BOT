@@ -197,7 +197,9 @@ describe('buildSystemPrompt — no catalog', () => {
   it('gives generic GT context when no projects and no focus', () => {
     const prompt = buildSystemPrompt({ lead: mockLead, project: null, projects: [] })
     expect(prompt).toContain('Grupo Terranova')
-    expect(prompt).not.toContain('Portacelli')
+    // No dynamic catalog section when projects is empty
+    expect(prompt).not.toContain('propiedades activas')
+    expect(prompt).not.toContain('CATÁLOGO GRUPO TERRANOVA')
   })
 })
 
@@ -215,6 +217,34 @@ describe('buildSystemPrompt — history poisoning guard', () => {
   it('instructs to ignore history inaccuracies', () => {
     const prompt = buildSystemPrompt({ lead: mockLead, project: null })
     expect(prompt).toContain('historial puede contener errores')
+  })
+
+  it('warns that assistant messages are inferences, not client facts', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+    expect(prompt).toContain('ASISTENTE')
+    expect(prompt).toContain('inferencias')
+  })
+
+  it('includes anti-loop rule', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+    expect(prompt).toContain('ANTI-LOOP')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// GT URL context
+// ─────────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — GT URL context', () => {
+  it('includes inversiones URL instruction when gtUrlSection is inversiones', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, gtUrlSection: 'inversiones' })
+    expect(prompt).toContain('INVERSIONES')
+    expect(prompt).toContain('enlace')
+  })
+
+  it('no special URL block when gtUrlSection is null', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, gtUrlSection: null })
+    expect(prompt).not.toContain('enlace de la sección')
   })
 })
 

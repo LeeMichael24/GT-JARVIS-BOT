@@ -75,11 +75,12 @@ export async function getConversationHistory(leadId: string, limit = 15): Promis
     .from('conversations')
     .select('*')
     .eq('lead_id', leadId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })  // newest first to get the right LIMIT window
     .limit(limit)
 
   if (error) throw new Error(`getConversationHistory: ${error.message}`)
-  return (data as Conversation[]) ?? []
+  // Reverse to chronological order (oldest→newest) for GPT-4o conversation context
+  return ((data as Conversation[]) ?? []).reverse()
 }
 
 export async function isMessageProcessed(waMessageId: string): Promise<boolean> {
