@@ -40,6 +40,15 @@ export interface ParsedWebhook {
   timestamp: number
 }
 
+export interface GTSubInvestment {
+  name: string
+  minInvestment?: number
+  expectedROI?: number      // annual %, e.g. 8.5 = 8.5% per year
+  investmentPeriod?: string // e.g. "24 meses", "36 meses"
+  riskLevel?: string        // e.g. "bajo", "medio", "alto"
+  description?: string
+}
+
 export interface GTProject {
   slug: string
   name: string
@@ -52,6 +61,11 @@ export interface GTProject {
   description: string
   status: string
   entityType?: 'project' | 'residency' | 'investment'
+  // Investment-specific fields (exposed by backend when entityType = 'investment')
+  expectedROI?: number          // annual ROI %, e.g. 10.5
+  investmentPeriod?: string     // e.g. "24-36 meses"
+  riskLevel?: string            // e.g. "bajo", "medio", "alto"
+  subInvestments?: GTSubInvestment[]  // investment modalities / tranches
 }
 
 export interface ClaudeResponse {

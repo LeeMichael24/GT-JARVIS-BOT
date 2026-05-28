@@ -1,4 +1,4 @@
-import type { Lead, GTProject } from '@/types'
+import type { Lead, GTProject, GTSubInvestment } from '@/types'
 import type { MessageIntent } from './intent'
 
 interface PromptContext {
@@ -65,7 +65,8 @@ Cuando el cliente mencione un modelo, enlázalo directamente al proyecto correct
 - Plusvalía a mediano plazo → Portacelli Alta ($242k-$265k, Nuevo Cuscatlán, zona en desarrollo acelerado)
 - Plusvalía premium → Portacelli Raices ($516k-$620k) o Portacelli Alba ($378k-$397k townhouses de lujo)
 - Renta larga → propiedades de alquiler en el catálogo ($850-$2,575/mes casas; $1,400-$1,700/mes locales)
-IMPORTANTE: Para porcentajes específicos de ROI que el cliente pida (ej. "¿puede dar 10%?") → NO inventes cifras. Di: "Para proyecciones de rentabilidad personalizadas, nuestro equipo financiero prepara un análisis. ¿Te genero esa cita?"
+Si el PROYECTO ACTUAL tiene campo "ROI estimado" → úsalo para responder directamente con esa cifra.
+Si NO tiene ROI estimado y el cliente pregunta un porcentaje específico → NO inventes cifras. Di: "Para proyecciones de rentabilidad personalizadas, nuestro equipo financiero prepara un análisis a tu medida. ¿Te genero esa cita?"
 ${intentBlock}${catalogBlock}
 # PERFIL DEL CLIENTE
 Nombre: ${lead.name ?? 'desconocido'}
@@ -248,15 +249,38 @@ function formatProjectFull(p: GTProject): string {
     priceLabel,
   ]
   if (p.deliveryDate) lines.push(`Entrega estimada: ${p.deliveryDate}`)
+
+  // Investment-specific data (exposed by backend for entityType: 'investment')
+  if (p.expectedROI) lines.push(`ROI estimado: ${p.expectedROI}% anual`)
+  if (p.investmentPeriod) lines.push(`Período de inversión: ${p.investmentPeriod}`)
+  if (p.riskLevel) lines.push(`Nivel de riesgo: ${p.riskLevel}`)
+  if (p.subInvestments?.length) {
+    lines.push(`Modalidades de inversión:`)
+    for (const sub of p.subInvestments) {
+      lines.push(formatSubInvestment(sub))
+    }
+  }
+
   if (p.description) lines.push(`Descripción: ${p.description}`)
   return lines.join('\n')
+}
+
+function formatSubInvestment(sub: GTSubInvestment): string {
+  const parts = [`  - ${sub.name}`]
+  if (sub.expectedROI !== undefined) parts.push(`ROI: ${sub.expectedROI}%/año`)
+  if (sub.minInvestment !== undefined) parts.push(`Mínimo: $${sub.minInvestment.toLocaleString()}`)
+  if (sub.investmentPeriod) parts.push(`Plazo: ${sub.investmentPeriod}`)
+  if (sub.riskLevel) parts.push(`Riesgo: ${sub.riskLevel}`)
+  if (sub.description) parts.push(`(${sub.description})`)
+  return parts.join(' | ')
 }
 
 function formatProjectLine(p: GTProject, priceType: 'rental' | 'purchase'): string {
   const price = priceType === 'rental'
     ? `${formatPriceRange(p)}/mes`
     : formatPriceRange(p)
-  return `• ${p.name} | ${p.location} | ${price}`
+  const roi = p.expectedROI ? ` | ROI: ${p.expectedROI}%/año` : ''
+  return `• ${p.name} | ${p.location} | ${price}${roi}`
 }
 
 function humanizeType(type: string): string {
