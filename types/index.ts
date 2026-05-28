@@ -42,11 +42,17 @@ export interface ParsedWebhook {
 
 export interface GTSubInvestment {
   name: string
-  minInvestment?: number
-  expectedROI?: number      // annual %, e.g. 8.5 = 8.5% per year
-  investmentPeriod?: string // e.g. "24 meses", "36 meses"
-  riskLevel?: string        // e.g. "bajo", "medio", "alto"
+  modality?: string           // full modality name
   description?: string
+  investorProfile?: string    // e.g. "Conservador", "Moderado", "Agresivo"
+  minInvestment?: number
+  maxInvestment?: number
+  expectedROI?: number        // annual %, e.g. 10 = 10%/year
+  investmentPeriodMonths?: number  // e.g. 24
+  paymentType?: string        // e.g. "Trimestral", "Mensual", "Al vencimiento"
+  riskLevel?: string          // e.g. "Conservador", "Moderado", "Alto"
+  startDate?: string
+  endDate?: string
 }
 
 export interface GTProject {
@@ -61,11 +67,11 @@ export interface GTProject {
   description: string
   status: string
   entityType?: 'project' | 'residency' | 'investment'
-  // Investment-specific fields (exposed by backend when entityType = 'investment')
-  expectedROI?: number          // annual ROI %, e.g. 10.5
-  investmentPeriod?: string     // e.g. "24-36 meses"
-  riskLevel?: string            // e.g. "bajo", "medio", "alto"
-  subInvestments?: GTSubInvestment[]  // investment modalities / tranches
+  // Investment-specific fields (exposed by backend for entityType = 'investment')
+  expectedROI?: number             // annual ROI %, e.g. 10
+  investmentPeriodMonths?: number  // e.g. 24
+  riskLevel?: string               // e.g. "Conservador", "Moderado"
+  subInvestments?: GTSubInvestment[]
 }
 
 export interface ClaudeResponse {

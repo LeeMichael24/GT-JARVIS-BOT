@@ -252,8 +252,8 @@ function formatProjectFull(p: GTProject): string {
 
   // Investment-specific data (exposed by backend for entityType: 'investment')
   if (p.expectedROI) lines.push(`ROI estimado: ${p.expectedROI}% anual`)
-  if (p.investmentPeriod) lines.push(`Período de inversión: ${p.investmentPeriod}`)
-  if (p.riskLevel) lines.push(`Nivel de riesgo: ${p.riskLevel}`)
+  if (p.investmentPeriodMonths) lines.push(`Período de inversión: ${p.investmentPeriodMonths} meses`)
+  if (p.riskLevel) lines.push(`Perfil de riesgo: ${p.riskLevel}`)
   if (p.subInvestments?.length) {
     lines.push(`Modalidades de inversión:`)
     for (const sub of p.subInvestments) {
@@ -266,20 +266,30 @@ function formatProjectFull(p: GTProject): string {
 }
 
 function formatSubInvestment(sub: GTSubInvestment): string {
-  const parts = [`  - ${sub.name}`]
-  if (sub.expectedROI !== undefined) parts.push(`ROI: ${sub.expectedROI}%/año`)
-  if (sub.minInvestment !== undefined) parts.push(`Mínimo: $${sub.minInvestment.toLocaleString()}`)
-  if (sub.investmentPeriod) parts.push(`Plazo: ${sub.investmentPeriod}`)
-  if (sub.riskLevel) parts.push(`Riesgo: ${sub.riskLevel}`)
-  if (sub.description) parts.push(`(${sub.description})`)
-  return parts.join(' | ')
+  const header: string[] = [`  - ${sub.name}`]
+  if (sub.expectedROI !== undefined) header.push(`ROI: ${sub.expectedROI}%/año`)
+  if (sub.investmentPeriodMonths) header.push(`Plazo: ${sub.investmentPeriodMonths} meses`)
+  if (sub.paymentType) header.push(`Pago: ${sub.paymentType}`)
+  if (sub.riskLevel) header.push(`Riesgo: ${sub.riskLevel}`)
+  if (sub.minInvestment !== undefined) {
+    const minStr = `$${sub.minInvestment.toLocaleString()}`
+    const maxStr = sub.maxInvestment && sub.maxInvestment !== sub.minInvestment
+      ? ` – $${sub.maxInvestment.toLocaleString()}`
+      : ''
+    header.push(`Inversión: ${minStr}${maxStr}`)
+  }
+  const lines = [header.join(' | ')]
+  if (sub.description) lines.push(`    ${sub.description}`)
+  return lines.join('\n')
 }
 
 function formatProjectLine(p: GTProject, priceType: 'rental' | 'purchase'): string {
   const price = priceType === 'rental'
     ? `${formatPriceRange(p)}/mes`
     : formatPriceRange(p)
-  const roi = p.expectedROI ? ` | ROI: ${p.expectedROI}%/año` : ''
+  const roi = p.expectedROI
+    ? ` | ROI: ${p.expectedROI}%/año${p.investmentPeriodMonths ? ` (${p.investmentPeriodMonths} meses)` : ''}`
+    : ''
   return `• ${p.name} | ${p.location} | ${price}${roi}`
 }
 
