@@ -105,16 +105,25 @@ async function processMessage(payload: unknown): Promise<void> {
     const detectedProject = detectProjectFromMessage(parsed.body, projects)
 
     // Fallback: if nothing detected in this message but lead has a prior interest, restore it
-    const project =
+    let project =
       detectedProject ??
       (lead.project_interest
         ? (projects.find(p => p.name === lead.project_interest) ?? null)
         : null)
 
-    // Update project interest whenever a new project is explicitly detected
-    // (allows topic switching when user mentions a different project)
+    // When client is asking about investments, don't lock onto a non-investment property
+    // (e.g. residential "Foresta Townhomes" must not steal focus from investment entities)
+    if (intent === 'investment_query' && project?.entityType !== 'investment') {
+      project = null
+    }
+
+    // Update project interest when a new project is explicitly detected
+    // Skip if the detected project is residential but the current topic is investments
     if (detectedProject && detectedProject.name !== lead.project_interest) {
-      await updateLead(lead.id, { project_interest: detectedProject.name })
+      const skipUpdate = intent === 'investment_query' && detectedProject.entityType !== 'investment'
+      if (!skipUpdate) {
+        await updateLead(lead.id, { project_interest: detectedProject.name })
+      }
     }
 
     console.log(`[processMessage] Project: ${project?.name ?? 'none'} | Detected: ${detectedProject?.name ?? 'none'}`)

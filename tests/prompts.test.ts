@@ -232,6 +232,75 @@ describe('buildSystemPrompt — history poisoning guard', () => {
 })
 
 // ─────────────────────────────────────────────────────────────
+// Investment intent catalog isolation
+// ─────────────────────────────────────────────────────────────
+
+describe('buildSystemPrompt — investment intent catalog isolation', () => {
+  const rentalProject: GTProject = {
+    slug: 'local-escalon-alquiler',
+    name: 'Local Escalón',
+    type: 'alquiler',
+    priceFrom: 1400,
+    currency: 'USD',
+    location: 'San Salvador',
+    description: 'Local comercial en alquiler.',
+    status: 'active',
+  }
+
+  it('shows only investment catalog when intent is investment_query', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: null,
+      projects: [mockProject, investmentProject, rentalProject],
+      intent: 'investment_query',
+    })
+    expect(prompt).toContain('PORTAFOLIO DE INVERSIONES')
+    expect(prompt).not.toContain('COMPRA RESIDENCIAL')
+    // Check for the catalog bucket header specifically (not the static price-type section)
+    expect(prompt).not.toContain('ALQUILER MENSUAL (precio por mes)')
+  })
+
+  it('includes investment project but not residential in investment_query mode', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: null,
+      projects: [mockProject, investmentProject],
+      intent: 'investment_query',
+    })
+    expect(prompt).toContain('Foresta Townhomes')
+    expect(prompt).not.toContain('Portacelli Nuevo Cuscatlán')
+  })
+
+  it('uses investment-specific focus block when detected project is an investment entity', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: investmentProject,
+      projects: [mockProject, investmentProject],
+      intent: 'investment_query',
+    })
+    expect(prompt).toContain('PROYECTO DE INVERSIÓN ACTUAL')
+    expect(prompt).not.toContain('COMPRA RESIDENCIAL')
+  })
+
+  it('falls back to full catalog when investment_query but no investment projects exist', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: null,
+      projects: [mockProject],
+      intent: 'investment_query',
+    })
+    // No investment bucket → falls through to full catalog display
+    expect(prompt).toContain('CATÁLOGO GRUPO TERRANOVA')
+  })
+
+  it('investment_query intent instruction includes REGLA to not mention residentials', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null, intent: 'investment_query' })
+    expect(prompt).toContain('SOLO habla de productos de INVERSIÓN')
+    expect(prompt).toContain('NO menciones proyectos residenciales')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
 // GT URL context
 // ─────────────────────────────────────────────────────────────
 

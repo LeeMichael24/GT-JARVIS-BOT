@@ -23,7 +23,7 @@ export function buildSystemPrompt({
   gtUrlSection = null,
 }: PromptContext): string {
   const intentBlock = buildIntentInstruction(intent, lastBotMessage, gtUrlSection)
-  const catalogBlock = buildCatalogSection(projects, project)
+  const catalogBlock = buildCatalogSection(projects, project, intent)
   const qualBlock = buildQualSection(lead)
 
   return `# IDENTIDAD
@@ -134,9 +134,10 @@ ${ctx}
       return `
 # INSTRUCCIÓN DE ESTE TURNO — INVERSIÓN
 El cliente habla de inversión o retorno.
-→ Si su mensaje YA especifica el modelo (ROI anual, Airbnb, plusvalía, renta): NO preguntes de nuevo qué modelo quiere. Profundiza en ese modelo con los proyectos del catálogo usando la GUÍA RÁPIDA de arriba.
+REGLA ABSOLUTA: SOLO habla de productos de INVERSIÓN / ROI. NO menciones proyectos residenciales ni propiedades de alquiler como opción — aunque estén en el catálogo.
+→ Si su mensaje YA especifica el modelo (ROI anual, Airbnb, plusvalía, renta): NO preguntes de nuevo qué modelo quiere. Profundiza en ese modelo con los proyectos de inversión usando la GUÍA RÁPIDA de arriba.
 → Si no especificó modelo: pregunta cuál de los 5 modelos le interesa.
-→ Si hay PROYECTO ACTUAL: explica primero su potencial para el modelo mencionado.
+→ Si hay PROYECTO ACTUAL de inversión: explica primero su potencial para el modelo mencionado.
 `
 
     case 'catalog_request':
@@ -154,7 +155,7 @@ El cliente quiere ver opciones. Selecciona 3-4 propiedades relevantes al perfil 
 // Catalog section — siempre incluye catálogo completo
 // ─────────────────────────────────────────────────────────────
 
-function buildCatalogSection(projects: GTProject[], detected: GTProject | null): string {
+function buildCatalogSection(projects: GTProject[], detected: GTProject | null, intent: MessageIntent = 'general'): string {
   if (!projects.length) {
     return `
 # PORTAFOLIO
@@ -176,6 +177,28 @@ Pregunta al cliente qué tipo (compra/alquiler/inversión), zona y presupuesto m
   const investmentBlock = investment.length
     ? `INVERSIÓN / ROI (precio total de compra)\n${investment.map(p => formatProjectLine(p, 'purchase')).join('\n')}`
     : ''
+
+  // Investment intent: only expose investment products — hide residential/rental to prevent topic drift
+  if (intent === 'investment_query' && investmentBlock) {
+    if (detected?.entityType === 'investment') {
+      return `
+# PROYECTO DE INVERSIÓN ACTUAL — EL CLIENTE ESTÁ HABLANDO DE ESTE
+REGLA: SOLO habla de productos de inversión. No menciones propiedades residenciales ni de alquiler.
+
+${formatProjectFull(detected)}
+
+# OTROS PRODUCTOS DE INVERSIÓN — referencia si el cliente pide alternativas
+${investmentBlock}
+`
+    }
+    return `
+# PORTAFOLIO DE INVERSIONES — ÚNICO FOCO DE ESTE TURNO
+REGLA ABSOLUTA: SOLO habla de estos productos. No menciones propiedades residenciales ni de alquiler.
+Los precios son precio total de compra.
+
+${investmentBlock}
+`
+  }
 
   const blocks = [rentalBlock, residentialBlock, investmentBlock].filter(Boolean).join('\n\n')
 
