@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import type { ClaudeResponse, Conversation, QualificationData } from '@/types'
+import type { ClaudeResponse, Conversation, MeetingRequest, QualificationData } from '@/types'
 
 const MODEL = 'gpt-4o'
 const MAX_TOKENS = 1024
@@ -55,5 +55,25 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     name_captured: parsed.name_captured ?? null,
     qualification_data: parsed.qualification_data ?? emptyQual,
     qualified: parsed.qualified ?? false,
+    schedule_meeting: parseMeetingRequest(parsed.schedule_meeting),
+  }
+}
+
+function parseMeetingRequest(raw: unknown): MeetingRequest | null {
+  if (!raw || typeof raw !== 'object') return null
+  const m = raw as Record<string, unknown>
+  if (!m.requested) return null
+
+  const validTypes = ['visita_proyecto', 'llamada', 'videollamada'] as const
+  const meetingType = validTypes.includes(m.meeting_type as typeof validTypes[number])
+    ? (m.meeting_type as MeetingRequest['meeting_type'])
+    : 'visita_proyecto'
+
+  return {
+    requested: true,
+    datetime_iso: typeof m.datetime_iso === 'string' ? m.datetime_iso : null,
+    meeting_type: meetingType,
+    project_name: typeof m.project_name === 'string' ? m.project_name : null,
+    notes: typeof m.notes === 'string' ? m.notes : null,
   }
 }

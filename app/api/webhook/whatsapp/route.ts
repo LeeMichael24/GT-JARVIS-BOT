@@ -4,6 +4,8 @@ import { callClaude, parseClaudeResponse } from '@/services/claude/client'
 import { buildSystemPrompt } from '@/services/claude/prompts'
 import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
+import { createCalendarEvent } from '@/services/google/calendar'
+import { getPlaybook, formatPlaybookForPrompt } from '@/lib/knowledge-base'
 import { sendText } from '@/services/whatsapp/client'
 import {
   upsertLead,
@@ -86,12 +88,18 @@ async function processMessage(payload: unknown): Promise<void> {
     // 5. Load conversation history — last 15 messages, most recent (descending then reversed)
     const history = await getConversationHistory(lead.id, 15)
 
-    // 6. Fetch full GT project catalog
+    // 6. Fetch full GT project catalog + sales playbook in parallel
     let projects: Awaited<ReturnType<typeof getAllProjects>> = []
+    let salesPlaybook: string | null = null
     try {
-      projects = await getAllProjects()
+      const [projectsResult, playbookEntries] = await Promise.all([
+        getAllProjects(),
+        getPlaybook(),
+      ])
+      projects = projectsResult
+      salesPlaybook = formatPlaybookForPrompt(playbookEntries)
     } catch (err) {
-      console.warn('[processMessage] Could not fetch GT projects, continuing without context:', err)
+      console.warn('[processMessage] Could not fetch GT projects or playbook, continuing without context:', err)
     }
 
     // 7. Classify message intent, extract conversation state, and detect GT URL reference
@@ -129,11 +137,29 @@ async function processMessage(payload: unknown): Promise<void> {
     console.log(`[processMessage] Project: ${project?.name ?? 'none'} | Detected: ${detectedProject?.name ?? 'none'}`)
 
     // 9. Build the Daniela system prompt with full catalog and call GPT-4o
-    const systemPrompt = buildSystemPrompt({ lead, project, projects, intent, lastBotMessage, gtUrlSection })
+    const systemPrompt = buildSystemPrompt({ lead, project, projects, intent, lastBotMessage, gtUrlSection, salesPlaybook })
     const rawResponse = await callClaude(systemPrompt, history)
     const claudeResponse = parseClaudeResponse(rawResponse)
 
-    // 10. Update lead with GPT-4o's analysis
+    // 10. Create Google Calendar event if Daniela scheduled a meeting
+    const mtg = claudeResponse.schedule_meeting
+    if (mtg?.requested && mtg.datetime_iso) {
+      try {
+        const event = await createCalendarEvent({
+          leadName:    lead.name ?? claudeResponse.name_captured ?? 'Cliente',
+          leadPhone:   lead.phone,
+          datetimeIso: mtg.datetime_iso,
+          meetingType: mtg.meeting_type,
+          projectName: mtg.project_name ?? lead.project_interest ?? null,
+          notes:       mtg.notes,
+        })
+        console.log(`[processMessage] Calendar event created: ${event.htmlLink}`)
+      } catch (err) {
+        console.error('[processMessage] Failed to create calendar event:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    // 11. Update lead with GPT-4o's analysis
     await updateLead(lead.id, {
       stage: claudeResponse.stage,
       ...(claudeResponse.name_captured ? { name: claudeResponse.name_captured } : {}),
@@ -141,14 +167,14 @@ async function processMessage(payload: unknown): Promise<void> {
       last_message_at: new Date().toISOString(),
     })
 
-    // 11. Save the bot's response
+    // 12. Save the bot's response
     await saveConversation({
       leadId: lead.id,
       role: 'assistant',
       content: claudeResponse.reply,
     })
 
-    // 12. Send the reply to WhatsApp
+    // 13. Send the reply to WhatsApp
     await sendText(parsed.from, claudeResponse.reply)
 
     console.log(`[processMessage] Done — lead ${lead.id} | stage: ${claudeResponse.stage} | qualified: ${claudeResponse.qualified}`)

@@ -74,10 +74,19 @@ export interface GTProject {
   subInvestments?: GTSubInvestment[]
 }
 
+export interface MeetingRequest {
+  requested: boolean
+  datetime_iso: string | null      // ISO 8601 in America/El_Salvador (UTC-6); null if date not yet confirmed
+  meeting_type: 'visita_proyecto' | 'llamada' | 'videollamada'
+  project_name: string | null
+  notes: string | null
+}
+
 export interface ClaudeResponse {
   reply: string
   stage: LeadStage
   name_captured: string | null
   qualification_data: QualificationData
   qualified: boolean
+  schedule_meeting: MeetingRequest | null
 }
