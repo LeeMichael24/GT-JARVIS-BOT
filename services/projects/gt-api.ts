@@ -13,9 +13,12 @@ function gtApiHeaders(): Record<string, string> {
   return { 'x-api-secret': process.env.GT_API_SECRET! }
 }
 
-export async function getAllProjects(): Promise<GTProject[]> {
-  return projectsCache.get('all', async () => {
-    const url = `${gtApiUrl()}/listings`
+export async function getAllProjects(typeFilter?: string): Promise<GTProject[]> {
+  const cacheKey = typeFilter ? `all:${typeFilter}` : 'all'
+  return projectsCache.get(cacheKey, async () => {
+    const url = typeFilter
+      ? `${gtApiUrl()}/listings?type=${typeFilter}`
+      : `${gtApiUrl()}/listings`
     const res = await fetch(url, { headers: gtApiHeaders() })
     if (!res.ok) throw new Error(`GT API error: ${res.status} ${res.statusText}`)
     const data = await res.json() as GTProject[]

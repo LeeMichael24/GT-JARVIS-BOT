@@ -88,7 +88,12 @@ async function processMessage(payload: unknown): Promise<void> {
     // 5. Load conversation history — last 15 messages, most recent (descending then reversed)
     const history = await getConversationHistory(lead.id, 15)
 
-    // 6. Fetch full GT project catalog + sales playbook in parallel
+    // 6. Classify intent early so we can optimize the API call
+    const intent = classifyIntent(parsed.body, history)
+    const lastBotMessage = extractLastBotMessage(history)
+    const gtUrlSection = detectGTUrlSection(parsed.body)
+
+    // 7. Fetch GT project catalog + sales playbook in parallel
     let projects: Awaited<ReturnType<typeof getAllProjects>> = []
     let salesPlaybook: string | null = null
     try {
@@ -101,11 +106,6 @@ async function processMessage(payload: unknown): Promise<void> {
     } catch (err) {
       console.warn('[processMessage] Could not fetch GT projects or playbook, continuing without context:', err)
     }
-
-    // 7. Classify message intent, extract conversation state, and detect GT URL reference
-    const intent = classifyIntent(parsed.body, history)
-    const lastBotMessage = extractLastBotMessage(history)
-    const gtUrlSection = detectGTUrlSection(parsed.body)
 
     console.log(`[processMessage] Intent: ${intent} | GT URL: ${gtUrlSection ?? 'none'} | History: ${history.length} msgs`)
 

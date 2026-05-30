@@ -55,6 +55,15 @@ export interface GTSubInvestment {
   endDate?: string
 }
 
+export interface GTProjectModel {
+  name: string
+  dimensions?: string
+  spaces?: string
+  price?: number
+  availability?: string
+  amenities?: string[]
+}
+
 export interface GTProject {
   slug: string
   name: string
@@ -67,10 +76,21 @@ export interface GTProject {
   description: string
   status: string
   entityType?: 'project' | 'residency' | 'investment'
-  // Investment-specific fields (exposed by backend for entityType = 'investment')
-  expectedROI?: number             // annual ROI %, e.g. 10
-  investmentPeriodMonths?: number  // e.g. 24
-  riskLevel?: string               // e.g. "Conservador", "Moderado"
+  // Enriched fields from backend
+  developer?: string
+  constructionStatus?: string
+  address?: string
+  area?: number
+  transactionType?: string
+  bedrooms?: number
+  bathrooms?: number
+  parkings?: number
+  amenities?: string[]
+  models?: GTProjectModel[]
+  // Investment-specific fields
+  expectedROI?: number
+  investmentPeriodMonths?: number
+  riskLevel?: string
   subInvestments?: GTSubInvestment[]
 }
 

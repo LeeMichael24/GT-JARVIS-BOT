@@ -35,10 +35,16 @@ export function buildSystemPrompt({
   })
 
   return `# IDENTIDAD
-Eres Daniela, asesora senior de inversiones y propiedades de Grupo Terranova El Salvador.
+Eres Daniela, coordinadora comercial de Grupo Terranova El Salvador.
 Escribes por WhatsApp con tono experto, cálido y directo. Tuteas al cliente.
 NUNCA digas que eres IA. Si te preguntan: "Soy parte del equipo de Grupo Terranova."
 Fecha actual (zona horaria El Salvador): ${today}
+
+# SALUDO INICIAL — PRIMERA VEZ QUE ESCRIBES
+Si es el primer mensaje de la conversación (historial vacío o solo 1 mensaje del usuario), SIEMPRE preséntate así:
+"Hola! Gracias por tu interés en [proyecto/Grupo Terranova]. Te saluda Daniela, coordinadora comercial de Grupo Terranova."
+Luego continúa con la respuesta relevante.
+Si ya hay historial, NO te vuelvas a presentar. Solo saluda: "Hola [nombre], un gusto saludarte!"
 
 # ESTILO DE COMUNICACIÓN — REGLA CRÍTICA
 Hablas como una asesora profesional que CONOCE a fondo cada proyecto. No eres genérica.
@@ -69,10 +75,12 @@ Si el cliente ya respondió una pregunta en su mensaje actual o inmediato anteri
 Ejemplo: preguntaste "¿qué modelo de inversión buscas?" → cliente dice "ROI anual" → NO preguntes de nuevo. Responde "Perfecto, para ROI anual te explico..." y avanza.
 Si el cliente especificó presupuesto, propósito o modelo → úsalo directamente, no confirmes lo obvio.
 
-# FORMATO OBLIGATORIO
-Texto plano, prosa natural, como persona real por WhatsApp.
-PROHIBIDO ❌: asteriscos (*), _subrayados_, listas numeradas (1. 2. 3.), bullets de cualquier tipo (• - *), markdown.
-CORRECTO ✅: "Foresta Townhomes está en San José Villanueva, con townhomes desde $576k hasta $704k. Tiene golf, casa club y restaurantes. Para ROI anual, el proyecto de inversión El Encanto es el que mejor estructura tiene. ¿Cuánto capital tienes disponible?"
+# FORMATO OBLIGATORIO — CERO EXCEPCIONES
+Texto plano, prosa natural, como persona real por WhatsApp. NUNCA uses formato de lista.
+PROHIBIDO ❌: asteriscos (*), _subrayados_, listas numeradas (1. 2. 3.), bullets de cualquier tipo (• - *), markdown, emojis de viñeta (🔹▪️), guiones como bullet (- item).
+CORRECTO ✅: "El apartamento de 101m2 en Portacelli Alta tiene 2 habitaciones con baño privado cada una, walk-in closet en la principal, cocina con top de granito, sala-comedor integrada y 2 parqueos incluidos. Está en el piso 5 con vista al mar, a $242,400. La reserva es de $3,000 y congelas el precio. Te gustaría que veamos los números para tu caso?"
+INCORRECTO ❌: "Las características son: 1. 2 habitaciones 2. Baño privado 3. Walk-in closet"
+Escribe todo en prosa corrida, como si le estuvieras hablando a un amigo por WhatsApp.
 
 # TIPOS DE PRECIO — REGLA ABSOLUTA
 El catálogo tiene DOS tipos de precio INCOMPARABLES:
@@ -91,6 +99,13 @@ Cuando el cliente mencione un modelo, enlázalo directamente al proyecto correct
 - Renta larga → propiedades de alquiler en el catálogo ($850-$2,575/mes casas; $1,400-$1,700/mes locales)
 Si el PROYECTO ACTUAL tiene campo "ROI estimado" → úsalo para responder directamente con esa cifra.
 Si NO tiene ROI estimado y el cliente pregunta un porcentaje específico → NO inventes cifras. Di: "Para proyecciones de rentabilidad personalizadas, nuestro equipo financiero prepara un análisis a tu medida. ¿Te genero esa cita?"
+
+# CÓMO RESPONDER PREGUNTAS SOBRE DETALLES DE PROPIEDADES
+Cuando el cliente pregunte sobre una propiedad (cuartos, baños, m2, amenidades, parqueos, etc.):
+1. Lee TODA la descripción del PROYECTO ACTUAL o del catálogo — los detalles están ahí (habitaciones, baños, acabados, áreas).
+2. Extrae los datos relevantes y responde EN PROSA, con confianza y detalle.
+3. Si la descripción tiene los datos, responde directo. Ejemplo: "El apartamento tiene 3 habitaciones, la principal con walk-in closet y baño privado remodelado con travertina, las otras dos con baño completo cada una. Son 161m2 más 2 estacionamientos."
+4. Si la descripción NO tiene el dato específico que preguntan, di: "Déjame confirmar ese detalle con nuestro equipo y te lo comparto." NUNCA inventes datos que no aparecen en la descripción.
 ${intentBlock}${playbookBlock}${catalogBlock}
 # PERFIL DEL CLIENTE
 Nombre: ${lead.name ?? 'desconocido'}
@@ -301,13 +316,20 @@ function formatProjectFull(p: GTProject): string {
 
   const lines = [
     `Nombre: ${p.name}`,
-    `Tipo: ${humanizeType(p.type)}`,
+    `Tipo: ${humanizeType(p.type)}${p.transactionType ? ` (${p.transactionType})` : ''}`,
     `Ubicación: ${p.location}`,
     priceLabel,
   ]
+  if (p.address) lines.push(`Dirección: ${p.address}`)
+  if (p.developer) lines.push(`Desarrollador: ${p.developer}`)
+  if (p.constructionStatus) lines.push(`Estado: ${p.constructionStatus}`)
   if (p.deliveryDate) lines.push(`Entrega estimada: ${p.deliveryDate}`)
+  if (p.area) lines.push(`Área: ${p.area} m²`)
+  if (p.bedrooms !== undefined) lines.push(`Habitaciones: ${p.bedrooms}`)
+  if (p.bathrooms !== undefined) lines.push(`Baños: ${p.bathrooms}`)
+  if (p.parkings !== undefined) lines.push(`Parqueos: ${p.parkings}`)
+  if (p.amenities?.length) lines.push(`Amenidades: ${p.amenities.join(', ')}`)
 
-  // Investment-specific data (exposed by backend for entityType: 'investment')
   if (p.expectedROI) lines.push(`ROI estimado: ${p.expectedROI}% anual`)
   if (p.investmentPeriodMonths) lines.push(`Período de inversión: ${p.investmentPeriodMonths} meses`)
   if (p.riskLevel) lines.push(`Perfil de riesgo: ${p.riskLevel}`)
@@ -318,7 +340,25 @@ function formatProjectFull(p: GTProject): string {
     }
   }
 
-  if (p.description) lines.push(`Descripción: ${p.description}`)
+  if (p.models?.length) {
+    lines.push(`Modelos disponibles:`)
+    for (const m of p.models) {
+      const parts = [m.name]
+      if (m.dimensions) parts.push(m.dimensions)
+      if (m.spaces) parts.push(m.spaces)
+      if (m.price) parts.push(`$${m.price.toLocaleString()}`)
+      if (m.availability) parts.push(`(${m.availability})`)
+      lines.push(`  ${parts.join(' | ')}`)
+      if (m.amenities?.length) lines.push(`    Amenidades: ${m.amenities.join(', ')}`)
+    }
+  }
+
+  if (p.description) {
+    lines.push(`Detalles: ${p.description}`)
+    if (p.description.length >= 495 && !p.bedrooms && !p.models?.length) {
+      lines.push(`(Nota: descripción puede estar incompleta. Si el cliente pide un dato que no aparece, di: "Déjame confirmar ese detalle con nuestro equipo y te lo comparto.")`)
+    }
+  }
   return lines.join('\n')
 }
 
@@ -347,7 +387,14 @@ function formatProjectLine(p: GTProject, priceType: 'rental' | 'purchase'): stri
   const roi = p.expectedROI
     ? ` | ROI: ${p.expectedROI}%/año${p.investmentPeriodMonths ? ` (${p.investmentPeriodMonths} meses)` : ''}`
     : ''
-  return `• ${p.name} | ${p.location} | ${price}${roi}`
+  const specs: string[] = []
+  if (p.area) specs.push(`${p.area}m²`)
+  if (p.bedrooms !== undefined) specs.push(`${p.bedrooms} hab`)
+  if (p.bathrooms !== undefined) specs.push(`${p.bathrooms} baños`)
+  if (p.parkings !== undefined) specs.push(`${p.parkings} parqueos`)
+  const specStr = specs.length ? ` | ${specs.join(', ')}` : ''
+  const desc = !specs.length && p.description ? ` — ${p.description.substring(0, 120)}` : ''
+  return `${p.name} | ${p.location} | ${price}${roi}${specStr}${desc}`
 }
 
 function humanizeType(type: string): string {
