@@ -603,18 +603,31 @@ import type {
   MessageTemplate, RecontactRule,
 } from '@/types'
 
-export interface LeadWithTags { lead: Lead; tagIds: string[] }
+export interface LeadWithTags {
+  lead: Lead
+  tagIds: string[]
+  // último mensaje DEL CLIENTE (role user) — gating de days_inactive;
+  // last_message_at NO sirve (lo actualizan también las respuestas del bot)
+  lastUserMessageAt: string | null
+}
 
 export async function leadsWithTags(): Promise<LeadWithTags[]> {
   const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('leads')
-    .select('*, lead_tags(tag_id)')
+    .select('*, lead_tags(tag_id), conversations(created_at)')
+    .eq('conversations.role', 'user')
+    .order('created_at', { referencedTable: 'conversations', ascending: false })
+    .limit(1, { referencedTable: 'conversations' })
   if (error) throw new Error(`leadsWithTags: ${error.message}`)
-  const rows = (data ?? []) as (Lead & { lead_tags: { tag_id: string }[] | null })[]
-  return rows.map(({ lead_tags, ...lead }) => ({
+  const rows = (data ?? []) as (Lead & {
+    lead_tags: { tag_id: string }[] | null
+    conversations: { created_at: string }[] | null
+  })[]
+  return rows.map(({ lead_tags, conversations, ...lead }) => ({
     lead: lead as Lead,
     tagIds: (lead_tags ?? []).map(t => t.tag_id),
+    lastUserMessageAt: conversations?.[0]?.created_at ?? null,
   }))
 }
 
@@ -848,7 +861,7 @@ function makeDeps(over: Partial<EngineDeps> = {}): EngineDeps & { created: unkno
   const created: unknown[] = []
   return {
     created,
-    leadsWithTags: vi.fn(async () => [{ lead: mkLead(), tagIds: [] }]),
+    leadsWithTags: vi.fn(async () => [{ lead: mkLead(), tagIds: [], lastUserMessageAt: daysAgo(10) }]),
     listActiveRules: vi.fn(async () => [rule]),
     getTemplateById: vi.fn(async () => template),
     getTemplateByName: vi.fn(async () => template),
@@ -887,11 +900,12 @@ describe('runRecontactRules', () => {
   it('excluye opted_out, bot pausado, gap reciente y leads ya en campaña activa', async () => {
     const deps = makeDeps({
       leadsWithTags: vi.fn(async () => [
-        { lead: mkLead({ id: 'ok' }), tagIds: [] },
-        { lead: mkLead({ id: 'optout', opted_out: true }), tagIds: [] },
-        { lead: mkLead({ id: 'humano', bot_active: false }), tagIds: [] },
-        { lead: mkLead({ id: 'reciente', last_proactive_at: daysAgo(2) }), tagIds: [] },
-        { lead: mkLead({ id: 'encampaña' }), tagIds: [] },
+        { lead: mkLead({ id: 'ok' }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+        { lead: mkLead({ id: 'optout', opted_out: true }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+        { lead: mkLead({ id: 'humano', bot_active: false }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+        { lead: mkLead({ id: 'reciente', last_proactive_at: daysAgo(2) }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+        { lead: mkLead({ id: 'encampaña' }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+        { lead: mkLead({ id: 'bottuvolaultima' }), tagIds: [], lastUserMessageAt: daysAgo(3) },
       ]),
       leadIdsInActiveCampaigns: vi.fn(async () => new Set(['encampaña'])),
     })
@@ -903,9 +917,9 @@ describe('runRecontactRules', () => {
   it('respeta max_per_run priorizando hot', async () => {
     const deps = makeDeps({
       leadsWithTags: vi.fn(async () => [
-        { lead: mkLead({ id: 'w', stage: 'warm' }), tagIds: [] },
-        { lead: mkLead({ id: 'h1' }), tagIds: [] },
-        { lead: mkLead({ id: 'h2' }), tagIds: [] },
+        { lead: mkLead({ id: 'w', stage: 'warm' }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+        { lead: mkLead({ id: 'h1' }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+        { lead: mkLead({ id: 'h2' }), tagIds: [], lastUserMessageAt: daysAgo(10) },
       ]),
       listActiveRules: vi.fn(async () => [{ ...rule, stages: null, max_per_run: 2 }]),
     })
@@ -951,6 +965,7 @@ describe('runDailyRadar', () => {
       leadsWithTags: vi.fn(async () => [{
         lead: mkLead({ qualification_data: { purpose: 'inversion', budget_ok: null, timeline: null, financing_needed: null, decision_maker: null } }),
         tagIds: [],
+        lastUserMessageAt: daysAgo(10),
       }]),
     })
     const res = await runDailyRadar(deps)
@@ -1109,10 +1124,10 @@ export async function runRecontactRules(deps: EngineDeps = realDeps): Promise<{ 
     if (!template || !template.active) continue
 
     const candidates = universe
-      .filter(({ lead, tagIds }) =>
+      .filter(({ lead, tagIds, lastUserMessageAt }) =>
         !busy.has(lead.id) &&
         isLeadEligible(lead, nowMs) &&
-        matchesRule(lead, tagIds, rule, nowMs))
+        matchesRule(lead, tagIds, rule, lastUserMessageAt, nowMs))
       .map(({ lead }) => lead)
 
     const chosen = rankByStage(candidates).slice(0, rule.max_per_run)
