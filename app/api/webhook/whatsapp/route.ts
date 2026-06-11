@@ -72,18 +72,20 @@ async function processMessage(payload: unknown): Promise<void> {
 
     // 3. Upsert lead — create if new, update last_message_at if existing
     const lead = await upsertLead(parsed.from)
-    if (!lead.bot_active) {
-      console.log(`[processMessage] Bot paused for lead ${lead.id}`)
-      return
-    }
 
-    // 4. Save the incoming user message
+    // 4. Save the incoming user message ALWAYS (even during human takeover)
     await saveConversation({
       leadId: lead.id,
       role: 'user',
       content: parsed.body,
       waMessageId: parsed.messageId,
     })
+
+    // 4b. If a human took over, stop here: the message is stored, Daniela stays quiet
+    if (!lead.bot_active) {
+      console.log(`[processMessage] Bot paused for lead ${lead.id} — message saved, no AI reply`)
+      return
+    }
 
     // 5. Load conversation history — last 15 messages, most recent (descending then reversed)
     const history = await getConversationHistory(lead.id, 15)
