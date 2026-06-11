@@ -108,6 +108,7 @@ npm run test       # modo watch
 | `database/schema.sql` | Schema de Supabase (ejecutar manualmente) |
 | `proxy.ts` | Protege /panel/* — chequeo de sesión + refresh de cookies (Next 16: ex-middleware) |
 | `app/panel/` | Panel CRM: login, inbox, chat con takeover, ficha de lead, config |
+| `components/panel/` | Componentes del panel: inbox (lista/kanban), chat, ficha, config |
 | `app/panel/actions.ts` | Server actions del panel (re-validan rol en servidor) |
 | `lib/auth.ts` | Sesión del equipo + guards admin/asesor |
 | `lib/panel-data.ts` | Lecturas del panel (inbox, ficha) con service role |
