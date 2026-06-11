@@ -134,3 +134,33 @@ git push
 - **Nada de WhatsApp/Meta** — el número y el webhook siguen igual.
 - **Nada de OpenAI** — misma clave.
 - **No hay costos nuevos** — Supabase free tier aguanta esto, Vercel igual que hoy.
+
+---
+
+# Activar el motor proactivo (Fase 2b)
+
+Sigue este orden:
+
+1. **Supabase**: SQL Editor → ejecutar `migrations/004_proactive.sql` (ANTES del deploy de 2b).
+2. **Meta**: crear las 3 plantillas de `docs/GUIA-PLANTILLAS-META.md` y esperar su aprobación.
+3. **Vercel**: Settings → Environment Variables → agregar `CRON_SECRET` (string largo inventado,
+   ej. 40 caracteres aleatorios). ⚠️ Debe ser variable del PROYECTO en Vercel: es el mismo valor
+   que el invocador de crons de Vercel manda como `Authorization: Bearer ...` — si solo existe en
+   un lado, el cron dará 401 todos los días. Redeploy después de agregarla.
+4. **Panel → Configuración → Plantillas**: registrar las 3 plantillas aprobadas (mismo nombre
+   exacto; las de recontacto/oportunidad llevan 2 variables).
+5. **Panel → Configuración → Reglas**: crear la primera regla (ej. "Calientes 5 días",
+   etapa Caliente, 5 días, plantilla `recontacto_seguimiento`, máx 10/día).
+6. Al día siguiente a las 10:00 revisa **Panel → Campañas** y aprueba tu primera campaña 🎉
+   (Para probar sin esperar: pide a Claude que dispare el cron de prueba, o hazlo tú con
+   Postman: GET `https://TU-APP.vercel.app/api/cron/daily` con header
+   `Authorization: Bearer TU_CRON_SECRET`.)
+
+### Cómo probar el ciclo completo (checklist)
+
+1. Disparo de prueba del cron → aparece campaña en "Por aprobar" (si hay leads que cumplan la regla).
+2. Desmarca un destinatario → **Aprobar y enviar** → el mensaje llega al WhatsApp de prueba.
+3. El envío aparece en el historial del chat del lead (como mensaje de Daniela).
+4. Responde desde el WhatsApp de prueba → Daniela conversa normal (ventana de 24h reabierta, gratis).
+5. Responde "ya no me interesa, no me escriban" → Daniela se despide y el lead queda 🔕 en la ficha.
+6. Verifica que el lead 🔕 ya NO aparece en la siguiente campaña propuesta.

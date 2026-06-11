@@ -170,7 +170,7 @@ filtros de etapa/tags de la regla. Orden: hot → warm → new → cold; corte e
 ### 4.5 Variables de plantilla por destinatario
 
 Convención fija de variables soportadas v1 (se documenta en el panel al registrar
-la plantilla): `{{1}}` = nombre del lead (fallback "¡Hola!" sin nombre),
+la plantilla): `{{1}}` = nombre del lead (fallback "qué gusto saludarte" sin nombre),
 `{{2}}` = interés/propiedad (project_interest del lead, o nombre del listing en
 oportunidades; fallback "nuestras propiedades"). Plantillas con `variables ≤ 2`.
 

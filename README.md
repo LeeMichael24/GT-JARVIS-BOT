@@ -114,6 +114,10 @@ npm run test       # modo watch
 | `lib/panel-data.ts` | Lecturas del panel (inbox, ficha) con service role |
 | `lib/wa-window.ts` | Regla de ventana de 24h de WhatsApp |
 | `migrations/003_panel_crm.sql` | Equipo, tags, notas, asignación, RLS del panel |
+| `lib/proactive/` | Motor proactivo: elegibilidad, matching, render, engine, datos |
+| `app/api/cron/daily/route.ts` | Cron diario (radar + reglas) protegido por CRON_SECRET |
+| `app/panel/(authed)/campanas/` | Cola de aprobación de campañas |
+| `migrations/004_proactive.sql` | Plantillas, reglas, campañas, radar, opt-out |
 
 ## Roadmap post-MVP
 
@@ -123,6 +127,6 @@ npm run test       # modo watch
 | B | Handoff humano — pausar bot, notificar asesor |
 | C | Google Calendar — agendamiento de citas + Meet |
 | D | Meta CAPI — atribución de leads calificados |
-| D | Re-contacto automático — cola de seguimiento |
+| D | ✅ Fase 2b: recontactos + radar de oportunidades con aprobación |
 | E | ✅ Panel CRM (Fase 1): inbox en vivo, takeover, tags, roles |
 | F | n8n — migrar flujos para configuración visual |
