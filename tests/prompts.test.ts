@@ -10,6 +10,7 @@ const mockLead: Lead = {
   bot_active: true,
   project_interest: null,
   qualification_data: null,
+  assigned_to: null,
   first_message_at: new Date().toISOString(),
   last_message_at: new Date().toISOString(),
   created_at: new Date().toISOString(),

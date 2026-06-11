@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Lead, Conversation } from '@/types'
+import type { Lead, Conversation, ConversationRole } from '@/types'
 
-function getSupabase() {
+export function getServiceClient() {
   return createClient(
     process.env.SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -9,7 +9,7 @@ function getSupabase() {
 }
 
 export async function upsertLead(phone: string): Promise<Lead> {
-  const supabase = getSupabase()
+  const supabase = getServiceClient()
   const { data: existing } = await supabase
     .from('leads')
     .select('*')
@@ -36,9 +36,9 @@ export async function upsertLead(phone: string): Promise<Lead> {
 
 export async function updateLead(
   id: string,
-  updates: Partial<Pick<Lead, 'stage' | 'name' | 'qualification_data' | 'project_interest' | 'last_message_at'>>
+  updates: Partial<Pick<Lead, 'stage' | 'name' | 'qualification_data' | 'project_interest' | 'last_message_at' | 'bot_active' | 'assigned_to'>>
 ): Promise<void> {
-  const supabase = getSupabase()
+  const supabase = getServiceClient()
   const { error } = await supabase
     .from('leads')
     .update(updates)
@@ -49,11 +49,12 @@ export async function updateLead(
 
 export async function saveConversation(params: {
   leadId: string
-  role: 'user' | 'assistant'
+  role: ConversationRole
   content: string
   waMessageId?: string
+  sentBy?: string
 }): Promise<void> {
-  const supabase = getSupabase()
+  const supabase = getServiceClient()
   const { error } = await supabase
     .from('conversations')
     .insert({
@@ -61,6 +62,7 @@ export async function saveConversation(params: {
       role: params.role,
       content: params.content,
       wa_message_id: params.waMessageId ?? null,
+      sent_by: params.sentBy ?? null,
     })
 
   // Ignore unique constraint violation (duplicate message)
@@ -70,7 +72,7 @@ export async function saveConversation(params: {
 }
 
 export async function getConversationHistory(leadId: string, limit = 15): Promise<Conversation[]> {
-  const supabase = getSupabase()
+  const supabase = getServiceClient()
   const { data, error } = await supabase
     .from('conversations')
     .select('*')
@@ -84,7 +86,7 @@ export async function getConversationHistory(leadId: string, limit = 15): Promis
 }
 
 export async function isMessageProcessed(waMessageId: string): Promise<boolean> {
-  const supabase = getSupabase()
+  const supabase = getServiceClient()
   const { data } = await supabase
     .from('conversations')
     .select('id')
@@ -92,4 +94,29 @@ export async function isMessageProcessed(waMessageId: string): Promise<boolean> 
     .maybeSingle()
 
   return data !== null
+}
+
+export async function getLeadById(id: string): Promise<Lead | null> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle()
+  if (error) throw new Error(`getLeadById: ${error.message}`)
+  return (data as Lead) ?? null
+}
+
+export async function getLatestUserMessageAt(leadId: string): Promise<string | null> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('created_at')
+    .eq('lead_id', leadId)
+    .eq('role', 'user')
+    .order('created_at', { ascending: false })
+    .limit(1)
+  if (error) throw new Error(`getLatestUserMessageAt: ${error.message}`)
+  const rows = (data as { created_at: string }[]) ?? []
+  return rows[0]?.created_at ?? null
 }

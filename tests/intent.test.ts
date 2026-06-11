@@ -5,8 +5,8 @@ import type { Conversation } from '@/types'
 const noHistory: Conversation[] = []
 
 const historyWithBot: Conversation[] = [
-  { id: '1', lead_id: 'l1', role: 'user', content: 'Hola', wa_message_id: null, created_at: '2024-01-01T00:00:00Z' },
-  { id: '2', lead_id: 'l1', role: 'assistant', content: 'Hola! Soy Daniela. ¿Qué tipo de propiedad buscas?', wa_message_id: null, created_at: '2024-01-01T00:01:00Z' },
+  { id: '1', lead_id: 'l1', role: 'user', content: 'Hola', wa_message_id: null, sent_by: null, created_at: '2024-01-01T00:00:00Z' },
+  { id: '2', lead_id: 'l1', role: 'assistant', content: 'Hola! Soy Daniela. ¿Qué tipo de propiedad buscas?', wa_message_id: null, sent_by: null, created_at: '2024-01-01T00:01:00Z' },
 ]
 
 // ─────────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ describe('extractLastBotMessage', () => {
 
   it('returns null when no assistant messages exist', () => {
     const userOnly: Conversation[] = [
-      { id: '1', lead_id: 'l1', role: 'user', content: 'Hola', wa_message_id: null, created_at: '' },
+      { id: '1', lead_id: 'l1', role: 'user', content: 'Hola', wa_message_id: null, sent_by: null, created_at: '' },
     ]
     expect(extractLastBotMessage(userOnly)).toBeNull()
   })
@@ -178,7 +178,7 @@ describe('extractLastBotMessage', () => {
   it('truncates messages longer than 400 chars', () => {
     const longContent = 'x'.repeat(500)
     const history: Conversation[] = [
-      { id: '1', lead_id: 'l1', role: 'assistant', content: longContent, wa_message_id: null, created_at: '' },
+      { id: '1', lead_id: 'l1', role: 'assistant', content: longContent, wa_message_id: null, sent_by: null, created_at: '' },
     ]
     const result = extractLastBotMessage(history)
     expect(result).toHaveLength(403) // 400 + '...'

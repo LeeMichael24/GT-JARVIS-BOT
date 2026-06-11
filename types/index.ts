@@ -1,5 +1,6 @@
 export type LeadStage = 'new' | 'warm' | 'hot' | 'cold'
-export type ConversationRole = 'user' | 'assistant'
+export type ConversationRole = 'user' | 'assistant' | 'human'
+export type TeamRole = 'admin' | 'asesor'
 export type MessageType = 'text' | 'image' | 'audio' | 'document' | 'video' | 'unknown'
 
 export interface QualificationData {
@@ -18,6 +19,7 @@ export interface Lead {
   bot_active: boolean
   project_interest: string | null
   qualification_data: QualificationData | null
+  assigned_to: string | null
   first_message_at: string
   last_message_at: string
   created_at: string
@@ -29,6 +31,7 @@ export interface Conversation {
   role: ConversationRole
   content: string
   wa_message_id: string | null
+  sent_by: string | null
   created_at: string
 }
 
@@ -100,6 +103,31 @@ export interface MeetingRequest {
   meeting_type: 'visita_proyecto' | 'llamada' | 'videollamada'
   project_name: string | null
   notes: string | null
+}
+
+export interface TeamMember {
+  id: string
+  name: string
+  email: string
+  role: TeamRole
+  wa_phone: string | null
+  active: boolean
+  created_at: string
+}
+
+export interface Tag {
+  id: string
+  name: string
+  color: string
+  created_at: string
+}
+
+export interface LeadNote {
+  id: string
+  lead_id: string
+  author: string
+  content: string
+  created_at: string
 }
 
 export interface ClaudeResponse {
