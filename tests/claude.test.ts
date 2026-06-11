@@ -63,6 +63,12 @@ describe('parseClaudeResponse', () => {
   it('throws on completely invalid JSON', () => {
     expect(() => parseClaudeResponse('not json at all')).toThrow()
   })
+
+  it('parsea opt_out true y default false', () => {
+    const base = '{"reply":"ok","stage":"warm"'
+    expect(parseClaudeResponse(base + ',"opt_out":true}').opt_out).toBe(true)
+    expect(parseClaudeResponse(base + '}').opt_out).toBe(false)
+  })
 })
 
 describe('callClaude — mensajes humanos en el contexto', () => {

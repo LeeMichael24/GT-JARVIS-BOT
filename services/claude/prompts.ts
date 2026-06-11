@@ -172,8 +172,10 @@ Cuando el cliente quiera agendar una visita, llamada o videollamada:
     "decision_maker": true | false | null
   },
   "qualified": false,
-  "schedule_meeting": null
-}`
+  "schedule_meeting": null,
+  "opt_out": false
+}
+- "opt_out": boolean — true SOLO si el cliente pide explícitamente no ser contactado o dejar de recibir mensajes ("ya no me interesa, no me escriban", "deja de escribirme", "bórrame"). En ese caso despídete con calidez y respeto, sin insistir. No actives opt_out si solo rechaza un proyecto o duda ("ese no me convence", "lo voy a pensar") — eso NO es opt-out. En cualquier otro caso: false.`
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -27,7 +27,7 @@ const ai = vi.hoisted(() => ({
   parseClaudeResponse: vi.fn(() => ({
     reply: '¡Hola!', stage: 'new', name_captured: null,
     qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-    qualified: false, schedule_meeting: null,
+    qualified: false, schedule_meeting: null, opt_out: false,
   })),
 }))
 vi.mock('@/services/claude/client', () => ai)
@@ -132,6 +132,23 @@ describe('webhook con bot activo', () => {
 
     expect(ai.callClaude).not.toHaveBeenCalled()
     expect(wa.sendText).not.toHaveBeenCalled()
+  })
+
+  it('marca opted_out cuando Daniela detecta opt-out', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Entendido, no te molesto más. ¡Éxitos!', stage: 'cold', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      qualified: false, schedule_meeting: null, opt_out: true,
+    })
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+    expect(db.updateLead).toHaveBeenCalledWith('lead-1', { opted_out: true })
   })
 
   it('no responde si un humano tomó el chat DURANTE el debounce', async () => {

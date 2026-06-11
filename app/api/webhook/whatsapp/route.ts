@@ -206,6 +206,14 @@ async function processMessage(payload: unknown): Promise<void> {
       last_message_at: new Date().toISOString(),
     })
 
+    // Marcamos opt-out ANTES de enviar: si el envío de la despedida falla,
+    // preferimos respetar el opt-out aunque no llegue el adiós (no al revés)
+    // 11b. Opt-out: el cliente pidió no ser contactado — fuera de campañas para siempre
+    if (claudeResponse.opt_out) {
+      await updateLead(lead.id, { opted_out: true })
+      console.log(`[processMessage] Lead ${lead.id} opted out de mensajes proactivos`)
+    }
+
     // 12. Send the reply to WhatsApp (first, so we can store its wa_message_id)
     const waMessageId = await sendText(parsed.from, claudeResponse.reply)
 
