@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getSessionMember } from '@/lib/auth'
 import { listAllTags, listInboxLeads, listTeam } from '@/lib/panel-data'
-import { InboxList } from '@/components/panel/InboxList'
+import { InboxViews } from '@/components/panel/InboxViews'
 import { RealtimeRefresher } from '@/components/panel/RealtimeRefresher'
 
 export default async function InboxPage() {
@@ -17,7 +17,7 @@ export default async function InboxPage() {
   return (
     <>
       <RealtimeRefresher />
-      <InboxList items={leads} tags={tags} team={team} isAdmin={member.role === 'admin'} />
+      <InboxViews items={leads} tags={tags} team={team} isAdmin={member.role === 'admin'} />
     </>
   )
 }

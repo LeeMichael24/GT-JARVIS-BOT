@@ -8,7 +8,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   if (!member) redirect('/panel/login')
 
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
+    <div className="flex h-screen h-dvh flex-col overflow-hidden bg-zinc-950 text-zinc-100">
       <header className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
         <div className="flex items-center gap-3">
           <Link href="/panel" className="text-lg font-semibold text-white">GT Panel</Link>
@@ -24,7 +24,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           <LogoutButton />
         </nav>
       </header>
-      <main className="flex flex-1 flex-col">{children}</main>
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</main>
     </div>
   )
 }

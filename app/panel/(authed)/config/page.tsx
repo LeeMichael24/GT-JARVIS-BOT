@@ -12,10 +12,12 @@ export default async function ConfigPage() {
   const [tags, team] = await Promise.all([listAllTags(), listTeam()])
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-6">
-      <h1 className="text-xl font-semibold text-white">Configuración</h1>
-      <ConfigTags tags={tags} />
-      <ConfigTeam team={team} selfId={member.id} />
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto w-full max-w-3xl space-y-8 px-4 py-6">
+        <h1 className="text-xl font-semibold text-white">Configuración</h1>
+        <ConfigTags tags={tags} />
+        <ConfigTeam team={team} selfId={member.id} />
+      </div>
     </div>
   )
 }
