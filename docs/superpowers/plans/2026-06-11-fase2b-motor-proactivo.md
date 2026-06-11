@@ -1490,9 +1490,9 @@ const engine = vi.hoisted(() => ({
 vi.mock('@/lib/proactive/engine', () => engine)
 
 const pdata = vi.hoisted(() => ({
-  setCampaignStatus: vi.fn(async () => {}),
+  // Espeja el claim real: true solo si el estado actual coincide con fromStatus
+  claimCampaign: vi.fn(async (_id: string, fromStatus: string) => state.campaign?.status === fromStatus),
   markRecipient: vi.fn(async () => {}),
-  getCampaignStatus: vi.fn(async () => state.campaign?.status ?? null),
 }))
 vi.mock('@/lib/proactive/data', () => pdata)
 
@@ -1525,11 +1525,11 @@ describe('approveCampaign', () => {
     expect(engine.sendCampaign).not.toHaveBeenCalled()
   })
 
-  it('admin aprueba: marca sending+aprobador y envía', async () => {
+  it('admin aprueba: claim atómico sending+aprobador y envía', async () => {
     state.member = admin
     const res = await approveCampaign('camp1')
     expect(res).toEqual({ ok: true })
-    expect(pdata.setCampaignStatus).toHaveBeenCalledWith('camp1', expect.objectContaining({
+    expect(pdata.claimCampaign).toHaveBeenCalledWith('camp1', 'pending_approval', expect.objectContaining({
       status: 'sending', approved_by: 'adm1',
     }))
     expect(engine.sendCampaign).toHaveBeenCalledWith('camp1')
@@ -1549,7 +1549,7 @@ describe('rejectCampaign', () => {
     state.member = admin
     const res = await rejectCampaign('camp1')
     expect(res).toEqual({ ok: true })
-    expect(pdata.setCampaignStatus).toHaveBeenCalledWith('camp1', { status: 'rejected' })
+    expect(pdata.claimCampaign).toHaveBeenCalledWith('camp1', 'pending_approval', { status: 'rejected' })
   })
 })
 
@@ -1595,7 +1595,7 @@ import { refresh } from 'next/cache'
 import { requireAdmin, requireMember } from '@/lib/auth'
 import { getLeadById, getServiceClient, updateLead } from '@/lib/supabase'
 import { sendCampaign } from '@/lib/proactive/engine'
-import { getCampaignStatus, markRecipient, setCampaignStatus } from '@/lib/proactive/data'
+import { claimCampaign, markRecipient } from '@/lib/proactive/data'
 import type { LeadStage, TemplateCategory } from '@/types'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
@@ -1610,17 +1610,20 @@ function fail(error: unknown, fallback = 'ERROR'): ActionResult {
 export async function approveCampaign(campaignId: string): Promise<ActionResult> {
   try {
     const admin = await requireAdmin()
-    const status = await getCampaignStatus(campaignId)
-    if (status !== 'pending_approval') return { ok: false, error: 'NOT_PENDING' }
-    await setCampaignStatus(campaignId, {
+    // Claim atómico: si otro admin aprobó en paralelo (doble click), affected=0
+    // y NO se envía dos veces — guard del camino del dinero
+    const claimed = await claimCampaign(campaignId, 'pending_approval', {
       status: 'sending',
       approved_by: admin.id,
       approved_at: new Date().toISOString(),
     })
+    if (!claimed) return { ok: false, error: 'NOT_PENDING' }
     await sendCampaign(campaignId)
     refresh()
     return { ok: true }
   } catch (error) {
+    const msg = error instanceof Error ? error.message : ''
+    if (msg === 'TEMPLATE_INACTIVE') return { ok: false, error: 'TEMPLATE_INACTIVE' }
     return fail(error, 'SEND_FAILED')
   }
 }
@@ -1628,9 +1631,8 @@ export async function approveCampaign(campaignId: string): Promise<ActionResult>
 export async function rejectCampaign(campaignId: string): Promise<ActionResult> {
   try {
     await requireAdmin()
-    const status = await getCampaignStatus(campaignId)
-    if (status !== 'pending_approval') return { ok: false, error: 'NOT_PENDING' }
-    await setCampaignStatus(campaignId, { status: 'rejected' })
+    const claimed = await claimCampaign(campaignId, 'pending_approval', { status: 'rejected' })
+    if (!claimed) return { ok: false, error: 'NOT_PENDING' }
     refresh()
     return { ok: true }
   } catch (error) {
@@ -1652,7 +1654,9 @@ export async function toggleRecipient(recipientId: string, included: boolean): P
 export async function retryFailedRecipients(campaignId: string): Promise<ActionResult> {
   try {
     await requireAdmin()
-    await setCampaignStatus(campaignId, { status: 'sending' })
+    // Solo se reintenta una campaña terminada; doble click → affected=0
+    const claimed = await claimCampaign(campaignId, 'done', { status: 'sending' })
+    if (!claimed) return { ok: false, error: 'NOT_PENDING' }
     await sendCampaign(campaignId)
     refresh()
     return { ok: true }
@@ -1785,16 +1789,7 @@ export async function deleteRecontactRule(ruleId: string): Promise<ActionResult>
 }
 ```
 
-- [ ] **Step 3: Añadir a `lib/proactive/data.ts` el helper que usan las actions:**
-
-```ts
-export async function getCampaignStatus(id: string): Promise<string | null> {
-  const { data, error } = await getServiceClient()
-    .from('campaigns').select('status').eq('id', id).maybeSingle()
-  if (error) throw new Error(`getCampaignStatus: ${error.message}`)
-  return (data as { status: string } | null)?.status ?? null
-}
-```
+- [ ] **Step 3: Verificar que `claimCampaign` y `markRecipient` ya existen en `lib/proactive/data.ts`** (llegaron con el hardening del engine en la Task 4) — las actions los importan; no crear nada nuevo en data.ts.
 
 - [ ] **Step 4: Verificar** — `npm run test:run && npx tsc --noEmit` → 195 tests, limpio.
 
@@ -1861,6 +1856,7 @@ import type { Campaign } from '@/types'
 const ERROR_TEXT: Record<string, string> = {
   NOT_PENDING: 'Esta campaña ya fue procesada. Recarga la página.',
   SEND_FAILED: 'Falló el envío. Revisa el historial y reintenta los fallidos.',
+  TEMPLATE_INACTIVE: 'La plantilla de esta campaña está desactivada. Reactívala en Configuración.',
   UNAUTHORIZED: 'Sesión expirada. Vuelve a entrar.',
   FORBIDDEN: 'Solo un admin puede gestionar campañas.',
 }
