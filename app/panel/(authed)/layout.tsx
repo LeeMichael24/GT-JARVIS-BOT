@@ -1,11 +1,14 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getSessionMember } from '@/lib/auth'
+import { countPendingCampaigns } from '@/lib/proactive/data'
 import { LogoutButton } from '@/components/panel/LogoutButton'
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const member = await getSessionMember()
   if (!member) redirect('/panel/login')
+
+  const pendingCount = member.role === 'admin' ? await countPendingCampaigns() : 0
 
   return (
     <div className="flex h-screen h-dvh flex-col overflow-hidden bg-zinc-950 text-zinc-100">
@@ -17,6 +20,16 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           </span>
         </div>
         <nav className="flex items-center gap-4 text-sm">
+          {member.role === 'admin' && (
+            <Link href="/panel/campanas" className="relative text-zinc-400 hover:text-white">
+              Campañas
+              {pendingCount > 0 && (
+                <span className="absolute -right-3 -top-1.5 rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white">
+                  {pendingCount}
+                </span>
+              )}
+            </Link>
+          )}
           {member.role === 'admin' && (
             <Link href="/panel/config" className="text-zinc-400 hover:text-white">Configuración</Link>
           )}

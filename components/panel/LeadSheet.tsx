@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import {
   addLeadTag, addNote, assignLead, removeLeadTag, updateLeadStage,
 } from '@/app/panel/actions'
+import { setLeadOptOut } from '@/app/panel/proactive-actions'
 import type { ActionResult } from '@/app/panel/actions'
 import type { LeadBundle } from '@/lib/panel-data'
 import type { SessionMember } from '@/lib/auth'
@@ -54,6 +55,18 @@ export function LeadSheet({ bundle, member }: { bundle: LeadBundle; member: Sess
       </div>
 
       {error && <p className="rounded-lg bg-red-950 px-3 py-2 text-xs text-red-300">{error}</p>}
+
+      <button
+        disabled={isPending}
+        onClick={() => run(() => setLeadOptOut(lead.id, !lead.opted_out))}
+        className={`w-full rounded-lg px-3 py-1.5 text-xs ${
+          lead.opted_out
+            ? 'bg-red-950 text-red-300 hover:bg-red-900'
+            : 'bg-zinc-900 text-zinc-400 hover:text-white'
+        }`}
+      >
+        {lead.opted_out ? '🔕 No contactar (opt-out) — tocar para reactivar' : '🔔 Recibe campañas — tocar para silenciar'}
+      </button>
 
       <label className="block text-zinc-400">
         Etapa
