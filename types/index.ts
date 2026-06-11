@@ -145,7 +145,7 @@ export interface ClaudeResponse {
 export type TemplateCategory = 'MARKETING' | 'UTILITY'
 export type CampaignKind = 'recontact' | 'opportunity'
 export type CampaignStatus = 'pending_approval' | 'sending' | 'done' | 'rejected'
-export type RecipientStatus = 'pending' | 'sent' | 'failed' | 'skipped'
+export type RecipientStatus = 'pending' | 'sending' | 'sent' | 'failed' | 'skipped'
 
 export interface MessageTemplate {
   id: string
