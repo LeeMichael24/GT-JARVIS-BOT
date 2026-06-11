@@ -1,11 +1,11 @@
 # GT Bot — WhatsApp AI para Grupo Terranova SV
 
-Bot de WhatsApp que atiende leads como "Daniela", asesora virtual de Grupo Terranova. Califica leads automáticamente con Claude Sonnet y guarda todo en Supabase.
+Bot de WhatsApp que atiende leads como "Daniela", asesora virtual de Grupo Terranova. Califica leads automáticamente con GPT-4o, guarda todo en Supabase, y ahora incluye un panel CRM en `/panel` para el equipo.
 
 ## Stack
 
-- **Next.js 14** (App Router) en Vercel
-- **Claude Sonnet** (`claude-sonnet-4-6`) via Anthropic API
+- **Next.js 16** (App Router) en Vercel
+- **OpenAI GPT-4o** via API
 - **WhatsApp Cloud API** (Meta)
 - **Supabase** (PostgreSQL)
 - **grupoterranovasv.com/api** para contexto de proyectos
