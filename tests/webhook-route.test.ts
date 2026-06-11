@@ -13,8 +13,14 @@ const db = vi.hoisted(() => ({
   saveConversation: vi.fn(async () => {}),
   getConversationHistory: vi.fn(async () => []),
   isMessageProcessed: vi.fn(async () => false),
+  getUnprocessedUserMessages: vi.fn(async () => [] as unknown[]),
+  getLeadById: vi.fn(async () => null as unknown),
 }))
 vi.mock('@/lib/supabase', () => db)
+
+// Sin espera de debounce en tests — vi.hoisted corre ANTES que los imports
+// (la ruta lee WA_DEBOUNCE_MS al cargar el módulo)
+vi.hoisted(() => { process.env.WA_DEBOUNCE_MS = '0' })
 
 const ai = vi.hoisted(() => ({
   callClaude: vi.fn(async () => '{"reply":"¡Hola!"}'),
@@ -99,6 +105,10 @@ describe('webhook con bot pausado (takeover)', () => {
 describe('webhook con bot activo', () => {
   it('envía primero y guarda la respuesta con su wa_message_id', async () => {
     db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
     const res = await POST(buildRequest())
     expect(res.status).toBe(200)
     await flush()
@@ -108,5 +118,33 @@ describe('webhook con bot activo', () => {
     expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
       leadId: 'lead-1', role: 'assistant', content: '¡Hola!', waMessageId: 'wamid.out1',
     }))
+  })
+
+  it('no responde si NO es el último mensaje de la ráfaga (debounce)', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+      { id: 'c2', lead_id: 'lead-1', role: 'user', content: 'otra cosa', wa_message_id: 'wamid.in2', sent_by: null, created_at: '' },
+    ])
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(ai.callClaude).not.toHaveBeenCalled()
+    expect(wa.sendText).not.toHaveBeenCalled()
+  })
+
+  it('no responde si un humano tomó el chat DURANTE el debounce', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: false })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(ai.callClaude).not.toHaveBeenCalled()
+    expect(wa.sendText).not.toHaveBeenCalled()
   })
 })

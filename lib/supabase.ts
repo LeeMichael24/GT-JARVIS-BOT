@@ -120,3 +120,34 @@ export async function getLatestUserMessageAt(leadId: string): Promise<string | n
   const rows = (data as { created_at: string }[]) ?? []
   return rows[0]?.created_at ?? null
 }
+
+// Returns all user messages that haven't been answered yet — i.e., every user
+// message created after the most recent assistant reply (or all if no reply exists).
+// Used by the debounce logic to collect a burst of messages before responding.
+export async function getUnprocessedUserMessages(leadId: string): Promise<Conversation[]> {
+  const supabase = getServiceClient()
+
+  // Una respuesta humana (panel) también cuenta como "ya respondido"
+  const { data: lastBot } = await supabase
+    .from('conversations')
+    .select('created_at')
+    .eq('lead_id', leadId)
+    .in('role', ['assistant', 'human'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const base = supabase
+    .from('conversations')
+    .select('*')
+    .eq('lead_id', leadId)
+    .eq('role', 'user')
+    .order('created_at', { ascending: true })
+
+  const { data, error } = lastBot
+    ? await base.gt('created_at', lastBot.created_at)
+    : await base
+
+  if (error) throw new Error(`getUnprocessedUserMessages: ${error.message}`)
+  return (data as Conversation[]) ?? []
+}

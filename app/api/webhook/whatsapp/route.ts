@@ -13,11 +13,19 @@ import {
   saveConversation,
   getConversationHistory,
   isMessageProcessed,
+  getUnprocessedUserMessages,
+  getLeadById,
 } from '@/lib/supabase'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
 export const maxDuration = 60
+
+// How long to wait for additional messages before treating a burst as complete.
+// Workers for earlier messages in a burst will exit after sleeping; only the
+// last message's worker collects and processes all pending messages together.
+// Overridable via env (tests use 0).
+const DEBOUNCE_MS = Number(process.env.WA_DEBOUNCE_MS ?? 4_000)
 
 // Detects a GT website URL and returns the section ('inversiones' | 'propiedades' | null)
 const GT_URL_RE = /grupoterranovasv\.com\/(inversiones|propiedades)\/[a-zA-Z0-9]+/i
@@ -73,7 +81,9 @@ async function processMessage(payload: unknown): Promise<void> {
     // 3. Upsert lead — create if new, update last_message_at if existing
     const lead = await upsertLead(parsed.from)
 
-    // 4. Save the incoming user message ALWAYS (even during human takeover)
+    // 4. Save the incoming user message ALWAYS and immediately: it must survive
+    //    a human takeover, and other workers in the same burst need to see it
+    //    during the debounce window.
     await saveConversation({
       leadId: lead.id,
       role: 'user',
@@ -87,13 +97,40 @@ async function processMessage(payload: unknown): Promise<void> {
       return
     }
 
+    // ── DEBOUNCE ────────────────────────────────────────────────────────────
+    // Wait for the user to finish typing. If more messages arrive during this
+    // window, those workers save their messages too and sleep. After the wait,
+    // only the LAST message's worker proceeds — earlier ones exit here.
+    await new Promise<void>(resolve => setTimeout(resolve, DEBOUNCE_MS))
+
+    const pending = await getUnprocessedUserMessages(lead.id)
+    const latestPending = pending.at(-1)
+
+    if (!latestPending || latestPending.wa_message_id !== parsed.messageId) {
+      console.log(`[processMessage] Not the latest in burst — exiting (${parsed.messageId})`)
+      return
+    }
+
+    // 4c. Re-check takeover AFTER the debounce: a human may have taken the chat
+    //     while we slept (their send pauses the bot before sending)
+    const freshLead = await getLeadById(lead.id)
+    if (freshLead && !freshLead.bot_active) {
+      console.log(`[processMessage] Bot paused during debounce for lead ${lead.id} — no AI reply`)
+      return
+    }
+
+    // Combine all pending messages into a single body for intent/project detection
+    const combinedBody = pending.map(m => m.content).join('\n')
+    console.log(`[processMessage] Processing burst of ${pending.length} message(s) for lead ${lead.id}`)
+    // ── END DEBOUNCE ─────────────────────────────────────────────────────────
+
     // 5. Load conversation history — last 15 messages, most recent (descending then reversed)
     const history = await getConversationHistory(lead.id, 15)
 
     // 6. Classify intent early so we can optimize the API call
-    const intent = classifyIntent(parsed.body, history)
+    const intent = classifyIntent(combinedBody, history)
     const lastBotMessage = extractLastBotMessage(history)
-    const gtUrlSection = detectGTUrlSection(parsed.body)
+    const gtUrlSection = detectGTUrlSection(combinedBody)
 
     // 7. Fetch GT project catalog + sales playbook in parallel
     let projects: Awaited<ReturnType<typeof getAllProjects>> = []
@@ -111,8 +148,8 @@ async function processMessage(payload: unknown): Promise<void> {
 
     console.log(`[processMessage] Intent: ${intent} | GT URL: ${gtUrlSection ?? 'none'} | History: ${history.length} msgs`)
 
-    // 8. Detect which project the lead is asking about in this message
-    const detectedProject = detectProjectFromMessage(parsed.body, projects)
+    // 8. Detect which project the lead is asking about in this burst of messages
+    const detectedProject = detectProjectFromMessage(combinedBody, projects)
 
     // Fallback: if nothing detected in this message but lead has a prior interest, restore it
     let project =
