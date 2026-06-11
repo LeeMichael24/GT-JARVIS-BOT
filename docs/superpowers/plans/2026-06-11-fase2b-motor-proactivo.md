@@ -1325,7 +1325,9 @@ export const maxDuration = 60
 // Vercel Cron manda Authorization: Bearer ${CRON_SECRET}
 export async function GET(request: Request): Promise<Response> {
   const auth = request.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
+  const secret = process.env.CRON_SECRET
+  // Sin secret configurado el endpoint se CIERRA (evita 'Bearer undefined')
+  if (!secret || auth !== `Bearer ${secret}`) {
     return new Response('Unauthorized', { status: 401 })
   }
 
