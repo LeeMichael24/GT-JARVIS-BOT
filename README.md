@@ -88,7 +88,7 @@ Usar la URL de ngrok como Callback URL en Meta durante el desarrollo.
 ## Tests
 
 ```bash
-npm run test:run   # todos los tests una vez (34 tests)
+npm run test:run   # todos los tests una vez (135 tests)
 npm run test       # modo watch
 ```
 
@@ -106,6 +106,13 @@ npm run test       # modo watch
 | `lib/supabase.ts` | Todas las queries a la base de datos |
 | `types/index.ts` | Tipos TypeScript compartidos |
 | `database/schema.sql` | Schema de Supabase (ejecutar manualmente) |
+| `proxy.ts` | Protege /panel/* — chequeo de sesión + refresh de cookies (Next 16: ex-middleware) |
+| `app/panel/` | Panel CRM: login, inbox, chat con takeover, ficha de lead, config |
+| `app/panel/actions.ts` | Server actions del panel (re-validan rol en servidor) |
+| `lib/auth.ts` | Sesión del equipo + guards admin/asesor |
+| `lib/panel-data.ts` | Lecturas del panel (inbox, ficha) con service role |
+| `lib/wa-window.ts` | Regla de ventana de 24h de WhatsApp |
+| `migrations/003_panel_crm.sql` | Equipo, tags, notas, asignación, RLS del panel |
 
 ## Roadmap post-MVP
 
@@ -116,5 +123,5 @@ npm run test       # modo watch
 | C | Google Calendar — agendamiento de citas + Meet |
 | D | Meta CAPI — atribución de leads calificados |
 | D | Re-contacto automático — cola de seguimiento |
-| E | Dashboard Next.js — CRM con Supabase realtime |
+| E | ✅ Panel CRM (Fase 1): inbox en vivo, takeover, tags, roles |
 | F | n8n — migrar flujos para configuración visual |
