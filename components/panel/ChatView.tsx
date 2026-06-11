@@ -99,8 +99,8 @@ export function ChatView({ bundle, member }: { bundle: LeadBundle; member: Sessi
     bundle.team.find(t => t.id === id)?.name ?? 'Equipo'
 
   return (
-    <div className="flex flex-1 overflow-hidden">
-      <div className="flex flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col">
         <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2">
           <div className="flex items-center gap-3">
             <Link href="/panel" className="text-zinc-400 hover:text-white">←</Link>
@@ -129,7 +129,7 @@ export function ChatView({ bundle, member }: { bundle: LeadBundle; member: Sessi
           </div>
         )}
 
-        <div className="flex-1 space-y-2 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-4 py-4">
           {messages.map(m => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
               <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
@@ -182,8 +182,32 @@ export function ChatView({ bundle, member }: { bundle: LeadBundle; member: Sessi
         </div>
       </div>
 
-      <aside className={`${showSheet ? 'block' : 'hidden'} w-full max-w-xs border-l border-zinc-800 lg:block`}>
-        <LeadSheet bundle={bundle} member={member} />
+      {showSheet && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setShowSheet(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 right-0 z-40 flex w-full max-w-sm transform flex-col border-l border-zinc-800 bg-zinc-950 transition-transform duration-200 ${
+          showSheet
+            ? 'translate-x-0'
+            : 'translate-x-full invisible pointer-events-none lg:visible lg:pointer-events-auto'
+        } lg:static lg:z-auto lg:w-72 lg:max-w-none lg:translate-x-0 lg:transition-none`}
+      >
+        <div className="flex shrink-0 items-center justify-end border-b border-zinc-800 p-2 lg:hidden">
+          <button
+            onClick={() => setShowSheet(false)}
+            aria-label="Cerrar ficha"
+            className="px-3 py-2 text-zinc-400 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="min-h-0 flex-1">
+          <LeadSheet bundle={bundle} member={member} />
+        </div>
       </aside>
     </div>
   )
