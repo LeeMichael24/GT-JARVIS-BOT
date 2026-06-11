@@ -36,7 +36,7 @@ export async function upsertLead(phone: string): Promise<Lead> {
 
 export async function updateLead(
   id: string,
-  updates: Partial<Pick<Lead, 'stage' | 'name' | 'qualification_data' | 'project_interest' | 'last_message_at' | 'bot_active' | 'assigned_to'>>
+  updates: Partial<Pick<Lead, 'stage' | 'name' | 'qualification_data' | 'project_interest' | 'last_message_at' | 'bot_active' | 'assigned_to' | 'opted_out' | 'last_proactive_at'>>
 ): Promise<void> {
   const supabase = getServiceClient()
   const { error } = await supabase

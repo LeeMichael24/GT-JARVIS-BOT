@@ -20,6 +20,8 @@ export interface Lead {
   project_interest: string | null
   qualification_data: QualificationData | null
   assigned_to: string | null
+  opted_out: boolean
+  last_proactive_at: string | null
   first_message_at: string
   last_message_at: string
   created_at: string
@@ -137,4 +139,60 @@ export interface ClaudeResponse {
   qualification_data: QualificationData
   qualified: boolean
   schedule_meeting: MeetingRequest | null
+  opt_out: boolean
+}
+
+export type TemplateCategory = 'MARKETING' | 'UTILITY'
+export type CampaignKind = 'recontact' | 'opportunity'
+export type CampaignStatus = 'pending_approval' | 'sending' | 'done' | 'rejected'
+export type RecipientStatus = 'pending' | 'sent' | 'failed' | 'skipped'
+
+export interface MessageTemplate {
+  id: string
+  name: string
+  language: string
+  category: TemplateCategory
+  body_preview: string
+  variables: number
+  active: boolean
+  created_at: string
+}
+
+export interface RecontactRule {
+  id: string
+  name: string
+  active: boolean
+  stages: LeadStage[] | null
+  tag_ids: string[] | null
+  days_inactive: number
+  template_id: string
+  max_per_run: number
+  created_at: string
+}
+
+export interface Campaign {
+  id: string
+  kind: CampaignKind
+  status: CampaignStatus
+  title: string
+  reason: string | null
+  rule_id: string | null
+  listing_slug: string | null
+  template_id: string
+  approved_by: string | null
+  created_at: string
+  approved_at: string | null
+}
+
+export interface CampaignRecipient {
+  id: string
+  campaign_id: string
+  lead_id: string
+  included: boolean
+  variables: string[]
+  match_reason: string | null
+  status: RecipientStatus
+  wa_message_id: string | null
+  error: string | null
+  sent_at: string | null
 }

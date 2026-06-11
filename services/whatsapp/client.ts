@@ -60,3 +60,31 @@ export async function sendText(
   }) as { messages?: { id?: string }[] } | null
   return response?.messages?.[0]?.id ?? null
 }
+
+// Mensajes de plantilla (fuera de la ventana de 24h). Sin typing delay:
+// son envíos programados/aprobados, no conversación en vivo.
+export async function sendTemplate(
+  to: string,
+  templateName: string,
+  language: string,
+  bodyParams: string[]
+): Promise<string | null> {
+  const template: Record<string, unknown> = {
+    name: templateName,
+    language: { code: language },
+  }
+  if (bodyParams.length > 0) {
+    template.components = [{
+      type: 'body',
+      parameters: bodyParams.map(text => ({ type: 'text', text })),
+    }]
+  }
+  const response = await postWithRetry({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'template',
+    template,
+  }) as { messages?: { id?: string }[] } | null
+  return response?.messages?.[0]?.id ?? null
+}

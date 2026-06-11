@@ -58,6 +58,7 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     qualification_data: parsed.qualification_data ?? emptyQual,
     qualified: parsed.qualified ?? false,
     schedule_meeting: parseMeetingRequest(parsed.schedule_meeting),
+    opt_out: parsed.opt_out ?? false,
   }
 }
 

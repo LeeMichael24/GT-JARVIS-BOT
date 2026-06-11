@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { calculateTypingDelay, sendText } from '@/services/whatsapp/client'
+import { calculateTypingDelay, sendText, sendTemplate } from '@/services/whatsapp/client'
 
 describe('calculateTypingDelay', () => {
   it('returns minimum 1500ms for very short messages', () => {
@@ -62,5 +62,54 @@ describe('sendText — wa_message_id y delay', () => {
     const promise = sendText('50312345678', 'mensaje largo de prueba para delay', { typingDelay: false })
     // Sin avanzar timers debe resolver (no hay setTimeout pendiente)
     await expect(promise).resolves.toBe('wamid.x')
+  })
+})
+
+describe('sendTemplate', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    process.env.WA_ACCESS_TOKEN = 'token'
+    process.env.WA_PHONE_NUMBER_ID = '12345'
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('envía el payload de plantilla correcto y devuelve el id', async () => {
+    const calls: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      calls.push(JSON.parse(init.body))
+      return { ok: true, json: async () => ({ messages: [{ id: 'wamid.t1' }] }), text: async () => '' }
+    }))
+    const id = await sendTemplate('50312345678', 'recontacto_seguimiento', 'es', ['Carlos', 'Portacelli'])
+    expect(id).toBe('wamid.t1')
+    expect(calls[0]).toEqual({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: '50312345678',
+      type: 'template',
+      template: {
+        name: 'recontacto_seguimiento',
+        language: { code: 'es' },
+        components: [{
+          type: 'body',
+          parameters: [
+            { type: 'text', text: 'Carlos' },
+            { type: 'text', text: 'Portacelli' },
+          ],
+        }],
+      },
+    })
+  })
+
+  it('sin variables omite components', async () => {
+    const calls: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      calls.push(JSON.parse(init.body))
+      return { ok: true, json: async () => ({ messages: [{ id: 'wamid.t2' }] }), text: async () => '' }
+    }))
+    await sendTemplate('503', 'hola_simple', 'es', [])
+    expect((calls[0] as { template: { components?: unknown } }).template.components).toBeUndefined()
   })
 })

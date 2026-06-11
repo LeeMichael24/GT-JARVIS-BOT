@@ -11,6 +11,8 @@ const mockLead: Lead = {
   project_interest: null,
   qualification_data: null,
   assigned_to: null,
+  opted_out: false,
+  last_proactive_at: null,
   first_message_at: new Date().toISOString(),
   last_message_at: new Date().toISOString(),
   created_at: new Date().toISOString(),
