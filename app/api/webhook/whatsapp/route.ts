@@ -169,15 +169,23 @@ async function processMessage(payload: unknown): Promise<void> {
       last_message_at: new Date().toISOString(),
     })
 
-    // 12. Save the bot's response
-    await saveConversation({
-      leadId: lead.id,
-      role: 'assistant',
-      content: claudeResponse.reply,
-    })
+    // 12. Send the reply to WhatsApp (first, so we can store its wa_message_id)
+    const waMessageId = await sendText(parsed.from, claudeResponse.reply)
 
-    // 13. Send the reply to WhatsApp
-    await sendText(parsed.from, claudeResponse.reply)
+    // 13. Save the bot's response
+    try {
+      await saveConversation({
+        leadId: lead.id,
+        role: 'assistant',
+        content: claudeResponse.reply,
+        waMessageId: waMessageId ?? undefined,
+      })
+    } catch (err) {
+      console.error(
+        `[processMessage] Reply DELIVERED (wa_message_id=${waMessageId ?? 'none'}) but saveConversation failed — history will miss this reply:`,
+        err instanceof Error ? err.message : err
+      )
+    }
 
     console.log(`[processMessage] Done — lead ${lead.id} | stage: ${claudeResponse.stage} | qualified: ${claudeResponse.qualified}`)
   } catch (error) {

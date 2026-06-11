@@ -95,3 +95,18 @@ describe('webhook con bot pausado (takeover)', () => {
     expect(wa.sendText).not.toHaveBeenCalled()
   })
 })
+
+describe('webhook con bot activo', () => {
+  it('envía primero y guarda la respuesta con su wa_message_id', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(ai.callClaude).toHaveBeenCalledTimes(1)
+    expect(wa.sendText).toHaveBeenCalledWith('50312345678', '¡Hola!')
+    expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
+      leadId: 'lead-1', role: 'assistant', content: '¡Hola!', waMessageId: 'wamid.out1',
+    }))
+  })
+})
