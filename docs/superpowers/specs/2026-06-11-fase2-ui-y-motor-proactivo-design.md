@@ -152,7 +152,7 @@ humano lo atiende, no se le mete ruido) **y** `last_proactive_at` es null o
 anterior a 7 días (constante `MIN_PROACTIVE_GAP_DAYS = 7`) **y** no está ya en
 otra campaña `pending_approval`/`sending`.
 
-Para reglas de recontacto además: `last_message_at` ≤ now − days_inactive, y
+Para reglas de recontacto además: el último mensaje DEL CLIENTE (role user) es ≤ now − days_inactive, y
 filtros de etapa/tags de la regla. Orden: hot → warm → new → cold; corte en
 `max_per_run`.
 
