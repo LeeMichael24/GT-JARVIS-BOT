@@ -51,17 +51,25 @@ CREATE TABLE campaign_recipients (
   variables     JSONB NOT NULL DEFAULT '[]',
   match_reason  TEXT,
   status        TEXT NOT NULL DEFAULT 'pending'
-                CHECK (status IN ('pending','sent','failed','skipped')),
+                CHECK (status IN ('pending','sending','sent','failed','skipped')),
   wa_message_id TEXT,
   error         TEXT,
   sent_at       TIMESTAMPTZ,
   UNIQUE (campaign_id, lead_id)
 );
 CREATE INDEX idx_recipients_campaign ON campaign_recipients(campaign_id);
+CREATE INDEX idx_recipients_lead ON campaign_recipients(lead_id);
+
+-- Idempotencia dura contra crons solapados: una campaña por regla por día,
+-- y una campaña por listing para siempre
+CREATE UNIQUE INDEX uniq_campaign_rule_day ON campaigns(rule_id, (created_at::date)) WHERE rule_id IS NOT NULL;
+CREATE UNIQUE INDEX uniq_campaign_listing ON campaigns(listing_slug) WHERE listing_slug IS NOT NULL;
 
 -- ── CONTROL POR LEAD ──────────────────────────────────────────────
 ALTER TABLE leads ADD COLUMN opted_out BOOLEAN DEFAULT false;
 ALTER TABLE leads ADD COLUMN last_proactive_at TIMESTAMPTZ;
+-- Índice para leadsWithTags: último mensaje del cliente por lead
+CREATE INDEX idx_conversations_lead_role_created ON conversations(lead_id, role, created_at DESC);
 
 -- ── RADAR ─────────────────────────────────────────────────────────
 CREATE TABLE known_listings (
