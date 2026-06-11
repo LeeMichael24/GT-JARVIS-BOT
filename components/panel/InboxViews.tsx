@@ -1,10 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { InboxList } from '@/components/panel/InboxList'
+import { KanbanBoard } from '@/components/panel/KanbanBoard'
 import { EMPTY_FILTERS, filterInboxLeads, type InboxFilters } from '@/components/panel/inbox-filtering'
 import type { InboxLead } from '@/lib/panel-data'
 import type { Tag, TeamMember } from '@/types'
+
+type Vista = 'lista' | 'kanban'
 
 export function InboxViews({ items, tags, team, isAdmin }: {
   items: InboxLead[]
@@ -13,14 +16,36 @@ export function InboxViews({ items, tags, team, isAdmin }: {
   isAdmin: boolean
 }) {
   const [filters, setFilters] = useState<InboxFilters>(EMPTY_FILTERS)
+  const [vista, setVista] = useState<Vista>('lista')
+
+  // Preferencia persistida; se lee en effect para no romper la hidratación
+  useEffect(() => {
+    if (window.localStorage.getItem('panel-vista') === 'kanban') setVista('kanban')
+  }, [])
+
+  function cambiarVista(v: Vista) {
+    setVista(v)
+    window.localStorage.setItem('panel-vista', v)
+  }
+
   const filtered = useMemo(() => filterInboxLeads(items, filters), [items, filters])
   const set = (patch: Partial<InboxFilters>) => setFilters(f => ({ ...f, ...patch }))
 
   const selectCls = 'rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-300'
+  const toggleCls = (active: boolean) =>
+    `rounded-lg px-3 py-1.5 text-sm ${active ? 'bg-emerald-700 text-white' : 'bg-zinc-900 text-zinc-400 hover:text-white'}`
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col px-3 py-4">
       <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1" role="tablist" aria-label="Vista">
+          <button role="tab" aria-selected={vista === 'lista'} onClick={() => cambiarVista('lista')} className={toggleCls(vista === 'lista')}>
+            ☰ Lista
+          </button>
+          <button role="tab" aria-selected={vista === 'kanban'} onClick={() => cambiarVista('kanban')} className={toggleCls(vista === 'kanban')}>
+            ▦ Kanban
+          </button>
+        </div>
         <input
           value={filters.search}
           onChange={e => set({ search: e.target.value })}
@@ -53,7 +78,9 @@ export function InboxViews({ items, tags, team, isAdmin }: {
       </div>
 
       <div className="mt-4 flex min-h-0 flex-1 flex-col">
-        <InboxList items={filtered} />
+        {vista === 'kanban'
+          ? <KanbanBoard items={filtered} />
+          : <InboxList items={filtered} />}
       </div>
     </div>
   )
