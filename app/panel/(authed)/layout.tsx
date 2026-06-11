@@ -8,7 +8,11 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const member = await getSessionMember()
   if (!member) redirect('/panel/login')
 
-  const pendingCount = member.role === 'admin' ? await countPendingCampaigns() : 0
+  // Tolerante: si la migración 004 aún no corrió (o falla la query), el panel
+  // sigue funcionando con badge en 0 en vez de tumbar el layout completo
+  const pendingCount = member.role === 'admin'
+    ? await countPendingCampaigns().catch(() => 0)
+    : 0
 
   return (
     <div className="flex h-screen h-dvh flex-col overflow-hidden bg-zinc-950 text-zinc-100">
