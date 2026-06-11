@@ -79,12 +79,12 @@ ALTER TABLE conversations ADD COLUMN sent_by UUID REFERENCES team_members(id);
 
 -- ── HELPERS RLS (SECURITY DEFINER evita recursión en team_members) ─
 CREATE OR REPLACE FUNCTION is_active_member() RETURNS boolean
-LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT EXISTS (SELECT 1 FROM team_members WHERE id = auth.uid() AND active)
 $$;
 
 CREATE OR REPLACE FUNCTION is_active_admin() RETURNS boolean
-LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT EXISTS (SELECT 1 FROM team_members WHERE id = auth.uid() AND active AND role = 'admin')
 $$;
 
@@ -128,6 +128,10 @@ CREATE POLICY lead_notes_select ON lead_notes FOR SELECT TO authenticated
 -- server actions con service role (que ignora RLS).
 
 -- ── REALTIME ──────────────────────────────────────────────────────
+-- UPDATEs de leads (asignación, bot_active) necesitan el row completo
+-- para que Realtime + RLS filtren correctamente por asesor
+ALTER TABLE leads REPLICA IDENTITY FULL;
+
 DO $$ BEGIN
   ALTER PUBLICATION supabase_realtime ADD TABLE conversations;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;

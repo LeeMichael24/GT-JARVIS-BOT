@@ -87,7 +87,7 @@ CREATE TABLE team_members (
 
 -- Taxonomía de tags (configurable por admin)
 CREATE TABLE tags (
-  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name       TEXT UNIQUE NOT NULL,
   color      TEXT NOT NULL DEFAULT '#6b7280',
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -105,7 +105,7 @@ CREATE TABLE lead_tags (
 
 -- Notas internas
 CREATE TABLE lead_notes (
-  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lead_id    UUID REFERENCES leads(id) ON DELETE CASCADE NOT NULL,
   author     UUID REFERENCES team_members(id) NOT NULL,
   content    TEXT NOT NULL,
@@ -144,6 +144,9 @@ Notas:
 - Sin políticas INSERT/UPDATE/DELETE para `authenticated`: toda escritura pasa por server
   actions con service role.
 - Realtime (postgres_changes) respeta estas mismas políticas con el token del usuario.
+- `leads` lleva `REPLICA IDENTITY FULL` para que los UPDATE (asignación, bot_active)
+  lleguen con el row completo y el filtrado RLS por asesor sea consistente.
+- Las funciones helper se marcan `STABLE` (solo lectura) para que el planner las cachee.
 
 ---
 
