@@ -4,5 +4,8 @@
     "app/api/webhook/whatsapp/route.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/cron/daily", "schedule": "0 16 * * *" }
+  ]
 }
