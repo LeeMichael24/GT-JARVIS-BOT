@@ -25,6 +25,8 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
   // Override optimista: leadId → etapa destino; se limpia cuando llegan items frescos
   const [overrides, setOverrides] = useState<Record<string, LeadStage>>({})
 
+  // Items frescos del server ya traen la etapa real: limpiar overrides optimistas
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setOverrides({}) }, [items])
 
   const effective = items.map(it =>
@@ -41,7 +43,8 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
       const res = await updateLeadStage(leadId, stage)
       if (!res.ok) {
         setOverrides(o => {
-          const { [leadId]: _drop, ...rest } = o
+          const rest = { ...o }
+          delete rest[leadId]
           return rest
         })
         setError(ERROR_TEXT[res.error] ?? 'No se pudo mover. Reintenta.')

@@ -18,8 +18,9 @@ export function InboxViews({ items, tags, team, isAdmin }: {
   const [filters, setFilters] = useState<InboxFilters>(EMPTY_FILTERS)
   const [vista, setVista] = useState<Vista>('lista')
 
-  // Preferencia persistida; se lee en effect para no romper la hidratación
+  // Leer en effect (no en init) para no romper la hidratación SSR
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (window.localStorage.getItem('panel-vista') === 'kanban') setVista('kanban')
   }, [])
 
