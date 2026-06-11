@@ -1,5 +1,15 @@
-import { describe, it, expect } from 'vitest'
-import { parseClaudeResponse } from '@/services/claude/client'
+import { describe, it, expect, vi } from 'vitest'
+import { parseClaudeResponse, callClaude } from '@/services/claude/client'
+
+const openaiSpy = vi.hoisted(() => ({
+  create: vi.fn(async () => ({ choices: [{ message: { content: '{"reply":"ok"}' } }] })),
+}))
+
+vi.mock('openai', () => ({
+  default: class {
+    chat = { completions: { create: openaiSpy.create } }
+  },
+}))
 
 const validResponse = {
   reply: 'Hola Carlos, me alegra que te interese Portacelli. ¿Cuándo piensas comprar?',
@@ -52,5 +62,20 @@ describe('parseClaudeResponse', () => {
 
   it('throws on completely invalid JSON', () => {
     expect(() => parseClaudeResponse('not json at all')).toThrow()
+  })
+})
+
+describe('callClaude — mensajes humanos en el contexto', () => {
+  it('mapea role human a assistant para el API', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test'
+    const history = [
+      { id: '1', lead_id: 'l', role: 'user' as const, content: 'Hola', wa_message_id: null, sent_by: null, created_at: '' },
+      { id: '2', lead_id: 'l', role: 'human' as const, content: 'Le atiende Michael', wa_message_id: null, sent_by: 'm1', created_at: '' },
+      { id: '3', lead_id: 'l', role: 'assistant' as const, content: 'Con gusto', wa_message_id: null, sent_by: null, created_at: '' },
+    ]
+    await callClaude('system', history)
+    const call = (openaiSpy.create.mock.calls[0] as unknown as [{ messages: { role: string }[] }])[0]
+    const roles = call.messages.map(m => m.role)
+    expect(roles).toEqual(['system', 'user', 'assistant', 'assistant'])
   })
 })

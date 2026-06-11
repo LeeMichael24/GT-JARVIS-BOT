@@ -12,7 +12,9 @@ export async function callClaude(
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
     ...history.map(msg => ({
-      role: msg.role as 'user' | 'assistant',
+      // 'human' = mensaje del equipo enviado desde el panel; para el modelo es
+      // indistinguible de Daniela (mismo número), así que va como assistant
+      role: msg.role === 'user' ? ('user' as const) : ('assistant' as const),
       content: msg.content,
     })),
   ]
