@@ -4,7 +4,7 @@ const mockSupabase = {
   from: vi.fn(() => mockSupabase),
   select: vi.fn(() => mockSupabase),
   eq: vi.fn(() => mockSupabase),
-  upsert: vi.fn(() => mockSupabase),
+  upsert: vi.fn(),
   maybeSingle: vi.fn(),
 }
 
