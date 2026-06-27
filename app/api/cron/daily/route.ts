@@ -1,4 +1,5 @@
 import { runDailyRadar, runRecontactRules } from '@/lib/proactive/engine'
+import { aggregateDailyMetrics } from '@/lib/agent-brain'
 
 export const maxDuration = 60
 
@@ -18,6 +19,12 @@ export async function GET(request: Request): Promise<Response> {
     error: e instanceof Error ? e.message : 'rules failed',
   }))
 
-  console.log('[cron/daily]', JSON.stringify({ radar, rules }))
-  return Response.json({ radar, rules })
+  const yesterday = new Date()
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+  const metrics = await aggregateDailyMetrics(yesterday).catch((e: unknown) => ({
+    error: e instanceof Error ? e.message : 'metrics failed',
+  }))
+
+  console.log('[cron/daily]', JSON.stringify({ radar, rules, metrics }))
+  return Response.json({ radar, rules, metrics })
 }

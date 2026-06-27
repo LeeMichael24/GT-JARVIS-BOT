@@ -6,6 +6,11 @@ const engine = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/proactive/engine', () => engine)
 
+const brain = vi.hoisted(() => ({
+  aggregateDailyMetrics: vi.fn(async () => undefined),
+}))
+vi.mock('@/lib/agent-brain', () => brain)
+
 import { GET } from '@/app/api/cron/daily/route'
 
 process.env.CRON_SECRET = 'sec123'
@@ -39,6 +44,7 @@ describe('cron daily', () => {
     expect(await res.json()).toEqual({
       radar: { newListings: 1, campaignsCreated: 1 },
       rules: { campaignsCreated: 2 },
+      metrics: undefined,
     })
   })
 

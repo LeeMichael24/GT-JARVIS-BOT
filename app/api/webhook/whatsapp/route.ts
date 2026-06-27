@@ -21,6 +21,7 @@ import {
 } from '@/lib/supabase'
 import { calculateAdaptiveDebounce, computeBurstPattern } from '@/lib/debounce'
 import { createSequence, pauseLeadSequences } from '@/lib/sequences'
+import { saveBrainObservations, getHighConfidenceLearnings, formatLearningsForPrompt } from '@/lib/agent-brain'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -168,14 +169,17 @@ async function processMessage(payload: unknown): Promise<void> {
     // 7. Fetch GT project catalog + sales playbook in parallel; deal memory already fetched pre-debounce
     let projects: Awaited<ReturnType<typeof getAllProjects>> = []
     let salesPlaybook: string | null = null
+    let brainLearnings: string = ''
     const existingDeal = existingDealForDebounce
     try {
-      const [projectsResult, playbookEntries] = await Promise.all([
+      const [projectsResult, playbookEntries, brainEntries] = await Promise.all([
         getAllProjects(),
         getPlaybook(),
+        getHighConfidenceLearnings(),
       ])
       projects = projectsResult
       salesPlaybook = formatPlaybookForPrompt(playbookEntries)
+      brainLearnings = formatLearningsForPrompt(brainEntries)
     } catch (err) {
       console.warn('[processMessage] Could not fetch GT projects/playbook:', err)
     }
@@ -213,6 +217,7 @@ async function processMessage(payload: unknown): Promise<void> {
     const systemPrompt = buildSystemPrompt({
       lead, project, projects, intent, lastBotMessage, gtUrlSection, salesPlaybook,
       dealSummary: existingDeal ? { summary: existingDeal.summary, next_action: existingDeal.next_action } : null,
+      brainLearnings: brainLearnings || null,
     })
     const rawResponse = await callClaude(systemPrompt, history)
     const claudeResponse = parseClaudeResponse(rawResponse)
@@ -227,6 +232,15 @@ async function processMessage(payload: unknown): Promise<void> {
         await upsertDealSummary(lead.id, { ...claudeResponse.deal_summary, signals: mergedSignals })
       } catch (err) {
         console.warn('[processMessage] Failed to save deal summary:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    // 9c. Save brain observations
+    if (claudeResponse.brain_observations.length > 0) {
+      try {
+        await saveBrainObservations(lead.id, claudeResponse.brain_observations)
+      } catch (err) {
+        console.warn('[processMessage] Failed to save brain observations:', err instanceof Error ? err.message : err)
       }
     }
 
