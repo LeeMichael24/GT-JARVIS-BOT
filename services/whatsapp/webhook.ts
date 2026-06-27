@@ -15,6 +15,8 @@ export function parseWebhook(raw: unknown): ParsedWebhook | null {
     const type = (msg.type as string) as MessageType
     const body = type === 'text'
       ? ((msg.text as Record<string, string>)?.body ?? '')
+      : type === 'interactive'
+      ? ((msg.interactive as Record<string, Record<string, string>>)?.button_reply?.title ?? '')
       : ''
 
     let mediaId: string | null = null

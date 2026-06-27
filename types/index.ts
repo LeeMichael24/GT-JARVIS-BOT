@@ -1,7 +1,7 @@
 export type LeadStage = 'new' | 'warm' | 'hot' | 'cold'
 export type ConversationRole = 'user' | 'assistant' | 'human'
 export type TeamRole = 'admin' | 'asesor'
-export type MessageType = 'text' | 'image' | 'audio' | 'document' | 'video' | 'unknown'
+export type MessageType = 'text' | 'image' | 'audio' | 'document' | 'video' | 'interactive' | 'unknown'
 
 export interface QualificationData {
   purpose: 'vivienda_propia' | 'inversion' | 'ambos' | null

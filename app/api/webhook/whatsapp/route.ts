@@ -88,6 +88,9 @@ async function processMessage(payload: unknown): Promise<void> {
       }
     } else if (parsed.messageType === 'image' && parsed.mediaId) {
       messageBody = '[El cliente envió una imagen]'
+    } else if (parsed.messageType === 'interactive') {
+      // Button reply — body was already extracted by parseWebhook; skip if somehow empty
+      if (!parsed.body.trim()) return
     } else if (parsed.messageType !== 'text' || !parsed.body.trim()) {
       return
     }

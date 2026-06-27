@@ -95,7 +95,7 @@ Reglas:
         continue
       }
 
-      const waMessageId = await sendText(lead.phone, reply)
+      const waMessageId = await sendText(lead.phone, reply, { typingDelay: false })
       await saveConversation({
         leadId: seq.lead_id,
         role: 'assistant',
