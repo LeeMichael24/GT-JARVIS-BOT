@@ -15,6 +15,8 @@ const db = vi.hoisted(() => ({
   isMessageProcessed: vi.fn(async () => false),
   getUnprocessedUserMessages: vi.fn(async () => [] as unknown[]),
   getLeadById: vi.fn(async () => null as unknown),
+  getDealSummary: vi.fn(async () => null as unknown),
+  upsertDealSummary: vi.fn(async () => {}),
 }))
 vi.mock('@/lib/supabase', () => db)
 

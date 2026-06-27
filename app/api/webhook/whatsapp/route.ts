@@ -18,16 +18,15 @@ import {
   getDealSummary,
   upsertDealSummary,
 } from '@/lib/supabase'
+import { calculateAdaptiveDebounce, computeBurstPattern } from '@/lib/debounce'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
 export const maxDuration = 60
 
-// How long to wait for additional messages before treating a burst as complete.
-// Workers for earlier messages in a burst will exit after sleeping; only the
-// last message's worker collects and processes all pending messages together.
-// Overridable via env (tests use 0).
-const DEBOUNCE_MS = Number(process.env.WA_DEBOUNCE_MS ?? 4_000)
+// Adaptive debounce: waits for the user to finish typing.
+// Duration is learned from each lead's typing pattern via calculateAdaptiveDebounce.
+// Overridable per-lead via WA_DEBOUNCE_MS env var (tests use 0).
 
 // Detects a GT website URL and returns the section ('inversiones' | 'propiedades' | null)
 const GT_URL_RE = /grupoterranovasv\.com\/(inversiones|propiedades)\/[a-zA-Z0-9]+/i
@@ -99,11 +98,13 @@ async function processMessage(payload: unknown): Promise<void> {
       return
     }
 
-    // ── DEBOUNCE ────────────────────────────────────────────────────────────
-    // Wait for the user to finish typing. If more messages arrive during this
-    // window, those workers save their messages too and sleep. After the wait,
-    // only the LAST message's worker proceeds — earlier ones exit here.
-    await new Promise<void>(resolve => setTimeout(resolve, DEBOUNCE_MS))
+    // ── ADAPTIVE DEBOUNCE ──────────────────────────────────────────
+    // Use learned typing pattern for this lead, fall back to env/default.
+    // Fetch existing deal signals BEFORE sleeping so we can learn from them.
+    const existingDealForDebounce = await getDealSummary(lead.id).catch(() => null)
+    const adaptiveMs = calculateAdaptiveDebounce(existingDealForDebounce?.signals)
+    const debounceMs = Number(process.env.WA_DEBOUNCE_MS ?? adaptiveMs)
+    await new Promise<void>(resolve => setTimeout(resolve, debounceMs))
 
     const pending = await getUnprocessedUserMessages(lead.id)
     const latestPending = pending.at(-1)
@@ -124,6 +125,10 @@ async function processMessage(payload: unknown): Promise<void> {
     // Combine all pending messages into a single body for intent/project detection
     const combinedBody = pending.map(m => m.content).join('\n')
     console.log(`[processMessage] Processing burst of ${pending.length} message(s) for lead ${lead.id}`)
+
+    // Record burst pattern for adaptive debounce learning
+    const burstTimestamps = pending.map(m => new Date(m.created_at).getTime())
+    const burstPatternUpdate = computeBurstPattern(burstTimestamps, existingDealForDebounce?.signals)
     // ── END DEBOUNCE ─────────────────────────────────────────────────────────
 
     // 5. Load conversation history — last 15 messages, most recent (descending then reversed)
@@ -134,21 +139,19 @@ async function processMessage(payload: unknown): Promise<void> {
     const lastBotMessage = extractLastBotMessage(history)
     const gtUrlSection = detectGTUrlSection(combinedBody)
 
-    // 7. Fetch GT project catalog + sales playbook + deal memory in parallel
+    // 7. Fetch GT project catalog + sales playbook in parallel; deal memory already fetched pre-debounce
     let projects: Awaited<ReturnType<typeof getAllProjects>> = []
     let salesPlaybook: string | null = null
-    let existingDeal: Awaited<ReturnType<typeof getDealSummary>> = null
+    const existingDeal = existingDealForDebounce
     try {
-      const [projectsResult, playbookEntries, dealResult] = await Promise.all([
+      const [projectsResult, playbookEntries] = await Promise.all([
         getAllProjects(),
         getPlaybook(),
-        getDealSummary(lead.id),
       ])
       projects = projectsResult
       salesPlaybook = formatPlaybookForPrompt(playbookEntries)
-      existingDeal = dealResult
     } catch (err) {
-      console.warn('[processMessage] Could not fetch GT projects/playbook/deal:', err)
+      console.warn('[processMessage] Could not fetch GT projects/playbook:', err)
     }
 
     console.log(`[processMessage] Intent: ${intent} | GT URL: ${gtUrlSection ?? 'none'} | History: ${history.length} msgs`)
@@ -188,10 +191,14 @@ async function processMessage(payload: unknown): Promise<void> {
     const rawResponse = await callClaude(systemPrompt, history)
     const claudeResponse = parseClaudeResponse(rawResponse)
 
-    // 9b. Save deal summary for future conversations
+    // 9b. Save deal summary for future conversations, merging in the burst pattern update
     if (claudeResponse.deal_summary) {
       try {
-        await upsertDealSummary(lead.id, claudeResponse.deal_summary)
+        const mergedSignals: typeof claudeResponse.deal_summary.signals = {
+          ...claudeResponse.deal_summary.signals,
+          ...burstPatternUpdate,
+        }
+        await upsertDealSummary(lead.id, { ...claudeResponse.deal_summary, signals: mergedSignals })
       } catch (err) {
         console.warn('[processMessage] Failed to save deal summary:', err instanceof Error ? err.message : err)
       }
