@@ -1,3 +1,5 @@
+import type { AgentAction } from '@/types'
+
 const WA_API_VERSION = 'v19.0'
 const WA_BASE = `https://graph.facebook.com/${WA_API_VERSION}`
 
@@ -59,6 +61,55 @@ export async function sendText(
     text: { body, preview_url: false },
   }) as { messages?: { id?: string }[] } | null
   return response?.messages?.[0]?.id ?? null
+}
+
+export interface NotificationParams {
+  leadName: string
+  leadPhone: string
+  action: AgentAction
+  botReply: string
+  dealSummary: string | null
+}
+
+export function formatNotification(params: NotificationParams): string {
+  const { leadName, leadPhone, action, botReply, dealSummary } = params
+  const isEscalation = action.type === 'escalate_ceo'
+  const clientLabel = action.client_type === 'corporate' ? 'CORPORATIVO' : 'Individual'
+
+  if (isEscalation) {
+    const lines = [
+      '🚨 LEAD HOT — Acción inmediata',
+      '',
+      `Cliente: ${leadName} (+${leadPhone})`,
+      `Tipo: ${clientLabel}`,
+    ]
+    if (action.reason) lines.push(`Contexto: ${action.reason}`)
+    if (dealSummary) lines.push(`Deal: ${dealSummary}`)
+    lines.push(`Daniela le dijo: "${botReply.slice(0, 200)}"`)
+    lines.push('', '⚡ Este cliente está listo para cerrar.')
+    return lines.join('\n')
+  }
+
+  const lines = [
+    '🔔 Daniela necesita tu apoyo',
+    '',
+    `Cliente: ${leadName} (+${leadPhone})`,
+  ]
+  if (action.reason) lines.push(`Solicitud: ${action.reason}`)
+  if (dealSummary) lines.push(`Deal: ${dealSummary}`)
+  lines.push(`Daniela le dijo: "${botReply.slice(0, 200)}"`)
+  lines.push('', 'Responde a este chat para darle instrucciones.')
+  return lines.join('\n')
+}
+
+export async function sendInternalNotification(params: NotificationParams): Promise<void> {
+  const ceoPhone = process.env.CEO_PHONE_NUMBER
+  if (!ceoPhone) {
+    console.warn('[notification] CEO_PHONE_NUMBER not configured — skipping notification')
+    return
+  }
+  const message = formatNotification(params)
+  await sendText(ceoPhone, message, { typingDelay: false })
 }
 
 // Mensajes de plantilla (fuera de la ventana de 24h). Sin typing delay:

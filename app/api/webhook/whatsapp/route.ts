@@ -6,7 +6,7 @@ import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
 import { createCalendarEvent } from '@/services/google/calendar'
 import { getPlaybook, formatPlaybookForPrompt } from '@/lib/knowledge-base'
-import { sendText } from '@/services/whatsapp/client'
+import { sendText, sendInternalNotification } from '@/services/whatsapp/client'
 import {
   upsertLead,
   updateLead,
@@ -212,6 +212,23 @@ async function processMessage(payload: unknown): Promise<void> {
         console.log(`[processMessage] Calendar event created: ${event.htmlLink}`)
       } catch (err) {
         console.error('[processMessage] Failed to create calendar event:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    // 10b. Route agent actions — notify CEO for consultations and escalations
+    const action = claudeResponse.agent_action
+    if (action && (action.type === 'consult_team' || action.type === 'escalate_ceo')) {
+      try {
+        await sendInternalNotification({
+          leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
+          leadPhone: lead.phone,
+          action,
+          botReply: claudeResponse.reply,
+          dealSummary: claudeResponse.deal_summary?.summary ?? null,
+        })
+        console.log(`[processMessage] CEO notified: ${action.type} for lead ${lead.id}`)
+      } catch (err) {
+        console.error('[processMessage] Failed to notify CEO:', err instanceof Error ? err.message : err)
       }
     }
 
