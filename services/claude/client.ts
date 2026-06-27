@@ -1,5 +1,9 @@
 import OpenAI from 'openai'
-import type { ClaudeResponse, Conversation, MeetingRequest, QualificationData } from '@/types'
+import type {
+  ClaudeResponse, Conversation, MeetingRequest, QualificationData,
+  AgentAction, AgentActionType, DealSummary, DealSignals,
+  BrainObservation, InteractiveButton,
+} from '@/types'
 
 const MODEL = 'gpt-4o'
 const MAX_TOKENS = 1024
@@ -59,7 +63,71 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     qualified: parsed.qualified ?? false,
     schedule_meeting: parseMeetingRequest(parsed.schedule_meeting),
     opt_out: parsed.opt_out ?? false,
+    agent_action: parseAgentAction((parsed as Record<string, unknown>).agent_action),
+    deal_summary: parseDealSummary((parsed as Record<string, unknown>).deal_summary),
+    brain_observations: parseBrainObservations((parsed as Record<string, unknown>).brain_observations),
+    interactive_buttons: parseInteractiveButtons((parsed as Record<string, unknown>).interactive_buttons),
   }
+}
+
+function parseAgentAction(raw: unknown): AgentAction | null {
+  if (!raw || typeof raw !== 'object') return null
+  const a = raw as Record<string, unknown>
+  const validTypes: AgentActionType[] = ['sell', 'consult_team', 'escalate_ceo', 'schedule', 'follow_up_needed']
+  const type = validTypes.includes(a.type as AgentActionType) ? (a.type as AgentActionType) : 'sell'
+  const validUrgency = ['normal', 'high', 'critical'] as const
+  const urgency = validUrgency.includes(a.urgency as typeof validUrgency[number])
+    ? (a.urgency as AgentAction['urgency']) : 'normal'
+  const validClient = ['individual', 'corporate'] as const
+  const clientType = validClient.includes(a.client_type as typeof validClient[number])
+    ? (a.client_type as AgentAction['client_type']) : 'individual'
+  return {
+    type,
+    reason: typeof a.reason === 'string' ? a.reason : null,
+    urgency,
+    client_type: clientType,
+    follow_up_hint: typeof a.follow_up_hint === 'string' ? a.follow_up_hint : null,
+  }
+}
+
+function parseDealSummary(raw: unknown): DealSummary | null {
+  if (!raw || typeof raw !== 'object') return null
+  const d = raw as Record<string, unknown>
+  if (typeof d.summary !== 'string') return null
+  return {
+    summary: d.summary,
+    signals: (typeof d.signals === 'object' && d.signals !== null ? d.signals : {}) as DealSignals,
+    next_action: typeof d.next_action === 'string' ? d.next_action : null,
+  }
+}
+
+function parseBrainObservations(raw: unknown): BrainObservation[] {
+  if (!Array.isArray(raw)) return []
+  const validCategories = ['observation', 'pattern', 'correction', 'metric']
+  return raw
+    .filter((o): o is Record<string, unknown> =>
+      typeof o === 'object' && o !== null &&
+      typeof (o as Record<string, unknown>).content === 'string' &&
+      typeof (o as Record<string, unknown>).topic === 'string')
+    .map(o => ({
+      category: validCategories.includes(o.category as string)
+        ? (o.category as BrainObservation['category']) : 'observation',
+      topic: o.topic as string,
+      content: o.content as string,
+    }))
+}
+
+function parseInteractiveButtons(raw: unknown): InteractiveButton[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((b): b is Record<string, unknown> =>
+      typeof b === 'object' && b !== null &&
+      typeof (b as Record<string, unknown>).title === 'string')
+    .slice(0, 3) // WhatsApp max 3 buttons
+    .map((b, i) => ({
+      id: typeof b.id === 'string' ? b.id : `btn_${i + 1}`,
+      title: (b.title as string).slice(0, 20), // WhatsApp max 20 chars per button
+    }))
 }
 
 function parseMeetingRequest(raw: unknown): MeetingRequest | null {

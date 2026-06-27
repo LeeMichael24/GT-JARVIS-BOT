@@ -140,6 +140,91 @@ export interface ClaudeResponse {
   qualified: boolean
   schedule_meeting: MeetingRequest | null
   opt_out: boolean
+  agent_action: AgentAction | null
+  deal_summary: DealSummary | null
+  brain_observations: BrainObservation[]
+  interactive_buttons: InteractiveButton[]
+}
+
+// ── SDR Agent types ──────────────────────────────────────────
+
+export type AgentActionType = 'sell' | 'consult_team' | 'escalate_ceo' | 'schedule' | 'follow_up_needed'
+export type ClientType = 'individual' | 'corporate'
+export type Urgency = 'normal' | 'high' | 'critical'
+
+export interface AgentAction {
+  type: AgentActionType
+  reason: string | null
+  urgency: Urgency
+  client_type: ClientType
+  follow_up_hint: string | null
+}
+
+export interface DealSignals {
+  buying_signals?: string[]
+  objections?: string[]
+  client_profile?: ClientType
+  budget_mentioned?: number | null
+  preferred_zone?: string | null
+  family_mentioned?: boolean
+  engagement_level?: 'low' | 'medium' | 'high'
+  messages_per_burst?: number
+  avg_gap_between_burst_msgs_ms?: number
+  typing_pattern?: 'single_message' | 'multi_message' | 'voice_note'
+}
+
+export interface DealSummary {
+  summary: string
+  signals: DealSignals
+  next_action: string | null
+}
+
+export interface DealSummaryRow {
+  id: string
+  lead_id: string
+  summary: string
+  signals: DealSignals
+  next_action: string | null
+  updated_at: string
+}
+
+export type SequenceType = 'post_conversation' | 'nurture' | 'hot_close' | 'cold_reactivation'
+export type SequenceStatus = 'active' | 'paused' | 'completed' | 'cancelled'
+
+export interface Sequence {
+  id: string
+  lead_id: string
+  sequence_type: SequenceType
+  current_step: number
+  status: SequenceStatus
+  context: Record<string, unknown>
+  next_fire_at: string | null
+  last_fired_at: string | null
+  created_at: string
+}
+
+export interface BrainObservation {
+  category: 'observation' | 'pattern' | 'correction' | 'metric'
+  topic: string
+  content: string
+}
+
+export interface BrainEntry {
+  id: string
+  category: string
+  topic: string
+  content: string
+  source: 'agent' | 'team'
+  lead_id: string | null
+  confidence: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface InteractiveButton {
+  id: string
+  title: string
 }
 
 export type TemplateCategory = 'MARKETING' | 'UTILITY'
