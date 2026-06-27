@@ -9,7 +9,7 @@ export async function transcribeAudio(buffer: Buffer, mimeType: string): Promise
     : mimeType.includes('mpeg') ? 'mp3'
     : 'ogg'
 
-  const file = new File([buffer], `audio.${ext}`, { type: mimeType })
+  const file = new File([new Uint8Array(buffer)], `audio.${ext}`, { type: mimeType })
 
   const transcription = await openai.audio.transcriptions.create({
     model: 'whisper-1',
