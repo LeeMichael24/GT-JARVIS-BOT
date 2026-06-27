@@ -43,6 +43,7 @@ export interface ParsedWebhook {
   body: string
   messageType: MessageType
   timestamp: number
+  mediaId: string | null
 }
 
 export interface GTSubInvestment {

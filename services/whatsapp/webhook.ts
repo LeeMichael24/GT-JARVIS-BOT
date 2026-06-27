@@ -17,12 +17,24 @@ export function parseWebhook(raw: unknown): ParsedWebhook | null {
       ? ((msg.text as Record<string, string>)?.body ?? '')
       : ''
 
+    let mediaId: string | null = null
+    if (type === 'audio') {
+      mediaId = (msg.audio as Record<string, string>)?.id ?? null
+    } else if (type === 'image') {
+      mediaId = (msg.image as Record<string, string>)?.id ?? null
+    } else if (type === 'video') {
+      mediaId = (msg.video as Record<string, string>)?.id ?? null
+    } else if (type === 'document') {
+      mediaId = (msg.document as Record<string, string>)?.id ?? null
+    }
+
     return {
       messageId: msg.id as string,
       from: msg.from as string,
       body,
       messageType: type,
       timestamp: parseInt(msg.timestamp as string, 10),
+      mediaId,
     }
   } catch {
     return null

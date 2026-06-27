@@ -30,11 +30,17 @@ const ai = vi.hoisted(() => ({
     reply: '¡Hola!', stage: 'new', name_captured: null,
     qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
     qualified: false, schedule_meeting: null, opt_out: false,
+    agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
   })),
 }))
 vi.mock('@/services/claude/client', () => ai)
 
-const wa = vi.hoisted(() => ({ sendText: vi.fn(async () => 'wamid.out1') }))
+const wa = vi.hoisted(() => ({
+  sendText: vi.fn(async () => 'wamid.out1'),
+  sendInteractiveButtons: vi.fn(async () => 'wamid.out1'),
+  sendInternalNotification: vi.fn(async () => {}),
+  downloadMedia: vi.fn(async () => ({ buffer: Buffer.from(''), mimeType: 'audio/ogg' })),
+}))
 vi.mock('@/services/whatsapp/client', () => wa)
 
 vi.mock('@/services/claude/prompts', () => ({ buildSystemPrompt: vi.fn(() => 'prompt') }))
@@ -47,6 +53,7 @@ vi.mock('@/services/projects/gt-api', () => ({
   detectProjectFromMessage: vi.fn(() => null),
 }))
 vi.mock('@/services/google/calendar', () => ({ createCalendarEvent: vi.fn() }))
+vi.mock('@/services/openai/whisper', () => ({ transcribeAudio: vi.fn(async () => 'transcribed text') }))
 vi.mock('@/lib/knowledge-base', () => ({
   getPlaybook: vi.fn(async () => []),
   formatPlaybookForPrompt: vi.fn(() => null),
@@ -146,6 +153,7 @@ describe('webhook con bot activo', () => {
       reply: 'Entendido, no te molesto más. ¡Éxitos!', stage: 'cold', name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
       qualified: false, schedule_meeting: null, opt_out: true,
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
     })
     const res = await POST(buildRequest())
     expect(res.status).toBe(200)

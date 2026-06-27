@@ -112,6 +112,42 @@ export async function sendInternalNotification(params: NotificationParams): Prom
   await sendText(ceoPhone, message, { typingDelay: false })
 }
 
+export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+  const metaRes = await fetch(`${WA_BASE}/${mediaId}`, { headers: headers() })
+  if (!metaRes.ok) throw new Error(`Media meta ${metaRes.status}`)
+  const meta = await metaRes.json() as { url: string; mime_type: string }
+
+  const dataRes = await fetch(meta.url, { headers: headers() })
+  if (!dataRes.ok) throw new Error(`Media download ${dataRes.status}`)
+  const arrayBuf = await dataRes.arrayBuffer()
+  return { buffer: Buffer.from(arrayBuf), mimeType: meta.mime_type }
+}
+
+export async function sendInteractiveButtons(
+  to: string,
+  bodyText: string,
+  buttons: { id: string; title: string }[],
+): Promise<string | null> {
+  if (buttons.length === 0) return sendText(to, bodyText)
+  const response = await postWithRetry({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: bodyText },
+      action: {
+        buttons: buttons.slice(0, 3).map(b => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title.slice(0, 20) },
+        })),
+      },
+    },
+  }) as { messages?: { id?: string }[] } | null
+  return response?.messages?.[0]?.id ?? null
+}
+
 // Mensajes de plantilla (fuera de la ventana de 24h). Sin typing delay:
 // son envíos programados/aprobados, no conversación en vivo.
 export async function sendTemplate(

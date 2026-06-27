@@ -6,7 +6,8 @@ import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
 import { createCalendarEvent } from '@/services/google/calendar'
 import { getPlaybook, formatPlaybookForPrompt } from '@/lib/knowledge-base'
-import { sendText, sendInternalNotification } from '@/services/whatsapp/client'
+import { downloadMedia, sendText, sendInteractiveButtons, sendInternalNotification } from '@/services/whatsapp/client'
+import { transcribeAudio } from '@/services/openai/whisper'
 import {
   upsertLead,
   updateLead,
@@ -72,7 +73,23 @@ async function processMessage(payload: unknown): Promise<void> {
     // 1. Parse the incoming webhook
     const parsed = parseWebhook(payload)
     if (!parsed) return
-    if (parsed.messageType !== 'text' || !parsed.body.trim()) return
+
+    // 1a. Resolve message body — transcribe audio, describe image, or skip unsupported types
+    let messageBody = parsed.body
+    if (parsed.messageType === 'audio' && parsed.mediaId) {
+      try {
+        const { buffer, mimeType } = await downloadMedia(parsed.mediaId)
+        messageBody = await transcribeAudio(buffer, mimeType)
+        console.log(`[processMessage] Transcribed audio: "${messageBody.slice(0, 100)}..."`)
+      } catch (err) {
+        console.error('[processMessage] Audio transcription failed:', err instanceof Error ? err.message : err)
+        messageBody = '[Nota de voz — no se pudo transcribir]'
+      }
+    } else if (parsed.messageType === 'image' && parsed.mediaId) {
+      messageBody = '[El cliente envió una imagen]'
+    } else if (parsed.messageType !== 'text' || !parsed.body.trim()) {
+      return
+    }
 
     // 2. Deduplicate: ignore already-processed messages
     if (await isMessageProcessed(parsed.messageId)) {
@@ -89,7 +106,7 @@ async function processMessage(payload: unknown): Promise<void> {
     await saveConversation({
       leadId: lead.id,
       role: 'user',
-      content: parsed.body,
+      content: messageBody,
       waMessageId: parsed.messageId,
     })
 
@@ -281,8 +298,11 @@ async function processMessage(payload: unknown): Promise<void> {
       console.log(`[processMessage] Lead ${lead.id} opted out de mensajes proactivos`)
     }
 
-    // 12. Send the reply to WhatsApp (first, so we can store its wa_message_id)
-    const waMessageId = await sendText(parsed.from, claudeResponse.reply)
+    // 12. Send the reply — use interactive buttons if GPT-4o provided them
+    const buttons = claudeResponse.interactive_buttons
+    const waMessageId = buttons.length > 0
+      ? await sendInteractiveButtons(parsed.from, claudeResponse.reply, buttons)
+      : await sendText(parsed.from, claudeResponse.reply)
 
     // 13. Save the bot's response
     try {
