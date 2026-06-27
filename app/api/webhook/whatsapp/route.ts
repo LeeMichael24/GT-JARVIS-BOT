@@ -19,6 +19,7 @@ import {
   upsertDealSummary,
 } from '@/lib/supabase'
 import { calculateAdaptiveDebounce, computeBurstPattern } from '@/lib/debounce'
+import { createSequence, pauseLeadSequences } from '@/lib/sequences'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -91,6 +92,14 @@ async function processMessage(payload: unknown): Promise<void> {
       content: parsed.body,
       waMessageId: parsed.messageId,
     })
+
+    // 4a. Client responded — pause any active follow-up sequences
+    try {
+      const paused = await pauseLeadSequences(lead.id)
+      if (paused > 0) console.log(`[processMessage] Paused ${paused} active sequence(s) for lead ${lead.id}`)
+    } catch (err) {
+      console.warn('[processMessage] Failed to pause sequences:', err instanceof Error ? err.message : err)
+    }
 
     // 4b. If a human took over, stop here: the message is stored, Daniela stays quiet
     if (!lead.bot_active) {
@@ -236,6 +245,23 @@ async function processMessage(payload: unknown): Promise<void> {
         console.log(`[processMessage] CEO notified: ${action.type} for lead ${lead.id}`)
       } catch (err) {
         console.error('[processMessage] Failed to notify CEO:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    // 10c. Create follow-up sequence if agent decided one is needed
+    if (action?.type === 'follow_up_needed') {
+      try {
+        const seqType = claudeResponse.stage === 'hot' ? 'hot_close' as const
+          : claudeResponse.stage === 'cold' ? 'cold_reactivation' as const
+          : 'post_conversation' as const
+        await createSequence(lead.id, seqType, {
+          summary: claudeResponse.deal_summary?.summary ?? claudeResponse.reply.slice(0, 200),
+          hint: action.follow_up_hint,
+          project: project?.name ?? lead.project_interest,
+        })
+        console.log(`[processMessage] Created ${seqType} sequence for lead ${lead.id}`)
+      } catch (err) {
+        console.warn('[processMessage] Failed to create sequence:', err instanceof Error ? err.message : err)
       }
     }
 
