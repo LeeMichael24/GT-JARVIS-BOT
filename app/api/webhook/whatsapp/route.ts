@@ -15,6 +15,8 @@ import {
   isMessageProcessed,
   getUnprocessedUserMessages,
   getLeadById,
+  getDealSummary,
+  upsertDealSummary,
 } from '@/lib/supabase'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
@@ -132,18 +134,21 @@ async function processMessage(payload: unknown): Promise<void> {
     const lastBotMessage = extractLastBotMessage(history)
     const gtUrlSection = detectGTUrlSection(combinedBody)
 
-    // 7. Fetch GT project catalog + sales playbook in parallel
+    // 7. Fetch GT project catalog + sales playbook + deal memory in parallel
     let projects: Awaited<ReturnType<typeof getAllProjects>> = []
     let salesPlaybook: string | null = null
+    let existingDeal: Awaited<ReturnType<typeof getDealSummary>> = null
     try {
-      const [projectsResult, playbookEntries] = await Promise.all([
+      const [projectsResult, playbookEntries, dealResult] = await Promise.all([
         getAllProjects(),
         getPlaybook(),
+        getDealSummary(lead.id),
       ])
       projects = projectsResult
       salesPlaybook = formatPlaybookForPrompt(playbookEntries)
+      existingDeal = dealResult
     } catch (err) {
-      console.warn('[processMessage] Could not fetch GT projects or playbook, continuing without context:', err)
+      console.warn('[processMessage] Could not fetch GT projects/playbook/deal:', err)
     }
 
     console.log(`[processMessage] Intent: ${intent} | GT URL: ${gtUrlSection ?? 'none'} | History: ${history.length} msgs`)
@@ -176,9 +181,21 @@ async function processMessage(payload: unknown): Promise<void> {
     console.log(`[processMessage] Project: ${project?.name ?? 'none'} | Detected: ${detectedProject?.name ?? 'none'}`)
 
     // 9. Build the Daniela system prompt with full catalog and call GPT-4o
-    const systemPrompt = buildSystemPrompt({ lead, project, projects, intent, lastBotMessage, gtUrlSection, salesPlaybook })
+    const systemPrompt = buildSystemPrompt({
+      lead, project, projects, intent, lastBotMessage, gtUrlSection, salesPlaybook,
+      dealSummary: existingDeal ? { summary: existingDeal.summary, next_action: existingDeal.next_action } : null,
+    })
     const rawResponse = await callClaude(systemPrompt, history)
     const claudeResponse = parseClaudeResponse(rawResponse)
+
+    // 9b. Save deal summary for future conversations
+    if (claudeResponse.deal_summary) {
+      try {
+        await upsertDealSummary(lead.id, claudeResponse.deal_summary)
+      } catch (err) {
+        console.warn('[processMessage] Failed to save deal summary:', err instanceof Error ? err.message : err)
+      }
+    }
 
     // 10. Create Google Calendar event if Daniela scheduled a meeting
     const mtg = claudeResponse.schedule_meeting

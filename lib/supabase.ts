@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import type { Lead, Conversation, ConversationRole } from '@/types'
+import type { Lead, Conversation, ConversationRole, DealSummary, DealSummaryRow } from '@/types'
 
 export function getServiceClient() {
   return createClient(
@@ -124,6 +124,31 @@ export async function getLatestUserMessageAt(leadId: string): Promise<string | n
 // Returns all user messages that haven't been answered yet — i.e., every user
 // message created after the most recent assistant reply (or all if no reply exists).
 // Used by the debounce logic to collect a burst of messages before responding.
+export async function upsertDealSummary(leadId: string, deal: DealSummary): Promise<void> {
+  const supabase = getServiceClient()
+  const { error } = await supabase
+    .from('deal_summaries')
+    .upsert({
+      lead_id: leadId,
+      summary: deal.summary,
+      signals: deal.signals,
+      next_action: deal.next_action,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'lead_id' })
+  if (error) throw new Error(`upsertDealSummary: ${error.message}`)
+}
+
+export async function getDealSummary(leadId: string): Promise<DealSummaryRow | null> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('deal_summaries')
+    .select('*')
+    .eq('lead_id', leadId)
+    .maybeSingle()
+  if (error) throw new Error(`getDealSummary: ${error.message}`)
+  return (data as DealSummaryRow) ?? null
+}
+
 export async function getUnprocessedUserMessages(leadId: string): Promise<Conversation[]> {
   const supabase = getServiceClient()
 
