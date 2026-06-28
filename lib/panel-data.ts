@@ -31,6 +31,7 @@ export async function listInboxLeads(member: SessionMember): Promise<InboxLead[]
   const baseQuery = supabase
     .from('leads')
     .select('*, lead_tags(tag_id, tags(*)), team_members!leads_assigned_to_fkey(name)')
+    .not('phone', 'like', 'n_%')
     .order('last_message_at', { ascending: false })
     .limit(100)
 
@@ -47,13 +48,13 @@ export async function listInboxLeads(member: SessionMember): Promise<InboxLead[]
 
   const ids = rows.map(l => l.id)
   const snippets = new Map<string, { content: string; role: string }>()
-  // ≤500 mensajes más recientes entre todos los leads; leads con actividad muy
-  // antigua pueden quedar sin snippet (tradeoff Fase 1, muestra "Sin mensajes")
   if (ids.length > 0) {
     const { data: msgs } = await supabase
       .from('conversations')
-      .select('lead_id, content, role, created_at')
+      .select('lead_id, content, role, wa_message_id, created_at')
       .in('lead_id', ids)
+      .not('wa_message_id', 'like', 'import_%')
+      .not('wa_message_id', 'like', 'scraped_%')
       .order('created_at', { ascending: false })
       .limit(500)
     for (const m of (msgs ?? []) as { lead_id: string; content: string; role: string }[]) {
@@ -86,7 +87,7 @@ export async function getLeadBundle(leadId: string, member: SessionMember): Prom
   if (!lead || !leadVisible(member, lead as Lead)) return null
 
   const [msgsRes, tagsRes, allTagsRes, notesRes, teamRes, lastUserAt] = await Promise.all([
-    supabase.from('conversations').select('*').eq('lead_id', leadId).order('created_at', { ascending: true }).limit(500),
+    supabase.from('conversations').select('*').eq('lead_id', leadId).not('wa_message_id', 'like', 'import_%').not('wa_message_id', 'like', 'scraped_%').order('created_at', { ascending: true }).limit(500),
     supabase.from('lead_tags').select('tags(*)').eq('lead_id', leadId),
     supabase.from('tags').select('*').order('name'),
     supabase.from('lead_notes').select('*, team_members(name)').eq('lead_id', leadId).order('created_at', { ascending: false }),
