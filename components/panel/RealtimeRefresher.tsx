@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
 import type { Conversation } from '@/types'
 
-// Beep corto generado con Web Audio (sin archivos)
 function playBeep() {
   try {
     const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -21,8 +20,15 @@ function playBeep() {
     osc.stop(ctx.currentTime + 0.25)
     osc.onended = () => { void ctx.close().catch(() => {}) }
   } catch {
-    // Autoplay bloqueado hasta la primera interacción — silencio aceptable
+    // Autoplay bloqueado hasta la primera interacción
   }
+}
+
+const IMPORTED_PREFIXES = ['import_', 'scraped_', 'bulk_']
+
+function isImportedMessage(msg: Conversation): boolean {
+  if (!msg.wa_message_id) return false
+  return IMPORTED_PREFIXES.some(p => msg.wa_message_id!.startsWith(p))
 }
 
 export function RealtimeRefresher() {
@@ -36,7 +42,6 @@ export function RealtimeRefresher() {
   useEffect(() => {
     baseTitleRef.current = document.title
 
-    // Coalescer: una ráfaga de eventos = un solo refresh (trailing 400ms)
     const scheduleRefresh = () => {
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
       refreshTimerRef.current = setTimeout(() => {
@@ -51,11 +56,20 @@ export function RealtimeRefresher() {
     }
     window.addEventListener('focus', onFocus)
 
+    const mountedAt = Date.now()
+
     const supabase = createSupabaseBrowserClient()
     const channel = supabase
       .channel('panel-inbox')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, payload => {
         const msg = payload.new as Conversation
+
+        if (isImportedMessage(msg)) return
+
+        const commitTs = (payload as unknown as { commit_timestamp?: string }).commit_timestamp
+        const commitTime = commitTs ? new Date(commitTs).getTime() : Date.now()
+        if (commitTime < mountedAt - 5000) return
+
         if (msg.role === 'user') {
           playBeep()
           if (!document.hasFocus()) {
@@ -70,7 +84,6 @@ export function RealtimeRefresher() {
       })
       .subscribe(status => {
         if (status === 'SUBSCRIBED') {
-          // Al reconectar pueden haberse perdido eventos: recargar del server
           if (wasDisconnectedRef.current) scheduleRefresh()
           wasDisconnectedRef.current = false
           setDisconnected(false)

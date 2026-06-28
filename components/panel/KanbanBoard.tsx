@@ -13,10 +13,17 @@ const ERROR_TEXT: Record<string, string> = {
 }
 
 const COLUMN_ACCENT: Record<LeadStage, string> = {
-  new: 'border-sky-800',
-  warm: 'border-amber-800',
-  hot: 'border-red-800',
-  cold: 'border-zinc-700',
+  new: 'border-sky-700',
+  warm: 'border-amber-700',
+  hot: 'border-red-700',
+  cold: 'border-zinc-600',
+}
+
+const COLUMN_BG: Record<LeadStage, string> = {
+  new: 'bg-sky-950/20',
+  warm: 'bg-amber-950/20',
+  hot: 'bg-red-950/20',
+  cold: 'bg-zinc-900/30',
 }
 
 export function KanbanBoard({ items }: { items: InboxLead[] }) {
@@ -55,7 +62,7 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {error && <p className="mb-2 rounded-lg bg-red-950 px-3 py-2 text-xs text-red-300">{error}</p>}
-      <div className="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto pb-2">
+      <div className="flex min-h-0 flex-1 snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2">
         {KANBAN_STAGES.map(({ value, label }) => (
           <section
             key={value}
@@ -66,11 +73,11 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
               if (leadId) move(leadId, value)
             }}
             aria-label={`Columna ${label}`}
-            className={`flex min-h-0 w-[85vw] shrink-0 snap-center flex-col rounded-xl border-t-2 bg-zinc-900/40 sm:w-72 lg:w-auto lg:flex-1 lg:shrink ${COLUMN_ACCENT[value]}`}
+            className={`flex min-h-0 w-[80vw] shrink-0 snap-center flex-col rounded-xl border-t-2 sm:w-64 lg:w-auto lg:flex-1 lg:shrink ${COLUMN_ACCENT[value]} ${COLUMN_BG[value]}`}
           >
-            <h3 className="flex items-center justify-between px-3 py-2 text-sm font-medium text-zinc-300">
+            <h3 className="flex items-center justify-between px-3 py-2.5 text-sm font-semibold text-zinc-300">
               {label}
-              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
+              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-zinc-800 px-1.5 text-[11px] text-zinc-400">
                 {groups[value].length}
               </span>
             </h3>
@@ -80,16 +87,16 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
                   key={lead.id}
                   draggable
                   onDragStart={e => e.dataTransfer.setData('text/lead-id', lead.id)}
-                  className="rounded-lg border border-zinc-800 bg-zinc-900 p-2.5"
+                  className="cursor-grab rounded-xl border border-zinc-800 bg-zinc-900 p-3 transition-shadow active:cursor-grabbing active:shadow-lg"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <Link href={`/panel/chat/${lead.id}`} className="font-medium text-white hover:underline">
+                    <Link href={`/panel/chat/${lead.id}`} className="truncate font-medium text-white hover:underline">
                       {lead.name ?? lead.phone}
                     </Link>
-                    {!lead.bot_active && <span title="Daniela pausada">✋</span>}
+                    {!lead.bot_active && <span className="shrink-0 text-xs" title="Daniela pausada">✋</span>}
                   </div>
                   {snippet && <p className="mt-1 truncate text-xs text-zinc-500">{snippet}</p>}
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  <div className="mt-2 flex flex-wrap items-center gap-1">
                     {tags.map(t => (
                       <span
                         key={t.id}
@@ -99,7 +106,7 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
                         {t.name}
                       </span>
                     ))}
-                    {assignedName && <span className="text-[10px] text-zinc-600">→ {assignedName}</span>}
+                    {assignedName && <span className="text-[10px] text-zinc-600">{assignedName}</span>}
                   </div>
                   <select
                     value=""
@@ -109,9 +116,9 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
                       const s = e.target.value as LeadStage
                       if (s) move(lead.id, s)
                     }}
-                    className="mt-2 w-full rounded border border-zinc-800 bg-zinc-950 px-1.5 py-1 text-[11px] text-zinc-400"
+                    className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-400"
                   >
-                    <option value="">Mover a…</option>
+                    <option value="">Mover a...</option>
                     {KANBAN_STAGES.filter(s => s.value !== lead.stage).map(s => (
                       <option key={s.value} value={s.value}>{s.label}</option>
                     ))}
@@ -119,7 +126,7 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
                 </div>
               ))}
               {groups[value].length === 0 && (
-                <p className="px-2 py-4 text-center text-xs text-zinc-600">Vacío</p>
+                <p className="px-2 py-6 text-center text-xs text-zinc-600">Sin leads</p>
               )}
             </div>
           </section>
