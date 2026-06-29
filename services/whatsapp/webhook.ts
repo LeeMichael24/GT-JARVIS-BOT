@@ -1,5 +1,5 @@
 import { createHmac } from 'crypto'
-import type { ParsedWebhook, MessageType } from '@/types'
+import type { ParsedWebhook, MessageType, WaReferral } from '@/types'
 
 export function parseWebhook(raw: unknown): ParsedWebhook | null {
   try {
@@ -30,6 +30,19 @@ export function parseWebhook(raw: unknown): ParsedWebhook | null {
       mediaId = (msg.document as Record<string, string>)?.id ?? null
     }
 
+    const rawReferral = msg.referral as Record<string, string> | undefined
+    const referral: WaReferral | null = rawReferral
+      ? {
+          source_url: rawReferral.source_url,
+          source_type: rawReferral.source_type,
+          source_id: rawReferral.source_id,
+          headline: rawReferral.headline,
+          body: rawReferral.body,
+          media_type: rawReferral.media_type,
+          media_url: rawReferral.media_url,
+        }
+      : null
+
     return {
       messageId: msg.id as string,
       from: msg.from as string,
@@ -37,6 +50,7 @@ export function parseWebhook(raw: unknown): ParsedWebhook | null {
       messageType: type,
       timestamp: parseInt(msg.timestamp as string, 10),
       mediaId,
+      referral,
     }
   } catch {
     return null

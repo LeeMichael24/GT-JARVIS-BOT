@@ -1,0 +1,432 @@
+{
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/api/cron/daily/route.ts": {
+    "mtime": 1781202347.7096872,
+    "ast_hash": "014348f238c4f6e6cfe69d8be3793c66",
+    "semantic_hash": "014348f238c4f6e6cfe69d8be3793c66"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/api/webhook/whatsapp/route.ts": {
+    "mtime": 1781202723.9970303,
+    "ast_hash": "5e43a239e354e66f98913327d8dbf549",
+    "semantic_hash": "5e43a239e354e66f98913327d8dbf549"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/layout.tsx": {
+    "mtime": 1781163604.9965456,
+    "ast_hash": "b8724d372201c75da222fd4bc2e5be34",
+    "semantic_hash": "b8724d372201c75da222fd4bc2e5be34"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/page.tsx": {
+    "mtime": 1781163604.9967294,
+    "ast_hash": "581c22c1eb7503a118d2b113ef72b5f4",
+    "semantic_hash": "581c22c1eb7503a118d2b113ef72b5f4"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/panel/(authed)/chat/[leadId]/page.tsx": {
+    "mtime": 1781163604.9970856,
+    "ast_hash": "78af5d514c144e2976499864ccf5a9f3",
+    "semantic_hash": "78af5d514c144e2976499864ccf5a9f3"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/panel/(authed)/config/page.tsx": {
+    "mtime": 1781198341.6589384,
+    "ast_hash": "3a73511146da8c9cf060cd09ab6edcf7",
+    "semantic_hash": "3a73511146da8c9cf060cd09ab6edcf7"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/panel/(authed)/layout.tsx": {
+    "mtime": 1781198341.6593122,
+    "ast_hash": "21fb7f8cc983668e4bb317e23676039b",
+    "semantic_hash": "21fb7f8cc983668e4bb317e23676039b"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/panel/(authed)/page.tsx": {
+    "mtime": 1781198341.65967,
+    "ast_hash": "8d56df3a480c7fcdaae976c55027103d",
+    "semantic_hash": "8d56df3a480c7fcdaae976c55027103d"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/panel/actions.ts": {
+    "mtime": 1781163604.997763,
+    "ast_hash": "4ffd6b7ceabd5d83db5a4088f7dfe9b2",
+    "semantic_hash": "4ffd6b7ceabd5d83db5a4088f7dfe9b2"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/panel/login/page.tsx": {
+    "mtime": 1781163604.9979694,
+    "ast_hash": "bd79feee380096c7455f7f1c30040f88",
+    "semantic_hash": "bd79feee380096c7455f7f1c30040f88"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/app/panel/set-password/page.tsx": {
+    "mtime": 1781163604.9981804,
+    "ast_hash": "8dd0f63f796ee8b31de98f267daef329",
+    "semantic_hash": "8dd0f63f796ee8b31de98f267daef329"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/ChatView.tsx": {
+    "mtime": 1781198341.660095,
+    "ast_hash": "dd4bd7ac2c0f9374654eccba5f1cc7cb",
+    "semantic_hash": "dd4bd7ac2c0f9374654eccba5f1cc7cb"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/ConfigTags.tsx": {
+    "mtime": 1781163604.9987571,
+    "ast_hash": "a53c15dfcab804138ca60cc71c613950",
+    "semantic_hash": "a53c15dfcab804138ca60cc71c613950"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/ConfigTeam.tsx": {
+    "mtime": 1781163604.998933,
+    "ast_hash": "9ec9fe215ec13554cc0a4ee170106cfc",
+    "semantic_hash": "9ec9fe215ec13554cc0a4ee170106cfc"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/InboxList.tsx": {
+    "mtime": 1781198341.6604283,
+    "ast_hash": "e03ef3c08eb4e6d4e3af2b335ab7adbc",
+    "semantic_hash": "e03ef3c08eb4e6d4e3af2b335ab7adbc"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/InboxViews.tsx": {
+    "mtime": 1781198341.6607082,
+    "ast_hash": "a888e726178efb66455d5aa474df5a66",
+    "semantic_hash": "a888e726178efb66455d5aa474df5a66"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/KanbanBoard.tsx": {
+    "mtime": 1781198341.6609976,
+    "ast_hash": "4e668f3aadcd454644d6fa8f5fd4a6b0",
+    "semantic_hash": "4e668f3aadcd454644d6fa8f5fd4a6b0"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/LeadSheet.tsx": {
+    "mtime": 1781163604.999257,
+    "ast_hash": "9765b68ec1c66d12222f8f137150b254",
+    "semantic_hash": "9765b68ec1c66d12222f8f137150b254"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/LogoutButton.tsx": {
+    "mtime": 1781163604.9993932,
+    "ast_hash": "8d68f54c3d2f3e9dd597e4565b54c9e2",
+    "semantic_hash": "8d68f54c3d2f3e9dd597e4565b54c9e2"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/RealtimeRefresher.tsx": {
+    "mtime": 1781163604.9995592,
+    "ast_hash": "f5d9c261ec217038d9fd71f27a4a3950",
+    "semantic_hash": "f5d9c261ec217038d9fd71f27a4a3950"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/components/panel/inbox-filtering.ts": {
+    "mtime": 1781198341.6612785,
+    "ast_hash": "490c46804e795f4f14bf996481623bb7",
+    "semantic_hash": "490c46804e795f4f14bf996481623bb7"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/database/schema.sql": {
+    "mtime": 1779680375.101482,
+    "ast_hash": "672def890415e048e14618a2b72b6db7",
+    "semantic_hash": "672def890415e048e14618a2b72b6db7"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/eslint.config.mjs": {
+    "mtime": 1779678116.6381166,
+    "ast_hash": "dfa1f5f6a7037bf39dc510f30b180002",
+    "semantic_hash": "dfa1f5f6a7037bf39dc510f30b180002"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/auth.ts": {
+    "mtime": 1781163605.0006723,
+    "ast_hash": "f0d5baf873bf731490fde5d1cd5dce5c",
+    "semantic_hash": "f0d5baf873bf731490fde5d1cd5dce5c"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/knowledge-base.ts": {
+    "mtime": 1780168562.4285536,
+    "ast_hash": "26cfe4ac1cfb428d8bdbf32c16b3b783",
+    "semantic_hash": "26cfe4ac1cfb428d8bdbf32c16b3b783"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/panel-data.ts": {
+    "mtime": 1781163605.0008242,
+    "ast_hash": "9daa570e7e901bd375238d74d3bd255a",
+    "semantic_hash": "9daa570e7e901bd375238d74d3bd255a"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/proactive/cost.ts": {
+    "mtime": 1781200058.5839403,
+    "ast_hash": "09beea4685dddda2bd930bfcb0b2d2d5",
+    "semantic_hash": "09beea4685dddda2bd930bfcb0b2d2d5"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/proactive/data.ts": {
+    "mtime": 1781201721.758613,
+    "ast_hash": "bbb3e9871f0ac140a552b45b07d004f6",
+    "semantic_hash": "bbb3e9871f0ac140a552b45b07d004f6"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/proactive/eligibility.ts": {
+    "mtime": 1781200574.3368816,
+    "ast_hash": "6b337cb1154d6e009ea0ae551cf3258b",
+    "semantic_hash": "6b337cb1154d6e009ea0ae551cf3258b"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/proactive/engine.ts": {
+    "mtime": 1781201752.0505068,
+    "ast_hash": "430bbff9e851ecf5ba5a6ad8a2d6a1c8",
+    "semantic_hash": "430bbff9e851ecf5ba5a6ad8a2d6a1c8"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/proactive/matching.ts": {
+    "mtime": 1781200583.3852265,
+    "ast_hash": "2212f711fb10b03728e8294bf33fbf41",
+    "semantic_hash": "2212f711fb10b03728e8294bf33fbf41"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/proactive/render.ts": {
+    "mtime": 1781200202.474474,
+    "ast_hash": "3cd4c73cae0c643cea6192544c141f02",
+    "semantic_hash": "3cd4c73cae0c643cea6192544c141f02"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/supabase-browser.ts": {
+    "mtime": 1781163605.000968,
+    "ast_hash": "34aae651adb29e523d6312f6400fde87",
+    "semantic_hash": "34aae651adb29e523d6312f6400fde87"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/supabase-server.ts": {
+    "mtime": 1781163605.0011175,
+    "ast_hash": "48ebe67df1842b6c2e1dec8788c15669",
+    "semantic_hash": "48ebe67df1842b6c2e1dec8788c15669"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/supabase.ts": {
+    "mtime": 1781199607.3005953,
+    "ast_hash": "112c5aad57e02375ffd38b51d6672c4d",
+    "semantic_hash": "112c5aad57e02375ffd38b51d6672c4d"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/lib/wa-window.ts": {
+    "mtime": 1781163605.0014622,
+    "ast_hash": "48d2a079b20f8068faab0ea5c21440be",
+    "semantic_hash": "48d2a079b20f8068faab0ea5c21440be"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/migrations/002_knowledge_base.sql": {
+    "mtime": 1780169414.7959383,
+    "ast_hash": "302cbb1632c7e70adddf6f534f6794b6",
+    "semantic_hash": "302cbb1632c7e70adddf6f534f6794b6"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/migrations/003_panel_crm.sql": {
+    "mtime": 1781188331.7087452,
+    "ast_hash": "f7ef142cfea98f3f5e9c6f9cc091ac57",
+    "semantic_hash": "f7ef142cfea98f3f5e9c6f9cc091ac57"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/migrations/004_proactive.sql": {
+    "mtime": 1781201820.8552485,
+    "ast_hash": "91986e3e4d99e256f9f4090967a255be",
+    "semantic_hash": "91986e3e4d99e256f9f4090967a255be"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/next.config.ts": {
+    "mtime": 1779678116.638291,
+    "ast_hash": "9b77af189a21a7a64e4bd7a426f64176",
+    "semantic_hash": "9b77af189a21a7a64e4bd7a426f64176"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/package.json": {
+    "mtime": 1781163605.002484,
+    "ast_hash": "fbf8fbc3c5d62e2161b86af3a438b062",
+    "semantic_hash": "fbf8fbc3c5d62e2161b86af3a438b062"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/postcss.config.mjs": {
+    "mtime": 1779678116.6385932,
+    "ast_hash": "239f3ebf717465dc636818a1a619398d",
+    "semantic_hash": "239f3ebf717465dc636818a1a619398d"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/proxy.ts": {
+    "mtime": 1781163605.002634,
+    "ast_hash": "8c100e2c4fcadb39f8de3eb262a26a7b",
+    "semantic_hash": "8c100e2c4fcadb39f8de3eb262a26a7b"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/services/claude/client.ts": {
+    "mtime": 1781199649.9240732,
+    "ast_hash": "b810fead2366f16291b4af7d7ecef9a5",
+    "semantic_hash": "b810fead2366f16291b4af7d7ecef9a5"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/services/claude/intent.ts": {
+    "mtime": 1779994649.823134,
+    "ast_hash": "fee38d998668639b45d16aa60981c889",
+    "semantic_hash": "fee38d998668639b45d16aa60981c889"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/services/claude/prompts.ts": {
+    "mtime": 1781202679.092854,
+    "ast_hash": "0b0d3dfdb8722bd001f0cc7f2c8c4179",
+    "semantic_hash": "0b0d3dfdb8722bd001f0cc7f2c8c4179"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/services/google/calendar.ts": {
+    "mtime": 1780007415.269911,
+    "ast_hash": "0c83fd4ac6dddb48c72da267ada41647",
+    "semantic_hash": "0c83fd4ac6dddb48c72da267ada41647"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/services/projects/cache.ts": {
+    "mtime": 1779680754.6085618,
+    "ast_hash": "ab856d47963c0295f1dc12873170c1ad",
+    "semantic_hash": "ab856d47963c0295f1dc12873170c1ad"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/services/projects/gt-api.ts": {
+    "mtime": 1780172058.262303,
+    "ast_hash": "2a886088297f3c58925528b5e9c1cce8",
+    "semantic_hash": "2a886088297f3c58925528b5e9c1cce8"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/services/whatsapp/client.ts": {
+    "mtime": 1781199574.4920967,
+    "ast_hash": "8304736dd3af76804c5ee51fcd1c0d65",
+    "semantic_hash": "8304736dd3af76804c5ee51fcd1c0d65"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/services/whatsapp/webhook.ts": {
+    "mtime": 1779680589.5830336,
+    "ast_hash": "4a4583612d218b2b250a712745c411dd",
+    "semantic_hash": "4a4583612d218b2b250a712745c411dd"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/auth.test.ts": {
+    "mtime": 1781163605.0031598,
+    "ast_hash": "cb8a1b2a27e59ef0916cfa52d7289529",
+    "semantic_hash": "cb8a1b2a27e59ef0916cfa52d7289529"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/cache.test.ts": {
+    "mtime": 1779680735.7237732,
+    "ast_hash": "0e25cfd50e49418eee4c9a6ae0588331",
+    "semantic_hash": "0e25cfd50e49418eee4c9a6ae0588331"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/claude.test.ts": {
+    "mtime": 1781202639.644673,
+    "ast_hash": "c8d8bc253b079a6e1bce7065d31af5fc",
+    "semantic_hash": "c8d8bc253b079a6e1bce7065d31af5fc"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/cron-route.test.ts": {
+    "mtime": 1781202351.0288947,
+    "ast_hash": "bc0b0957cdd4bff98f2b5b2bb9574e96",
+    "semantic_hash": "bc0b0957cdd4bff98f2b5b2bb9574e96"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/gt-api.test.ts": {
+    "mtime": 1779863838.171876,
+    "ast_hash": "c594d95a0de5d7b1e537e191d670e9e6",
+    "semantic_hash": "c594d95a0de5d7b1e537e191d670e9e6"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/inbox-filtering.test.ts": {
+    "mtime": 1781198341.6616304,
+    "ast_hash": "5f492ffee141c3dd218d824b5eb030be",
+    "semantic_hash": "5f492ffee141c3dd218d824b5eb030be"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/intent.test.ts": {
+    "mtime": 1781163605.0035522,
+    "ast_hash": "b2bb7c0de3f8aa665c2933b372a29bcc",
+    "semantic_hash": "b2bb7c0de3f8aa665c2933b372a29bcc"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/panel-actions.test.ts": {
+    "mtime": 1781163605.0037122,
+    "ast_hash": "ec6d02ef2a976c15dd7cc5afd6bb7a69",
+    "semantic_hash": "ec6d02ef2a976c15dd7cc5afd6bb7a69"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/proactive-engine.test.ts": {
+    "mtime": 1781201778.924426,
+    "ast_hash": "0d4deacd796ed01531b9a6c8633435d4",
+    "semantic_hash": "0d4deacd796ed01531b9a6c8633435d4"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/proactive-pure.test.ts": {
+    "mtime": 1781200609.0393128,
+    "ast_hash": "e1af2b903b1121bb41b9423d2e2d34ac",
+    "semantic_hash": "e1af2b903b1121bb41b9423d2e2d34ac"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/prompts.test.ts": {
+    "mtime": 1781199620.373964,
+    "ast_hash": "9ad273e280c30999d040b00336a0c55e",
+    "semantic_hash": "9ad273e280c30999d040b00336a0c55e"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/supabase-helpers.test.ts": {
+    "mtime": 1781163605.0040603,
+    "ast_hash": "b85057046d55e7be879261f73d74ab7a",
+    "semantic_hash": "b85057046d55e7be879261f73d74ab7a"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/wa-window.test.ts": {
+    "mtime": 1781163605.0041904,
+    "ast_hash": "f51825e01208e9089e44f68b627cb264",
+    "semantic_hash": "f51825e01208e9089e44f68b627cb264"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/webhook-route.test.ts": {
+    "mtime": 1781202664.2486012,
+    "ast_hash": "cfea89640006d4648e2069da39e6147a",
+    "semantic_hash": "cfea89640006d4648e2069da39e6147a"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/webhook.test.ts": {
+    "mtime": 1779680560.6729326,
+    "ast_hash": "33fd420e2ff2349905eb79db8eb2253b",
+    "semantic_hash": "33fd420e2ff2349905eb79db8eb2253b"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tests/whatsapp-client.test.ts": {
+    "mtime": 1781199558.1162713,
+    "ast_hash": "5305ede47c930e9c96010e020f4b2593",
+    "semantic_hash": "5305ede47c930e9c96010e020f4b2593"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/tsconfig.json": {
+    "mtime": 1779678116.6394274,
+    "ast_hash": "02fc19ad21338c2ab820a70136310db4",
+    "semantic_hash": "02fc19ad21338c2ab820a70136310db4"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/types/index.ts": {
+    "mtime": 1781201703.2929583,
+    "ast_hash": "305842e5e540f5bfda6e7c49c1a9c0b8",
+    "semantic_hash": "305842e5e540f5bfda6e7c49c1a9c0b8"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/vercel.json": {
+    "mtime": 1781202116.3822937,
+    "ast_hash": "b5127680adb305d0a41e7c739f7de923",
+    "semantic_hash": "b5127680adb305d0a41e7c739f7de923"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/vitest.config.ts": {
+    "mtime": 1779678206.571097,
+    "ast_hash": "6cff7c4a9e3714899673cf3bc68fa48f",
+    "semantic_hash": "6cff7c4a9e3714899673cf3bc68fa48f"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/AGENTS.md": {
+    "mtime": 1779678152.9251773,
+    "ast_hash": "9e09241799026ac05be315a2f0b50055",
+    "semantic_hash": "9e09241799026ac05be315a2f0b50055"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/CLAUDE.md": {
+    "mtime": 1779678152.9252965,
+    "ast_hash": "5c27369b226fcf2be8a6cfe52224e767",
+    "semantic_hash": "5c27369b226fcf2be8a6cfe52224e767"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/README.md": {
+    "mtime": 1781198341.6585085,
+    "ast_hash": "2f6fc6640c8bbc1fd809508decd028e0",
+    "semantic_hash": "2f6fc6640c8bbc1fd809508decd028e0"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/docs/GUIA-ACTIVACION-PANEL.md": {
+    "mtime": 1781186889.580582,
+    "ast_hash": "6bfe669d7c235d4a4aabfdadea4332be",
+    "semantic_hash": "6bfe669d7c235d4a4aabfdadea4332be"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/docs/GUIA-PLANTILLAS-META.md": {
+    "mtime": 1781194594.4785182,
+    "ast_hash": "e67e4d3e8e29926513c200cb02bf093b",
+    "semantic_hash": "e67e4d3e8e29926513c200cb02bf093b"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/docs/superpowers/plans/2026-06-10-panel-crm-fase1.md": {
+    "mtime": 1781163604.999993,
+    "ast_hash": "060aed6b75ceaf38a6d4c74feb138225",
+    "semantic_hash": "060aed6b75ceaf38a6d4c74feb138225"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/docs/superpowers/plans/2026-06-11-fase2a-ui.md": {
+    "mtime": 1781194569.368772,
+    "ast_hash": "61a2d3b2bc226ce9ff87fa934675122b",
+    "semantic_hash": "61a2d3b2bc226ce9ff87fa934675122b"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/docs/superpowers/plans/2026-06-11-fase2b-motor-proactivo.md": {
+    "mtime": 1781202396.8451478,
+    "ast_hash": "b251818a17803f9a9dad9257ddb8d41d",
+    "semantic_hash": "b251818a17803f9a9dad9257ddb8d41d"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/docs/superpowers/specs/2026-06-10-panel-crm-fase1-design.md": {
+    "mtime": 1781163605.0005043,
+    "ast_hash": "f91492f61d9a233ff63c86fad3c494d0",
+    "semantic_hash": "f91492f61d9a233ff63c86fad3c494d0"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/docs/superpowers/specs/2026-06-11-fase2-ui-y-motor-proactivo-design.md": {
+    "mtime": 1781200615.402587,
+    "ast_hash": "8f6d1ed4a0df3fa91b897e3dd03880aa",
+    "semantic_hash": "8f6d1ed4a0df3fa91b897e3dd03880aa"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/public/file.svg": {
+    "mtime": 1779678116.6381025,
+    "ast_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71",
+    "semantic_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/public/globe.svg": {
+    "mtime": 1779678116.6385696,
+    "ast_hash": "2aaafa6a49b6563925fe440891e32717",
+    "semantic_hash": "2aaafa6a49b6563925fe440891e32717"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/public/next.svg": {
+    "mtime": 1779678116.638624,
+    "ast_hash": "8e061864f388b47f33a1c3780831193e",
+    "semantic_hash": "8e061864f388b47f33a1c3780831193e"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/public/vercel.svg": {
+    "mtime": 1779678116.6387484,
+    "ast_hash": "c0af2f507b369b085b35ef4bbe3bcf1e",
+    "semantic_hash": "c0af2f507b369b085b35ef4bbe3bcf1e"
+  },
+  "/Users/michaelnarvaez/Documents/CLAUDE/BOT ESPECIAL/gt-bot/public/window.svg": {
+    "mtime": 1779678116.638703,
+    "ast_hash": "a2760511c65806022ad20adf74370ff3",
+    "semantic_hash": "a2760511c65806022ad20adf74370ff3"
+  }
+}

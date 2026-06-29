@@ -6,7 +6,7 @@ import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
 import { createCalendarEvent } from '@/services/google/calendar'
 import { getPlaybook, formatPlaybookForPrompt } from '@/lib/knowledge-base'
-import { downloadMedia, sendText, sendInteractiveButtons, sendInternalNotification } from '@/services/whatsapp/client'
+import { downloadMedia, sendText, sendInteractiveButtons, sendInternalNotification, markAsRead } from '@/services/whatsapp/client'
 import { transcribeAudio } from '@/services/openai/whisper'
 import {
   upsertLead,
@@ -22,6 +22,9 @@ import {
 import { calculateAdaptiveDebounce, computeBurstPattern } from '@/lib/debounce'
 import { createSequence, pauseLeadSequences } from '@/lib/sequences'
 import { saveBrainObservations, getHighConfidenceLearnings, formatLearningsForPrompt } from '@/lib/agent-brain'
+import { saveLeadSource, getLeadSource, getActiveAdCampaigns, matchAdCampaign, formatSourceContextForPrompt, formatActiveAdsForPrompt } from '@/lib/lead-sources'
+import { logActivity } from '@/lib/activity-log'
+import { autoTagProject, autoTagSource } from '@/lib/auto-tag'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -64,7 +67,13 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const payload = JSON.parse(body) as unknown
-  waitUntil(processMessage(payload))
+
+  // Run synchronously in dev to avoid waitUntil issues with Turbopack
+  if (process.env.NODE_ENV === 'development') {
+    await processMessage(payload)
+  } else {
+    waitUntil(processMessage(payload))
+  }
 
   return new Response('OK', { status: 200 })
 }
@@ -101,8 +110,36 @@ async function processMessage(payload: unknown): Promise<void> {
       return
     }
 
+    // 2a. Mark as read immediately (blue checkmarks in WhatsApp)
+    markAsRead(parsed.messageId)
+
     // 3. Upsert lead — create if new, update last_message_at if existing
     const lead = await upsertLead(parsed.from)
+
+    // 3a. Track lead source from Meta Ads referral data
+    if (parsed.referral) {
+      try {
+        await saveLeadSource(lead.id, parsed.referral)
+        const matchedCampaign = parsed.referral.source_id
+          ? await matchAdCampaign(parsed.referral.source_id)
+          : null
+        await logActivity({
+          actorType: 'system',
+          action: 'lead_from_ad',
+          entityType: 'lead',
+          entityId: lead.id,
+          details: {
+            ad_headline: parsed.referral.headline,
+            campaign: matchedCampaign?.name,
+            source_id: parsed.referral.source_id,
+          },
+        })
+        await autoTagSource(lead.id, parsed.referral.source_type === 'ad' ? 'meta_ad' : 'organic')
+        console.log(`[processMessage] Lead ${lead.id} from Meta Ad: ${parsed.referral.headline ?? parsed.referral.source_id}`)
+      } catch (err) {
+        console.warn('[processMessage] Failed to save lead source:', err instanceof Error ? err.message : err)
+      }
+    }
 
     // 4. Save the incoming user message ALWAYS and immediately: it must survive
     //    a human takeover, and other workers in the same burst need to see it
@@ -169,20 +206,32 @@ async function processMessage(payload: unknown): Promise<void> {
     const lastBotMessage = extractLastBotMessage(history)
     const gtUrlSection = detectGTUrlSection(combinedBody)
 
-    // 7. Fetch GT project catalog + sales playbook in parallel; deal memory already fetched pre-debounce
+    // 7. Fetch GT project catalog + sales playbook + lead source in parallel
     let projects: Awaited<ReturnType<typeof getAllProjects>> = []
     let salesPlaybook: string | null = null
     let brainLearnings: string = ''
+    let adContext: string | null = null
     const existingDeal = existingDealForDebounce
     try {
-      const [projectsResult, playbookEntries, brainEntries] = await Promise.all([
+      const [projectsResult, playbookEntries, brainEntries, leadSource, activeAds] = await Promise.all([
         getAllProjects(),
         getPlaybook(),
         getHighConfidenceLearnings(),
+        getLeadSource(lead.id),
+        getActiveAdCampaigns(),
       ])
       projects = projectsResult
       salesPlaybook = formatPlaybookForPrompt(playbookEntries)
       brainLearnings = formatLearningsForPrompt(brainEntries)
+
+      if (leadSource && leadSource.source_type !== 'organic') {
+        const matchedCampaign = leadSource.campaign_id
+          ? await matchAdCampaign(leadSource.campaign_id)
+          : null
+        adContext = formatSourceContextForPrompt(leadSource, matchedCampaign)
+      } else {
+        adContext = formatActiveAdsForPrompt(activeAds)
+      }
     } catch (err) {
       console.warn('[processMessage] Could not fetch GT projects/playbook:', err)
     }
@@ -211,6 +260,7 @@ async function processMessage(payload: unknown): Promise<void> {
       const skipUpdate = intent === 'investment_query' && detectedProject.entityType !== 'investment'
       if (!skipUpdate) {
         await updateLead(lead.id, { project_interest: detectedProject.name })
+        try { await autoTagProject(lead.id, detectedProject.name) } catch {}
       }
     }
 
@@ -221,9 +271,12 @@ async function processMessage(payload: unknown): Promise<void> {
       lead, project, projects, intent, lastBotMessage, gtUrlSection, salesPlaybook,
       dealSummary: existingDeal ? { summary: existingDeal.summary, next_action: existingDeal.next_action } : null,
       brainLearnings: brainLearnings || null,
+      adContext,
     })
     const rawResponse = await callClaude(systemPrompt, history)
+    console.log('[processMessage] Raw GPT-4o response:', rawResponse.slice(0, 300))
     const claudeResponse = parseClaudeResponse(rawResponse)
+    console.log('[processMessage] Parsed action:', JSON.stringify(claudeResponse.agent_action))
 
     // 9b. Save deal summary for future conversations, merging in the burst pattern update
     if (claudeResponse.deal_summary) {
@@ -259,6 +312,10 @@ async function processMessage(payload: unknown): Promise<void> {
           projectName: mtg.project_name ?? lead.project_interest ?? null,
           notes:       mtg.notes,
         })
+        await logActivity({
+          actorType: 'bot', action: 'meeting_scheduled', entityType: 'lead', entityId: lead.id,
+          details: { type: mtg.meeting_type, project: mtg.project_name, datetime: mtg.datetime_iso },
+        })
         console.log(`[processMessage] Calendar event created: ${event.htmlLink}`)
       } catch (err) {
         console.error('[processMessage] Failed to create calendar event:', err instanceof Error ? err.message : err)
@@ -268,6 +325,11 @@ async function processMessage(payload: unknown): Promise<void> {
     // 10b. Route agent actions — notify CEO for consultations and escalations
     const action = claudeResponse.agent_action
     if (action && (action.type === 'consult_team' || action.type === 'escalate_ceo')) {
+      await logActivity({
+        actorType: 'bot', action: action.type, entityType: 'lead', entityId: lead.id,
+        details: { reason: action.reason, urgency: action.urgency, client_type: action.client_type },
+      }).catch(err => console.error('[processMessage] logActivity failed:', err instanceof Error ? err.message : err))
+
       try {
         await sendInternalNotification({
           leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
@@ -278,7 +340,7 @@ async function processMessage(payload: unknown): Promise<void> {
         })
         console.log(`[processMessage] CEO notified: ${action.type} for lead ${lead.id}`)
       } catch (err) {
-        console.error('[processMessage] Failed to notify CEO:', err instanceof Error ? err.message : err)
+        console.error('[processMessage] Failed to send WA notification to CEO:', err instanceof Error ? err.message : err)
       }
     }
 
@@ -300,6 +362,12 @@ async function processMessage(payload: unknown): Promise<void> {
     }
 
     // 11. Update lead with GPT-4o's analysis
+    if (claudeResponse.stage !== lead.stage) {
+      await logActivity({
+        actorType: 'bot', action: 'stage_change', entityType: 'lead', entityId: lead.id,
+        details: { from: lead.stage, to: claudeResponse.stage },
+      })
+    }
     await updateLead(lead.id, {
       stage: claudeResponse.stage,
       ...(claudeResponse.name_captured ? { name: claudeResponse.name_captured } : {}),
@@ -316,12 +384,17 @@ async function processMessage(payload: unknown): Promise<void> {
     }
 
     // 12. Send the reply — use interactive buttons if GPT-4o provided them
+    let waMessageId: string | null = null
     const buttons = claudeResponse.interactive_buttons
-    const waMessageId = buttons.length > 0
-      ? await sendInteractiveButtons(parsed.from, claudeResponse.reply, buttons)
-      : await sendText(parsed.from, claudeResponse.reply)
+    try {
+      waMessageId = buttons.length > 0
+        ? await sendInteractiveButtons(parsed.from, claudeResponse.reply, buttons)
+        : await sendText(parsed.from, claudeResponse.reply)
+    } catch (err) {
+      console.error(`[processMessage] Failed to send WA reply to ${parsed.from}:`, err instanceof Error ? err.message : err)
+    }
 
-    // 13. Save the bot's response
+    // 13. Save the bot's response (even if WA send failed — the reply is still valid context)
     try {
       await saveConversation({
         leadId: lead.id,
@@ -331,14 +404,13 @@ async function processMessage(payload: unknown): Promise<void> {
       })
     } catch (err) {
       console.error(
-        `[processMessage] Reply DELIVERED (wa_message_id=${waMessageId ?? 'none'}) but saveConversation failed — history will miss this reply:`,
+        `[processMessage] saveConversation failed — history will miss this reply:`,
         err instanceof Error ? err.message : err
       )
     }
 
     console.log(`[processMessage] Done — lead ${lead.id} | stage: ${claudeResponse.stage} | qualified: ${claudeResponse.qualified}`)
   } catch (error) {
-    // Log but don't rethrow — we already sent 200 OK to WhatsApp
     console.error('[processMessage] Unhandled error:', error instanceof Error ? error.message : error)
     if (error instanceof Error) console.error('[processMessage] Stack:', error.stack)
   }

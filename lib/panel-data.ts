@@ -9,6 +9,7 @@ export interface InboxLead {
   snippetRole: string | null
   tags: Tag[]
   assignedName: string | null
+  sourceType: string | null
 }
 
 export interface LeadBundle {
@@ -48,17 +49,27 @@ export async function listInboxLeads(member: SessionMember): Promise<InboxLead[]
 
   const ids = rows.map(l => l.id)
   const snippets = new Map<string, { content: string; role: string }>()
+  const sources = new Map<string, string>()
   if (ids.length > 0) {
-    const { data: msgs } = await supabase
-      .from('conversations')
-      .select('lead_id, content, role, wa_message_id, created_at')
-      .in('lead_id', ids)
-      .not('wa_message_id', 'like', 'import_%')
-      .not('wa_message_id', 'like', 'scraped_%')
-      .order('created_at', { ascending: false })
-      .limit(500)
-    for (const m of (msgs ?? []) as { lead_id: string; content: string; role: string }[]) {
+    const [msgsResult, sourcesResult] = await Promise.all([
+      supabase
+        .from('conversations')
+        .select('lead_id, content, role, wa_message_id, created_at')
+        .in('lead_id', ids)
+        .not('wa_message_id', 'like', 'import_%')
+        .not('wa_message_id', 'like', 'scraped_%')
+        .order('created_at', { ascending: false })
+        .limit(500),
+      supabase
+        .from('lead_sources')
+        .select('lead_id, source_type')
+        .in('lead_id', ids),
+    ])
+    for (const m of (msgsResult.data ?? []) as { lead_id: string; content: string; role: string }[]) {
       if (!snippets.has(m.lead_id)) snippets.set(m.lead_id, { content: m.content, role: m.role })
+    }
+    for (const s of (sourcesResult.data ?? []) as { lead_id: string; source_type: string }[]) {
+      sources.set(s.lead_id, s.source_type)
     }
   }
 
@@ -71,6 +82,7 @@ export async function listInboxLeads(member: SessionMember): Promise<InboxLead[]
       snippetRole: snip?.role ?? null,
       tags: (lead_tags ?? []).map(lt => lt.tags).filter(Boolean),
       assignedName: team_members?.name ?? null,
+      sourceType: sources.get(lead.id) ?? null,
     }
   })
 }

@@ -35,6 +35,9 @@ yarn-error.log*
 !.env.example
 .env.local
 
+# chat exports (contain private conversations)
+/data/whatsapp-exports/*.txt
+
 # vercel
 .vercel
 

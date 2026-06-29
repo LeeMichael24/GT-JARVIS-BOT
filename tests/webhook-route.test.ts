@@ -8,6 +8,7 @@ vi.mock('@vercel/functions', () => ({
 }))
 
 const db = vi.hoisted(() => ({
+  getServiceClient: vi.fn(() => ({})),
   upsertLead: vi.fn(),
   updateLead: vi.fn(async () => {}),
   saveConversation: vi.fn(async () => {}),
@@ -40,6 +41,7 @@ const wa = vi.hoisted(() => ({
   sendInteractiveButtons: vi.fn(async () => 'wamid.out1'),
   sendInternalNotification: vi.fn(async () => {}),
   downloadMedia: vi.fn(async () => ({ buffer: Buffer.from(''), mimeType: 'audio/ogg' })),
+  markAsRead: vi.fn(async () => {}),
 }))
 vi.mock('@/services/whatsapp/client', () => wa)
 
@@ -57,6 +59,21 @@ vi.mock('@/services/openai/whisper', () => ({ transcribeAudio: vi.fn(async () =>
 vi.mock('@/lib/knowledge-base', () => ({
   getPlaybook: vi.fn(async () => []),
   formatPlaybookForPrompt: vi.fn(() => null),
+}))
+vi.mock('@/lib/lead-sources', () => ({
+  saveLeadSource: vi.fn(async () => ({})),
+  getLeadSource: vi.fn(async () => null),
+  getActiveAdCampaigns: vi.fn(async () => []),
+  matchAdCampaign: vi.fn(async () => null),
+  formatSourceContextForPrompt: vi.fn(() => null),
+  formatActiveAdsForPrompt: vi.fn(() => null),
+}))
+vi.mock('@/lib/activity-log', () => ({
+  logActivity: vi.fn(async () => {}),
+}))
+vi.mock('@/lib/auto-tag', () => ({
+  autoTagProject: vi.fn(async () => {}),
+  autoTagSource: vi.fn(async () => {}),
 }))
 
 import { POST } from '@/app/api/webhook/whatsapp/route'

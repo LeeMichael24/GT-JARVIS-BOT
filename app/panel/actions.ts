@@ -215,6 +215,47 @@ export async function inviteTeamMember(email: string, name: string, role: TeamRo
   }
 }
 
+export async function deleteLead(leadId: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const service = getServiceClient()
+    await service.from('lead_tags').delete().eq('lead_id', leadId)
+    await service.from('lead_notes').delete().eq('lead_id', leadId)
+    await service.from('conversations').delete().eq('lead_id', leadId)
+    await service.from('deal_summaries').delete().eq('lead_id', leadId)
+    await service.from('sequences').delete().eq('lead_id', leadId)
+    await service.from('agent_brain').delete().eq('lead_id', leadId)
+    await service.from('lead_sources').delete().eq('lead_id', leadId)
+    const { error } = await service.from('leads').delete().eq('id', leadId)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error, 'DELETE_FAILED')
+  }
+}
+
+export async function deleteLeadsBatch(leadIds: string[]): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    if (leadIds.length === 0) return { ok: true }
+    const service = getServiceClient()
+    await service.from('lead_tags').delete().in('lead_id', leadIds)
+    await service.from('lead_notes').delete().in('lead_id', leadIds)
+    await service.from('conversations').delete().in('lead_id', leadIds)
+    await service.from('deal_summaries').delete().in('lead_id', leadIds)
+    await service.from('sequences').delete().in('lead_id', leadIds)
+    await service.from('agent_brain').delete().in('lead_id', leadIds)
+    await service.from('lead_sources').delete().in('lead_id', leadIds)
+    const { error } = await service.from('leads').delete().in('id', leadIds)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error, 'DELETE_FAILED')
+  }
+}
+
 export async function setMemberActive(memberId: string, active: boolean): Promise<ActionResult> {
   try {
     const admin = await requireAdmin()

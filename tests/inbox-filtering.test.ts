@@ -30,6 +30,7 @@ function makeItem(over: {
     snippetRole: 'user',
     tags: (over.tagIds ?? []).map(id => ({ id, name: `tag-${id}`, color: '#fff', created_at: '' })),
     assignedName: null,
+    sourceType: null,
   }
 }
 

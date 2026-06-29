@@ -44,6 +44,7 @@ export interface ParsedWebhook {
   messageType: MessageType
   timestamp: number
   mediaId: string | null
+  referral: WaReferral | null
 }
 
 export interface GTSubInvestment {
@@ -281,4 +282,65 @@ export interface CampaignRecipient {
   wa_message_id: string | null
   error: string | null
   sent_at: string | null
+}
+
+// ── Meta Ads / Lead Source Tracking ─────────────────────────
+
+export type SourceType = 'meta_ad' | 'google_ad' | 'organic' | 'referral' | 'website' | 'direct'
+export type AdPlatform = 'meta' | 'google' | 'tiktok'
+export type AdCampaignStatus = 'active' | 'paused' | 'ended'
+
+export interface LeadSource {
+  id: string
+  lead_id: string
+  source_type: SourceType
+  campaign_id: string | null
+  ad_id: string | null
+  ad_headline: string | null
+  ad_body: string | null
+  source_url: string | null
+  raw_referral: Record<string, unknown>
+  created_at: string
+}
+
+export interface AdCampaign {
+  id: string
+  platform: AdPlatform
+  external_id: string
+  name: string
+  status: AdCampaignStatus
+  objective: string | null
+  target_project: string | null
+  offer_details: string | null
+  landing_url: string | null
+  budget_daily: number | null
+  start_date: string | null
+  end_date: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface WaReferral {
+  source_url?: string
+  source_type?: string
+  source_id?: string
+  headline?: string
+  body?: string
+  media_type?: string
+  media_url?: string
+}
+
+// ── Activity Log ────────────────────────────────────────────
+
+export type ActorType = 'team' | 'system' | 'bot'
+
+export interface ActivityLogEntry {
+  id: string
+  actor_id: string | null
+  actor_type: ActorType
+  action: string
+  entity_type: string
+  entity_id: string | null
+  details: Record<string, unknown>
+  created_at: string
 }

@@ -8,9 +8,10 @@ interface PromptContext {
   intent?: MessageIntent
   lastBotMessage?: string | null
   gtUrlSection?: string | null
-  salesPlaybook?: string | null       // formatted knowledge base content
+  salesPlaybook?: string | null
   dealSummary?: { summary: string; next_action: string | null } | null
   brainLearnings?: string | null
+  adContext?: string | null
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -27,6 +28,7 @@ export function buildSystemPrompt({
   salesPlaybook = null,
   dealSummary = null,
   brainLearnings = null,
+  adContext = null,
 }: PromptContext): string {
   const intentBlock = buildIntentInstruction(intent, lastBotMessage, gtUrlSection)
   const catalogBlock = buildCatalogSection(projects, project, intent)
@@ -53,7 +55,14 @@ No eres solo un asistente. Eres una SDR que TOMA DECISIONES. En cada respuesta, 
 DECISIÓN 1 — ¿PUEDO RESOLVER ESTO?
 - Si el cliente pregunta algo que ESTÁ en el catálogo, playbook o tu conocimiento → type: "sell", responde con autoridad
 - Si el cliente pide algo que NO está en el catálogo (apartamento amueblado ya, zona que no cubrimos, propiedad comercial específica, modificaciones estructurales) → type: "consult_team", dile "Déjame verificar con mi equipo y te confirmo durante el día"
-- Si el cliente es corporativo, quiere múltiples unidades, o está listo para cerrar con presupuesto confirmado → type: "escalate_ceo", dile "Te voy a conectar con nuestro CEO Mike Fuentes para atenderte personalmente"
+- ESCALAMIENTO OBLIGATORIO — type: "escalate_ceo" cuando se cumpla CUALQUIERA:
+  * El cliente menciona una empresa o se identifica como corporativo
+  * Quiere comprar 3+ unidades
+  * Presupuesto confirmado mayor a $300,000
+  * Pide hablar con el CEO, dueño, director o encargado
+  * Dice que tiene otra oferta y necesita respuesta urgente
+  Dile: "Te voy a conectar con Michael Narváez, nuestro CEO, para atenderte personalmente"
+  En agent_action DEBES poner type: "escalate_ceo". Si tu reply menciona conectar con el CEO pero tu type dice "sell", es un ERROR.
 
 DECISIÓN 2 — ¿NECESITA SEGUIMIENTO?
 - Si respondiste y crees que el cliente NO va a escribir de vuelta (pidió info, dijo "lo voy a pensar", etc.) → type: "follow_up_needed" con follow_up_hint describiendo qué hacer y cuándo
@@ -218,7 +227,7 @@ Cuando el cliente pregunte sobre una propiedad (cuartos, baños, m2, amenidades,
 2. Extrae los datos relevantes y responde EN PROSA, con confianza y detalle.
 3. Si la descripción tiene los datos, responde directo. Ejemplo: "El apartamento tiene 3 habitaciones, la principal con walk-in closet y baño privado remodelado con travertina, las otras dos con baño completo cada una. Son 161m2 más 2 estacionamientos."
 4. Si la descripción NO tiene el dato específico que preguntan, di: "Déjame confirmar ese detalle con nuestro equipo y te lo comparto." NUNCA inventes datos que no aparecen en la descripción.
-${intentBlock}${playbookBlock}${brainBlock}${catalogBlock}${decisionBlock}
+${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${catalogBlock}${decisionBlock}
 # PERFIL DEL CLIENTE
 Nombre: ${lead.name ?? 'desconocido'}
 Etapa: ${lead.stage}

@@ -1,0 +1,201 @@
+import { getServiceClient } from '@/lib/supabase'
+
+export interface DashboardStats {
+  totalLeads: number
+  newLeads: number
+  warmLeads: number
+  hotLeads: number
+  coldLeads: number
+  botActive: number
+  botPaused: number
+  totalMessages: number
+  messagesLast24h: number
+  leadsFromAds: number
+  meetingsScheduled: number
+  escalations: number
+  avgResponseTime: number | null
+  conversionRate: number
+}
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const supabase = getServiceClient()
+  const now = new Date()
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
+
+  const [
+    leadsRes,
+    msgsRes,
+    msgs24hRes,
+    adLeadsRes,
+    meetingsRes,
+    escalationsRes,
+  ] = await Promise.all([
+    supabase.from('leads').select('stage, bot_active').not('phone', 'like', 'n_%'),
+    supabase.from('conversations').select('id', { count: 'exact', head: true })
+      .not('wa_message_id', 'like', 'import_%'),
+    supabase.from('conversations').select('id', { count: 'exact', head: true })
+      .not('wa_message_id', 'like', 'import_%')
+      .gte('created_at', yesterday),
+    supabase.from('lead_sources').select('id', { count: 'exact', head: true })
+      .eq('source_type', 'meta_ad'),
+    supabase.from('activity_log').select('id', { count: 'exact', head: true })
+      .eq('action', 'meeting_scheduled')
+      .gte('created_at', thirtyDaysAgo),
+    supabase.from('activity_log').select('id', { count: 'exact', head: true })
+      .eq('action', 'escalate_ceo')
+      .gte('created_at', thirtyDaysAgo),
+  ])
+
+  const leads = (leadsRes.data ?? []) as { stage: string; bot_active: boolean }[]
+  const totalLeads = leads.length
+  const newLeads = leads.filter(l => l.stage === 'new').length
+  const warmLeads = leads.filter(l => l.stage === 'warm').length
+  const hotLeads = leads.filter(l => l.stage === 'hot').length
+  const coldLeads = leads.filter(l => l.stage === 'cold').length
+  const botActive = leads.filter(l => l.bot_active).length
+  const botPaused = leads.filter(l => !l.bot_active).length
+
+  const conversionRate = totalLeads > 0
+    ? Math.round(((hotLeads + warmLeads) / totalLeads) * 100)
+    : 0
+
+  return {
+    totalLeads,
+    newLeads,
+    warmLeads,
+    hotLeads,
+    coldLeads,
+    botActive,
+    botPaused,
+    totalMessages: msgsRes.count ?? 0,
+    messagesLast24h: msgs24hRes.count ?? 0,
+    leadsFromAds: adLeadsRes.count ?? 0,
+    meetingsScheduled: meetingsRes.count ?? 0,
+    escalations: escalationsRes.count ?? 0,
+    avgResponseTime: null,
+    conversionRate,
+  }
+}
+
+export interface LeadsByDay {
+  date: string
+  count: number
+}
+
+export async function getLeadsByDay(days = 30): Promise<LeadsByDay[]> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+  const { data, error } = await getServiceClient()
+    .from('leads')
+    .select('created_at')
+    .not('phone', 'like', 'n_%')
+    .gte('created_at', since)
+    .order('created_at')
+
+  if (error) throw new Error(`getLeadsByDay: ${error.message}`)
+
+  const byDay = new Map<string, number>()
+  for (const row of (data ?? []) as { created_at: string }[]) {
+    const day = row.created_at.slice(0, 10)
+    byDay.set(day, (byDay.get(day) ?? 0) + 1)
+  }
+
+  return Array.from(byDay.entries()).map(([date, count]) => ({ date, count }))
+}
+
+export interface DanielaStats {
+  totalConversations: number
+  handledAlone: number
+  escalated: number
+  escalationRate: number
+  avgResponseTimeSec: number | null
+  projectBreakdown: { project: string; count: number }[]
+}
+
+export async function getDanielaStats(days = 30): Promise<DanielaStats> {
+  const supabase = getServiceClient()
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+  const [leadsRes, escalationsRes, projectsRes, responseTimeRes] = await Promise.all([
+    supabase.from('leads').select('id', { count: 'exact', head: true })
+      .not('phone', 'like', 'n_%')
+      .gte('created_at', since),
+    supabase.from('activity_log').select('id', { count: 'exact', head: true })
+      .in('action', ['escalate_ceo', 'consult_team'])
+      .gte('created_at', since),
+    supabase.from('leads').select('project_interest')
+      .not('phone', 'like', 'n_%')
+      .not('project_interest', 'is', null)
+      .gte('created_at', since),
+    supabase.from('conversations')
+      .select('lead_id, role, created_at')
+      .not('wa_message_id', 'like', 'import_%')
+      .gte('created_at', since)
+      .order('created_at', { ascending: true })
+      .limit(5000),
+  ])
+
+  const totalConversations = leadsRes.count ?? 0
+  const escalated = escalationsRes.count ?? 0
+  const handledAlone = Math.max(0, totalConversations - escalated)
+  const escalationRate = totalConversations > 0
+    ? Math.round((escalated / totalConversations) * 100)
+    : 0
+
+  const projectCounts = new Map<string, number>()
+  for (const row of (projectsRes.data ?? []) as { project_interest: string }[]) {
+    projectCounts.set(row.project_interest, (projectCounts.get(row.project_interest) ?? 0) + 1)
+  }
+  const projectBreakdown = Array.from(projectCounts.entries())
+    .map(([project, count]) => ({ project, count }))
+    .sort((a, b) => b.count - a.count)
+
+  let avgResponseTimeSec: number | null = null
+  const msgs = (responseTimeRes.data ?? []) as { lead_id: string; role: string; created_at: string }[]
+  const responseTimes: number[] = []
+  const lastUserMsg = new Map<string, number>()
+  for (const m of msgs) {
+    if (m.role === 'user') {
+      lastUserMsg.set(m.lead_id, new Date(m.created_at).getTime())
+    } else if (m.role === 'assistant' && lastUserMsg.has(m.lead_id)) {
+      const userTime = lastUserMsg.get(m.lead_id)!
+      const diff = (new Date(m.created_at).getTime() - userTime) / 1000
+      if (diff > 0 && diff < 300) responseTimes.push(diff)
+      lastUserMsg.delete(m.lead_id)
+    }
+  }
+  if (responseTimes.length > 0) {
+    avgResponseTimeSec = Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
+  }
+
+  return {
+    totalConversations,
+    handledAlone,
+    escalated,
+    escalationRate,
+    avgResponseTimeSec,
+    projectBreakdown,
+  }
+}
+
+export interface SourceBreakdown {
+  source: string
+  count: number
+}
+
+export async function getSourceBreakdown(): Promise<SourceBreakdown[]> {
+  const { data, error } = await getServiceClient()
+    .from('lead_sources')
+    .select('source_type')
+
+  if (error) throw new Error(`getSourceBreakdown: ${error.message}`)
+
+  const counts = new Map<string, number>()
+  for (const row of (data ?? []) as { source_type: string }[]) {
+    counts.set(row.source_type, (counts.get(row.source_type) ?? 0) + 1)
+  }
+
+  return Array.from(counts.entries())
+    .map(([source, count]) => ({ source, count }))
+    .sort((a, b) => b.count - a.count)
+}

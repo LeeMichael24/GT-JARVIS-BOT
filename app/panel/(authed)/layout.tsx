@@ -27,6 +27,11 @@ export default async function PanelLayout({ children }: { children: React.ReactN
 
         <nav className="hidden items-center gap-5 text-sm sm:flex">
           {member.role === 'admin' && (
+            <Link href="/panel/dashboard" className="text-zinc-400 transition-colors hover:text-white">
+              Dashboard
+            </Link>
+          )}
+          {member.role === 'admin' && (
             <Link href="/panel/campanas" className="relative text-zinc-400 transition-colors hover:text-white">
               Campañas
               {pendingCount > 0 && (
@@ -35,6 +40,9 @@ export default async function PanelLayout({ children }: { children: React.ReactN
                 </span>
               )}
             </Link>
+          )}
+          {member.role === 'admin' && (
+            <Link href="/panel/ads" className="text-zinc-400 transition-colors hover:text-white">Ads</Link>
           )}
           {member.role === 'admin' && (
             <Link href="/panel/config" className="text-zinc-400 transition-colors hover:text-white">Config</Link>

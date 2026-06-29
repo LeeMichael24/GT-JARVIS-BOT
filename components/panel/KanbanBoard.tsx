@@ -7,6 +7,13 @@ import { groupByStage, KANBAN_STAGES } from '@/components/panel/inbox-filtering'
 import type { InboxLead } from '@/lib/panel-data'
 import type { LeadStage } from '@/types'
 
+const SOURCE_BADGE: Record<string, { label: string; cls: string }> = {
+  meta_ad: { label: 'Meta Ad', cls: 'bg-purple-900/60 text-purple-300' },
+  google_ad: { label: 'Google Ad', cls: 'bg-blue-900/60 text-blue-300' },
+  referral: { label: 'Referido', cls: 'bg-teal-900/60 text-teal-300' },
+  website: { label: 'Web', cls: 'bg-cyan-900/60 text-cyan-300' },
+}
+
 const ERROR_TEXT: Record<string, string> = {
   FORBIDDEN: 'No tienes acceso a este lead.',
   UNAUTHORIZED: 'Sesión expirada. Vuelve a entrar.',
@@ -82,7 +89,7 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
               </span>
             </h3>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2 pb-2">
-              {groups[value].map(({ lead, snippet, tags, assignedName }) => (
+              {groups[value].map(({ lead, snippet, tags, assignedName, sourceType }) => (
                 <div
                   key={lead.id}
                   draggable
@@ -97,6 +104,11 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
                   </div>
                   {snippet && <p className="mt-1 truncate text-xs text-zinc-500">{snippet}</p>}
                   <div className="mt-2 flex flex-wrap items-center gap-1">
+                    {sourceType && SOURCE_BADGE[sourceType] && (
+                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SOURCE_BADGE[sourceType].cls}`}>
+                        {SOURCE_BADGE[sourceType].label}
+                      </span>
+                    )}
                     {tags.map(t => (
                       <span
                         key={t.id}

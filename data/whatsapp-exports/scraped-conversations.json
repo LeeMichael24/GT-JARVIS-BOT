@@ -1,0 +1,39 @@
+[
+  {
+    "contactName": "Oscar Olano Inversor",
+    "contactPhone": "+50377423766",
+    "labels": ["Important"],
+    "messages": [
+      {"role": "user", "content": "Ok", "timestamp": "2026-06-28T12:13:00-06:00"},
+      {"role": "user", "content": "Fechas de entrega estimadas ?", "timestamp": "2026-06-28T12:13:00-06:00"},
+      {"role": "human", "content": "Las fechas se estiman de la siguiente forma:\n1. Casas primer trimestre del 2028\n2. Townhomes tercer trimestre del 2028\n3. Apartamentos cuarto trimestre del 2028", "timestamp": "2026-06-28T12:14:00-06:00"},
+      {"role": "human", "content": "Te comparto el avance que tiene el proyecto actualmente, el bulevar de 4 carriles y el area comercial que tendra para suministrar toda la residencial", "timestamp": "2026-06-28T12:14:30-06:00"},
+      {"role": "human", "content": "[3 videos de avance de construccion]", "timestamp": "2026-06-28T12:15:00-06:00"},
+      {"role": "human", "content": "Asi es la distribucion de los 42 apartamentos, 2 niveles de parqueos, 6 niveles de aptos - cada nivel con 7 apartamentos y el septimo piso es el rooftop", "timestamp": "2026-06-28T12:16:00-06:00"},
+      {"role": "human", "content": "[PDF: Plano Acotado - APARTAMENTO TIPO B Torre Portacelli.pdf - 215 KiB]", "timestamp": "2026-06-28T12:47:00-06:00"}
+    ]
+  },
+  {
+    "contactName": "Marcela jacobo 503 portacelli",
+    "contactPhone": "+50371273218",
+    "labels": ["Important", "Follow up"],
+    "messages": [
+      {"role": "user", "content": "[DUI.pdf - Documento de identidad - 724 KiB]", "timestamp": "2026-06-24T13:08:00-06:00"},
+      {"role": "user", "content": "jakelinjacobo00@gmail.com", "timestamp": "2026-06-24T13:08:30-06:00"},
+      {"role": "user", "content": "Colonia ciudad Satelite, pasaje Orion, casa #8, Block \"O\"\nPago con transferencia", "timestamp": "2026-06-24T13:09:00-06:00"},
+      {"role": "user", "content": "Pago de contado", "timestamp": "2026-06-24T13:09:30-06:00"},
+      {"role": "human", "content": "Perfecto. Me confirma por favor!", "timestamp": "2026-06-24T13:10:00-06:00"},
+      {"role": "human", "content": "Ok muchisimas gracias Marcela por la confirmacion", "timestamp": "2026-06-24T13:11:00-06:00"},
+      {"role": "human", "content": "Ya enviamos la informacion tanto para el borrador de promesa de venta como para la visita muchas gracias", "timestamp": "2026-06-24T13:12:00-06:00"},
+      {"role": "user", "content": "De acuerdo. Quedo atenta para agendar la visita. Gracias", "timestamp": "2026-06-24T13:15:00-06:00"},
+      {"role": "human", "content": "Buen dia Marcela, un gusto saludarle fijate que el documento ya esta siendo redactado por el equipo legal, quedamos atentos de eso, por otra parte la visita me dicen que por el momento no esta disponible, ya que, es zona de construccion, en octubre entregan la calle ya urbanizada y se puede ir a visitar el area donde comenzara la entrada de Portacelli", "timestamp": "2026-06-25T12:19:00-06:00"},
+      {"role": "human", "content": "Voy a gestionar durante este tiempo una visita en un 4x4 para ir a que visiten la zona donde se esta construyendo la calle pero eso es por parte de la desarrolladora, necesitaria esperar la confirmacion por parte de ellos", "timestamp": "2026-06-25T12:20:00-06:00"},
+      {"role": "human", "content": "Mientras me permitieron mostrarles imagenes de drone del avance de la calle y los puentes que se estan haciendo, ahorita lo que ven es area comercial unicamente, no es el proyecto Portacelli", "timestamp": "2026-06-25T12:21:00-06:00"},
+      {"role": "human", "content": "[Fotos aereas de avance de construccion - carretera y puentes]", "timestamp": "2026-06-25T12:22:00-06:00"},
+      {"role": "human", "content": "Perdon no se enviaron todas las imagenes, pero ahora si", "timestamp": "2026-06-25T12:23:00-06:00"},
+      {"role": "user", "content": "Bueno, esta bien, muchas gracias! Por que zona de Nuevo Cuscatlan esta ubicado el proyecto?", "timestamp": "2026-06-27T19:32:00-06:00"},
+      {"role": "user", "content": "Perfecto, gracias", "timestamp": "2026-06-27T19:33:00-06:00"},
+      {"role": "human", "content": "[Video de recorrido del proyecto]", "timestamp": "2026-06-28T11:58:00-06:00"}
+    ]
+  }
+]

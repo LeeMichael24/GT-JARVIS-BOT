@@ -41,6 +41,22 @@ async function postWithRetry(
   }
 }
 
+export async function markAsRead(messageId: string): Promise<void> {
+  try {
+    await fetch(messagesUrl(), {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+      }),
+    })
+  } catch {
+    // Non-critical — don't fail the message flow
+  }
+}
+
 export function calculateTypingDelay(text: string): number {
   return Math.min(Math.max(text.length * 30, 1500), 4000)
 }

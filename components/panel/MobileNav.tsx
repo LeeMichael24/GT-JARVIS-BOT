@@ -48,6 +48,11 @@ export function MobileNav({ isAdmin, memberName, pendingCount }: {
               Inbox
             </Link>
             {isAdmin && (
+              <Link href="/panel/dashboard" onClick={() => setOpen(false)} className={linkCls('/panel/dashboard')}>
+                Dashboard
+              </Link>
+            )}
+            {isAdmin && (
               <Link href="/panel/campanas" onClick={() => setOpen(false)} className={linkCls('/panel/campanas')}>
                 <span className="flex items-center justify-between">
                   Campañas
@@ -57,6 +62,11 @@ export function MobileNav({ isAdmin, memberName, pendingCount }: {
                     </span>
                   )}
                 </span>
+              </Link>
+            )}
+            {isAdmin && (
+              <Link href="/panel/ads" onClick={() => setOpen(false)} className={linkCls('/panel/ads')}>
+                Ads
               </Link>
             )}
             {isAdmin && (
