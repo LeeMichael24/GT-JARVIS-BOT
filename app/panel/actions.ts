@@ -11,7 +11,7 @@ import {
 } from '@/lib/supabase'
 import { isWithin24h } from '@/lib/wa-window'
 import { sendText } from '@/services/whatsapp/client'
-import type { BrainEntry, Lead, LeadStage, TeamRole } from '@/types'
+import type { BrainEntry, EscalationAction, EscalationRule, EscalationTriggerType, Lead, LeadStage, TeamRole } from '@/types'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -356,4 +356,85 @@ export async function deleteBrainEntry(id: string): Promise<ActionResult> {
   } catch (error) {
     return fail(error)
   }
+}
+
+// ── Escalation Rules CRUD ──────────────────────────────
+
+const VALID_TRIGGER_TYPES: EscalationTriggerType[] = ['keyword', 'topic', 'condition']
+const VALID_ACTIONS: EscalationAction[] = ['escalate_ceo', 'consult_team']
+
+export async function getEscalationRules(): Promise<EscalationRule[]> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('escalation_rules')
+    .select('*')
+    .order('trigger_type')
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data as EscalationRule[]) ?? []
+}
+
+export async function createEscalationRule(
+  triggerType: EscalationTriggerType, triggerValue: string, description: string | null, action: EscalationAction,
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    if (!VALID_TRIGGER_TYPES.includes(triggerType)) return { ok: false, error: 'INVALID_TRIGGER_TYPE' }
+    if (!VALID_ACTIONS.includes(action)) return { ok: false, error: 'INVALID_ACTION' }
+    if (!triggerValue.trim()) return { ok: false, error: 'EMPTY' }
+    const { error } = await getServiceClient().from('escalation_rules').insert({
+      trigger_type: triggerType, trigger_value: triggerValue.trim(),
+      description: description?.trim() || null, action, active: true,
+    })
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function updateEscalationRule(
+  id: string, updates: { trigger_type?: EscalationTriggerType; trigger_value?: string; description?: string | null; action?: EscalationAction; active?: boolean },
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (updates.trigger_type !== undefined) {
+      if (!VALID_TRIGGER_TYPES.includes(updates.trigger_type)) return { ok: false, error: 'INVALID_TRIGGER_TYPE' }
+      patch.trigger_type = updates.trigger_type
+    }
+    if (updates.trigger_value !== undefined) {
+      if (!updates.trigger_value.trim()) return { ok: false, error: 'EMPTY' }
+      patch.trigger_value = updates.trigger_value.trim()
+    }
+    if (updates.description !== undefined) patch.description = updates.description?.trim() || null
+    if (updates.action !== undefined) {
+      if (!VALID_ACTIONS.includes(updates.action)) return { ok: false, error: 'INVALID_ACTION' }
+      patch.action = updates.action
+    }
+    if (updates.active !== undefined) patch.active = updates.active
+    const { error } = await getServiceClient().from('escalation_rules').update(patch).eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function deleteEscalationRule(id: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const { error } = await getServiceClient().from('escalation_rules').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function toggleEscalationRule(id: string, active: boolean): Promise<ActionResult> {
+  return updateEscalationRule(id, { active })
 }

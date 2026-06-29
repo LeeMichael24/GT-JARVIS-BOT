@@ -6,7 +6,7 @@ import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
 import { createCalendarEvent } from '@/services/google/calendar'
 import { getPlaybook, formatPlaybookForPrompt } from '@/lib/knowledge-base'
-import { downloadMedia, sendText, sendInteractiveButtons, sendInternalNotification, markAsRead } from '@/services/whatsapp/client'
+import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendInternalNotification, markAsRead } from '@/services/whatsapp/client'
 import { transcribeAudio } from '@/services/openai/whisper'
 import {
   upsertLead,
@@ -25,6 +25,8 @@ import { saveBrainObservations, getHighConfidenceLearnings, formatLearningsForPr
 import { saveLeadSource, getLeadSource, getActiveAdCampaigns, matchAdCampaign, formatSourceContextForPrompt, formatActiveAdsForPrompt } from '@/lib/lead-sources'
 import { logActivity } from '@/lib/activity-log'
 import { autoTagProject, autoTagSource } from '@/lib/auto-tag'
+import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPrompt } from '@/lib/escalation-rules'
+import { getProjectMedia } from '@/lib/project-media'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -206,19 +208,21 @@ async function processMessage(payload: unknown): Promise<void> {
     const lastBotMessage = extractLastBotMessage(history)
     const gtUrlSection = detectGTUrlSection(combinedBody)
 
-    // 7. Fetch GT project catalog + sales playbook + lead source in parallel
+    // 7. Fetch GT project catalog + sales playbook + lead source + escalation rules in parallel
     let projects: Awaited<ReturnType<typeof getAllProjects>> = []
     let salesPlaybook: string | null = null
     let brainLearnings: string = ''
     let adContext: string | null = null
+    let escalationOverride: string | null = null
     const existingDeal = existingDealForDebounce
     try {
-      const [projectsResult, playbookEntries, brainEntries, leadSource, activeAds] = await Promise.all([
+      const [projectsResult, playbookEntries, brainEntries, leadSource, activeAds, escalationRules] = await Promise.all([
         getAllProjects(),
         getPlaybook(),
         getHighConfidenceLearnings(),
         getLeadSource(lead.id),
         getActiveAdCampaigns(),
+        getActiveEscalationRules(),
       ])
       projects = projectsResult
       salesPlaybook = formatPlaybookForPrompt(playbookEntries)
@@ -231,6 +235,13 @@ async function processMessage(payload: unknown): Promise<void> {
         adContext = formatSourceContextForPrompt(leadSource, matchedCampaign)
       } else {
         adContext = formatActiveAdsForPrompt(activeAds)
+      }
+
+      // 7b. Check escalation rules against the user's message
+      const matchedRules = matchKeywordRules(combinedBody, escalationRules)
+      if (matchedRules.length > 0) {
+        escalationOverride = formatEscalationRulesForPrompt(matchedRules)
+        console.log(`[processMessage] Escalation rules matched: ${matchedRules.map(r => r.trigger_value).join(', ')}`)
       }
     } catch (err) {
       console.warn('[processMessage] Could not fetch GT projects/playbook:', err)
@@ -272,6 +283,7 @@ async function processMessage(payload: unknown): Promise<void> {
       dealSummary: existingDeal ? { summary: existingDeal.summary, next_action: existingDeal.next_action } : null,
       brainLearnings: brainLearnings || null,
       adContext,
+      escalationOverride,
     })
     const rawResponse = await callClaude(systemPrompt, history)
     console.log('[processMessage] Raw GPT-4o response:', rawResponse.slice(0, 300))
@@ -392,6 +404,23 @@ async function processMessage(payload: unknown): Promise<void> {
         : await sendText(parsed.from, claudeResponse.reply)
     } catch (err) {
       console.error(`[processMessage] Failed to send WA reply to ${parsed.from}:`, err instanceof Error ? err.message : err)
+    }
+
+    // 12b. Send media attachment if GPT-4o requested it
+    if (claudeResponse.send_media) {
+      const media = getProjectMedia(claudeResponse.send_media.project)
+      if (media) {
+        try {
+          if (claudeResponse.send_media.type === 'document' && media.brochureUrl) {
+            await sendDocument(parsed.from, media.brochureUrl, `${claudeResponse.send_media.project}.pdf`, claudeResponse.send_media.description || undefined)
+          } else if (claudeResponse.send_media.type === 'image' && media.galleryUrls.length > 0) {
+            await sendImage(parsed.from, media.galleryUrls[0], claudeResponse.send_media.description || undefined)
+          }
+          console.log(`[processMessage] Sent ${claudeResponse.send_media.type} for "${claudeResponse.send_media.project}"`)
+        } catch (err) {
+          console.error('[processMessage] Failed to send media:', err instanceof Error ? err.message : err)
+        }
+      }
     }
 
     // 13. Save the bot's response (even if WA send failed — the reply is still valid context)

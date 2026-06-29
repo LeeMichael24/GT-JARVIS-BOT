@@ -128,6 +128,41 @@ export async function sendInternalNotification(params: NotificationParams): Prom
   await sendText(ceoPhone, message, { typingDelay: false })
 }
 
+export async function sendDocument(
+  to: string,
+  documentUrl: string,
+  filename: string,
+  caption?: string
+): Promise<string | null> {
+  const document: Record<string, string> = { link: documentUrl, filename }
+  if (caption) document.caption = caption
+  const response = await postWithRetry({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'document',
+    document,
+  }) as { messages?: { id?: string }[] } | null
+  return response?.messages?.[0]?.id ?? null
+}
+
+export async function sendImage(
+  to: string,
+  imageUrl: string,
+  caption?: string
+): Promise<string | null> {
+  const image: Record<string, string> = { link: imageUrl }
+  if (caption) image.caption = caption
+  const response = await postWithRetry({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'image',
+    image,
+  }) as { messages?: { id?: string }[] } | null
+  return response?.messages?.[0]?.id ?? null
+}
+
 export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
   const metaRes = await fetch(`${WA_BASE}/${mediaId}`, { headers: headers() })
   if (!metaRes.ok) throw new Error(`Media meta ${metaRes.status}`)

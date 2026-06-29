@@ -2,7 +2,7 @@ import OpenAI from 'openai'
 import type {
   ClaudeResponse, Conversation, MeetingRequest, QualificationData,
   AgentAction, AgentActionType, DealSummary, DealSignals,
-  BrainObservation, InteractiveButton,
+  BrainObservation, InteractiveButton, SendMedia,
 } from '@/types'
 
 const MODEL = 'gpt-4o'
@@ -67,6 +67,7 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     deal_summary: parseDealSummary((parsed as Record<string, unknown>).deal_summary),
     brain_observations: parseBrainObservations((parsed as Record<string, unknown>).brain_observations),
     interactive_buttons: parseInteractiveButtons((parsed as Record<string, unknown>).interactive_buttons),
+    send_media: parseSendMedia((parsed as Record<string, unknown>).send_media),
   }
 }
 
@@ -128,6 +129,19 @@ function parseInteractiveButtons(raw: unknown): InteractiveButton[] {
       id: typeof b.id === 'string' ? b.id : `btn_${i + 1}`,
       title: (b.title as string).slice(0, 20), // WhatsApp max 20 chars per button
     }))
+}
+
+function parseSendMedia(raw: unknown): SendMedia | null {
+  if (!raw || typeof raw !== 'object') return null
+  const m = raw as Record<string, unknown>
+  const validTypes = ['document', 'image'] as const
+  if (!validTypes.includes(m.type as typeof validTypes[number])) return null
+  if (typeof m.project !== 'string' || typeof m.description !== 'string') return null
+  return {
+    type: m.type as SendMedia['type'],
+    project: m.project,
+    description: m.description,
+  }
 }
 
 function parseMeetingRequest(raw: unknown): MeetingRequest | null {

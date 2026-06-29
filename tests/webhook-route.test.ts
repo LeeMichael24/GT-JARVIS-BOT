@@ -31,7 +31,7 @@ const ai = vi.hoisted(() => ({
     reply: '¡Hola!', stage: 'new', name_captured: null,
     qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
     qualified: false, schedule_meeting: null, opt_out: false,
-    agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
+    agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
   })),
 }))
 vi.mock('@/services/claude/client', () => ai)
@@ -39,6 +39,8 @@ vi.mock('@/services/claude/client', () => ai)
 const wa = vi.hoisted(() => ({
   sendText: vi.fn(async () => 'wamid.out1'),
   sendInteractiveButtons: vi.fn(async () => 'wamid.out1'),
+  sendDocument: vi.fn(async () => 'wamid.doc1'),
+  sendImage: vi.fn(async () => 'wamid.img1'),
   sendInternalNotification: vi.fn(async () => {}),
   downloadMedia: vi.fn(async () => ({ buffer: Buffer.from(''), mimeType: 'audio/ogg' })),
   markAsRead: vi.fn(async () => {}),
@@ -74,6 +76,14 @@ vi.mock('@/lib/activity-log', () => ({
 vi.mock('@/lib/auto-tag', () => ({
   autoTagProject: vi.fn(async () => {}),
   autoTagSource: vi.fn(async () => {}),
+}))
+vi.mock('@/lib/escalation-rules', () => ({
+  getActiveEscalationRules: vi.fn(async () => []),
+  matchKeywordRules: vi.fn(() => []),
+  formatEscalationRulesForPrompt: vi.fn(() => ''),
+}))
+vi.mock('@/lib/project-media', () => ({
+  getProjectMedia: vi.fn(() => null),
 }))
 
 import { POST } from '@/app/api/webhook/whatsapp/route'
@@ -170,7 +180,7 @@ describe('webhook con bot activo', () => {
       reply: 'Entendido, no te molesto más. ¡Éxitos!', stage: 'cold', name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
       qualified: false, schedule_meeting: null, opt_out: true,
-      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
     })
     const res = await POST(buildRequest())
     expect(res.status).toBe(200)

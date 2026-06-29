@@ -146,6 +146,7 @@ export interface ClaudeResponse {
   deal_summary: DealSummary | null
   brain_observations: BrainObservation[]
   interactive_buttons: InteractiveButton[]
+  send_media: SendMedia | null
 }
 
 // ── SDR Agent types ──────────────────────────────────────────
@@ -227,6 +228,12 @@ export interface BrainEntry {
 export interface InteractiveButton {
   id: string
   title: string
+}
+
+export interface SendMedia {
+  type: 'document' | 'image'
+  project: string
+  description: string
 }
 
 export type TemplateCategory = 'MARKETING' | 'UTILITY'
@@ -328,6 +335,22 @@ export interface WaReferral {
   body?: string
   media_type?: string
   media_url?: string
+}
+
+// ── Escalation Rules ──────────────────────────────────────
+
+export type EscalationTriggerType = 'keyword' | 'topic' | 'condition'
+export type EscalationAction = 'escalate_ceo' | 'consult_team'
+
+export interface EscalationRule {
+  id: string
+  trigger_type: EscalationTriggerType
+  trigger_value: string
+  description: string | null
+  action: EscalationAction
+  active: boolean
+  created_at: string
+  updated_at: string
 }
 
 // ── Activity Log ────────────────────────────────────────────
