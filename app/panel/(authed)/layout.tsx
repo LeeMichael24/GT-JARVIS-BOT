@@ -42,6 +42,9 @@ export default async function PanelLayout({ children }: { children: React.ReactN
             </Link>
           )}
           {member.role === 'admin' && (
+            <Link href="/panel/daniela" className="text-zinc-400 transition-colors hover:text-white">Daniela</Link>
+          )}
+          {member.role === 'admin' && (
             <Link href="/panel/ads" className="text-zinc-400 transition-colors hover:text-white">Ads</Link>
           )}
           {member.role === 'admin' && (

@@ -11,7 +11,7 @@ import {
 } from '@/lib/supabase'
 import { isWithin24h } from '@/lib/wa-window'
 import { sendText } from '@/services/whatsapp/client'
-import type { Lead, LeadStage, TeamRole } from '@/types'
+import type { BrainEntry, Lead, LeadStage, TeamRole } from '@/types'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -262,7 +262,6 @@ export async function setMemberActive(memberId: string, active: boolean): Promis
     if (memberId === admin.id) return { ok: false, error: 'CANT_DEACTIVATE_SELF' }
     const service = getServiceClient()
     if (!active) {
-      // No permitir dejar el sistema sin ningún admin activo
       const { data: target } = await service
         .from('team_members')
         .select('role')
@@ -281,6 +280,76 @@ export async function setMemberActive(memberId: string, active: boolean): Promis
       .from('team_members')
       .update({ active })
       .eq('id', memberId)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// ── Brain CRUD ──────────────────────────────────────
+
+const VALID_CATEGORIES = ['observation', 'pattern', 'correction', 'metric'] as const
+
+export async function getBrainEntries(): Promise<BrainEntry[]> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('agent_brain')
+    .select('*')
+    .order('confidence', { ascending: false })
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data as BrainEntry[]) ?? []
+}
+
+export async function createBrainEntry(
+  category: string, topic: string, content: string, confidence: number,
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    if (!VALID_CATEGORIES.includes(category as typeof VALID_CATEGORIES[number])) return { ok: false, error: 'INVALID_CATEGORY' }
+    if (!topic.trim() || !content.trim()) return { ok: false, error: 'EMPTY' }
+    const { error } = await getServiceClient().from('agent_brain').insert({
+      category, topic: topic.trim(), content: content.trim(),
+      source: 'team', lead_id: null, confidence: Math.min(1, Math.max(0, confidence)), active: true,
+    })
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function updateBrainEntry(
+  id: string, updates: { topic?: string; content?: string; confidence?: number; active?: boolean; category?: string },
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const patch: Record<string, unknown> = {}
+    if (updates.topic !== undefined) patch.topic = updates.topic.trim()
+    if (updates.content !== undefined) patch.content = updates.content.trim()
+    if (updates.confidence !== undefined) patch.confidence = Math.min(1, Math.max(0, updates.confidence))
+    if (updates.active !== undefined) patch.active = updates.active
+    if (updates.category !== undefined) {
+      if (!VALID_CATEGORIES.includes(updates.category as typeof VALID_CATEGORIES[number])) return { ok: false, error: 'INVALID_CATEGORY' }
+      patch.category = updates.category
+    }
+    if (Object.keys(patch).length === 0) return { ok: true }
+    const { error } = await getServiceClient().from('agent_brain').update(patch).eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function deleteBrainEntry(id: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const { error } = await getServiceClient().from('agent_brain').delete().eq('id', id)
     if (error) throw new Error(error.message)
     refresh()
     return { ok: true }

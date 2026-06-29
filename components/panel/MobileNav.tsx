@@ -65,6 +65,11 @@ export function MobileNav({ isAdmin, memberName, pendingCount }: {
               </Link>
             )}
             {isAdmin && (
+              <Link href="/panel/daniela" onClick={() => setOpen(false)} className={linkCls('/panel/daniela')}>
+                Daniela
+              </Link>
+            )}
+            {isAdmin && (
               <Link href="/panel/ads" onClick={() => setOpen(false)} className={linkCls('/panel/ads')}>
                 Ads
               </Link>
