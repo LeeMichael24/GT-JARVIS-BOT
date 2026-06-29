@@ -94,7 +94,7 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
                   key={lead.id}
                   draggable
                   onDragStart={e => e.dataTransfer.setData('text/lead-id', lead.id)}
-                  className="cursor-grab rounded-xl border border-zinc-800 bg-zinc-900 p-3 transition-shadow active:cursor-grabbing active:shadow-lg"
+                  className="flex h-[140px] cursor-grab flex-col rounded-xl border border-zinc-800 bg-zinc-900 p-3 transition-shadow active:cursor-grabbing active:shadow-lg"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <Link href={`/panel/chat/${lead.id}`} className="truncate font-medium text-white hover:underline">
@@ -102,23 +102,24 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
                     </Link>
                     {!lead.bot_active && <span className="shrink-0 text-xs" title="Daniela pausada">✋</span>}
                   </div>
-                  {snippet && <p className="mt-1 truncate text-xs text-zinc-500">{snippet}</p>}
-                  <div className="mt-2 flex flex-wrap items-center gap-1">
+                  {snippet && <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{snippet}</p>}
+                  <div className="mt-auto flex items-center gap-1 overflow-hidden">
                     {sourceType && SOURCE_BADGE[sourceType] && (
-                      <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SOURCE_BADGE[sourceType].cls}`}>
+                      <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SOURCE_BADGE[sourceType].cls}`}>
                         {SOURCE_BADGE[sourceType].label}
                       </span>
                     )}
-                    {tags.map(t => (
+                    {tags.slice(0, 2).map(t => (
                       <span
                         key={t.id}
-                        className="rounded-full px-1.5 py-0.5 text-[10px]"
-                        style={{ backgroundColor: `${t.color}33`, color: t.color }}
+                        className="shrink-0 truncate rounded-full px-1.5 py-0.5 text-[10px]"
+                        style={{ backgroundColor: `${t.color}33`, color: t.color, maxWidth: '80px' }}
                       >
                         {t.name}
                       </span>
                     ))}
-                    {assignedName && <span className="text-[10px] text-zinc-600">{assignedName}</span>}
+                    {tags.length > 2 && <span className="shrink-0 text-[10px] text-zinc-500">+{tags.length - 2}</span>}
+                    {assignedName && <span className="shrink-0 text-[10px] text-zinc-600">{assignedName}</span>}
                   </div>
                   <select
                     value=""
@@ -128,7 +129,7 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
                       const s = e.target.value as LeadStage
                       if (s) move(lead.id, s)
                     }}
-                    className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-400"
+                    className="mt-1.5 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-1.5 text-[11px] text-zinc-400"
                   >
                     <option value="">Mover a...</option>
                     {KANBAN_STAGES.filter(s => s.value !== lead.stage).map(s => (

@@ -52,7 +52,7 @@ export function InboxList({ items, selectMode = false, selected, onToggle }: {
             <li key={lead.id}>
               <button
                 onClick={() => onToggle?.(lead.id)}
-                className={`flex w-full flex-col gap-1.5 rounded-xl px-3 py-3 text-left transition-colors ${
+                className={`flex h-[72px] w-full flex-col justify-center gap-1 rounded-xl px-3 py-2.5 text-left transition-colors ${
                   isSelected ? 'bg-red-950/40 ring-1 ring-red-700/50' : 'hover:bg-zinc-900'
                 }`}
               >
@@ -71,8 +71,8 @@ export function InboxList({ items, selectMode = false, selected, onToggle }: {
                     <span className="shrink-0 text-xs text-zinc-500">{lead.phone}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 pl-8">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STAGE_STYLES[lead.stage] ?? STAGE_STYLES.cold}`}>
+                <div className="flex items-center gap-1.5 overflow-hidden pl-8">
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STAGE_STYLES[lead.stage] ?? STAGE_STYLES.cold}`}>
                     {STAGE_LABEL[lead.stage] ?? lead.stage}
                   </span>
                   {snippet && <p className="truncate text-xs text-zinc-500">{snippet}</p>}
@@ -86,7 +86,7 @@ export function InboxList({ items, selectMode = false, selected, onToggle }: {
           <li key={lead.id}>
             <Link
               href={`/panel/chat/${lead.id}`}
-              className="flex flex-col gap-1.5 rounded-xl px-3 py-3 transition-colors active:bg-zinc-800 sm:rounded-lg sm:hover:bg-zinc-900"
+              className="flex h-[88px] flex-col justify-center gap-1 rounded-xl px-3 py-2.5 transition-colors active:bg-zinc-800 sm:h-[80px] sm:rounded-lg sm:hover:bg-zinc-900"
             >
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2.5">
@@ -110,21 +110,22 @@ export function InboxList({ items, selectMode = false, selected, onToggle }: {
                 </p>
                 {!lead.bot_active && <span className="shrink-0 text-xs" title="Daniela pausada">✋</span>}
               </div>
-              <div className="flex flex-wrap items-center gap-1.5 pl-[46px] sm:pl-[42px]">
-                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STAGE_STYLES[lead.stage] ?? STAGE_STYLES.cold}`}>
+              <div className="flex items-center gap-1.5 overflow-hidden pl-[46px] sm:pl-[42px]">
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STAGE_STYLES[lead.stage] ?? STAGE_STYLES.cold}`}>
                   {STAGE_LABEL[lead.stage] ?? lead.stage}
                 </span>
                 {sourceType && SOURCE_BADGE[sourceType] && (
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${SOURCE_BADGE[sourceType].cls}`}>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${SOURCE_BADGE[sourceType].cls}`}>
                     {SOURCE_BADGE[sourceType].label}
                   </span>
                 )}
-                {tags.map(t => (
-                  <span key={t.id} className="rounded-full px-2 py-0.5 text-[11px]" style={{ backgroundColor: `${t.color}33`, color: t.color }}>
+                {tags.slice(0, 2).map(t => (
+                  <span key={t.id} className="shrink-0 truncate rounded-full px-2 py-0.5 text-[11px]" style={{ backgroundColor: `${t.color}33`, color: t.color, maxWidth: '100px' }}>
                     {t.name}
                   </span>
                 ))}
-                {assignedName && <span className="text-[11px] text-zinc-500">{assignedName}</span>}
+                {tags.length > 2 && <span className="shrink-0 text-[11px] text-zinc-500">+{tags.length - 2}</span>}
+                {assignedName && <span className="shrink-0 text-[11px] text-zinc-500">{assignedName}</span>}
               </div>
             </Link>
           </li>
