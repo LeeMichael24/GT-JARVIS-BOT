@@ -30,10 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — ALL env files ignored, no exceptions
 .env*
-!.env.example
-.env.local
 
 # chat exports (contain private conversations)
 /data/whatsapp-exports/*.txt
