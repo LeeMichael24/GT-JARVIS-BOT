@@ -201,4 +201,59 @@ describe('webhook con bot activo', () => {
     expect(ai.callClaude).not.toHaveBeenCalled()
     expect(wa.sendText).not.toHaveBeenCalled()
   })
+
+  it('si GPT falla, envía mensaje de respaldo — el cliente NUNCA queda en visto', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    ai.callClaude.mockRejectedValueOnce(new Error('OpenAI timeout'))
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    // Se envió el puente humano y quedó guardado en el historial
+    expect(wa.sendText).toHaveBeenCalledWith('50312345678', expect.stringContaining('Dame un momento'))
+    expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
+      leadId: 'lead-1', role: 'assistant', content: expect.stringContaining('Dame un momento'),
+    }))
+  })
+
+  it('si GPT devuelve JSON inválido, también cae al mensaje de respaldo', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    ai.parseClaudeResponse.mockImplementationOnce(() => { throw new Error('missing reply field') })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(wa.sendText).toHaveBeenCalledWith('50312345678', expect.stringContaining('Dame un momento'))
+  })
+
+  it('procesa TODOS los mensajes cuando Meta agrupa un batch en un webhook', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: false })
+    const body = JSON.stringify({
+      object: 'whatsapp_business_account',
+      entry: [{ changes: [{ value: { messages: [
+        { id: 'wamid.b1', from: '50312345678', type: 'text', text: { body: 'Hola' }, timestamp: '1716556800' },
+        { id: 'wamid.b2', from: '50312345678', type: 'text', text: { body: 'Info porfa' }, timestamp: '1716556801' },
+      ] } }] }],
+    })
+    const sig = 'sha256=' + createHmac('sha256', SECRET).update(body).digest('hex')
+    const res = await POST(new Request('http://localhost/api/webhook/whatsapp', {
+      method: 'POST', body, headers: { 'x-hub-signature-256': sig },
+    }))
+    expect(res.status).toBe(200)
+    await flush()
+
+    // Ambos mensajes del batch se guardaron (bot pausado: solo guarda, no responde)
+    expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({ waMessageId: 'wamid.b1' }))
+    expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({ waMessageId: 'wamid.b2' }))
+  })
 })

@@ -30,7 +30,19 @@ export async function upsertLead(phone: string): Promise<Lead> {
     .select()
     .single()
 
-  if (error) throw new Error(`upsertLead: ${error.message}`)
+  // Carrera: dos mensajes simultáneos de un número nuevo — el segundo INSERT
+  // choca con el unique de phone. Re-leemos la fila que ganó y seguimos.
+  if (error) {
+    if (error.code === '23505' || error.message.includes('duplicate') || error.message.includes('unique')) {
+      const { data: winner } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('phone', phone)
+        .maybeSingle()
+      if (winner) return winner as Lead
+    }
+    throw new Error(`upsertLead: ${error.message}`)
+  }
   return data as Lead
 }
 

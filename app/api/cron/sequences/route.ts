@@ -7,9 +7,11 @@ import {
 import {
   getLeadById,
   getDealSummary,
+  getLatestUserMessageAt,
   saveConversation,
   updateLead,
 } from '@/lib/supabase'
+import { isWithin24h } from '@/lib/wa-window'
 import { callClaude } from '@/services/claude/client'
 import { sendText } from '@/services/whatsapp/client'
 import type { SequenceType } from '@/types'
@@ -54,6 +56,18 @@ export async function GET(request: Request): Promise<Response> {
       const def = SEQUENCE_DEFINITIONS[seq.sequence_type as SequenceType]
       const step = def?.steps[seq.current_step]
       if (!step) {
+        skipped++
+        continue
+      }
+
+      // Ventana de 24h de Meta: fuera de ella el texto libre es RECHAZADO
+      // (error 131047). Chequear ANTES de generar el mensaje ahorra la llamada
+      // GPT. Avanzamos el paso para no reintentar eternamente un envío imposible.
+      // TODO: cuando existan plantillas HSM aprobadas, usar sendTemplate() aquí.
+      const lastUserAt = await getLatestUserMessageAt(seq.lead_id)
+      if (!isWithin24h(lastUserAt)) {
+        console.warn(`[cron/sequences] Lead ${seq.lead_id} fuera de ventana 24h — paso ${seq.current_step} omitido (requiere plantilla HSM)`)
+        await advanceSequence(seq.id, seq.sequence_type as SequenceType, seq.current_step)
         skipped++
         continue
       }

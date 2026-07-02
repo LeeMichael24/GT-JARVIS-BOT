@@ -12,7 +12,9 @@ export async function callClaude(
   systemPrompt: string,
   history: Conversation[]
 ): Promise<string> {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  // timeout 30s: sin esto una llamada colgada consume los 60s de maxDuration
+  // y el cliente queda sin respuesta. 1 retry automático del SDK.
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 1 })
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
     ...history.map(msg => ({

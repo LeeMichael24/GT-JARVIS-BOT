@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseWebhook, verifySignature } from '@/services/whatsapp/webhook'
+import { parseWebhook, parseWebhookMessages, verifySignature } from '@/services/whatsapp/webhook'
 import { createHmac } from 'crypto'
 
 const textPayload = {
@@ -75,6 +75,55 @@ describe('parseWebhook', () => {
     expect(parseWebhook(null)).toBeNull()
     expect(parseWebhook({})).toBeNull()
     expect(parseWebhook('not an object')).toBeNull()
+  })
+})
+
+describe('parseWebhookMessages — batches de Meta', () => {
+  it('extrae TODOS los mensajes cuando Meta agrupa varios en un webhook', () => {
+    const batchPayload = {
+      object: 'whatsapp_business_account',
+      entry: [{
+        changes: [{
+          value: {
+            messages: [
+              { id: 'wamid.m1', from: '50312345678', type: 'text', text: { body: 'Hola' }, timestamp: '1716556800' },
+              { id: 'wamid.m2', from: '50312345678', type: 'text', text: { body: 'Info de Portacelli porfa' }, timestamp: '1716556801' },
+            ]
+          }
+        }]
+      }]
+    }
+    const results = parseWebhookMessages(batchPayload)
+    expect(results).toHaveLength(2)
+    expect(results[0].messageId).toBe('wamid.m1')
+    expect(results[1].messageId).toBe('wamid.m2')
+    expect(results[1].body).toBe('Info de Portacelli porfa')
+  })
+
+  it('extrae mensajes de múltiples entries y changes', () => {
+    const multiEntry = {
+      object: 'whatsapp_business_account',
+      entry: [
+        { changes: [{ value: { messages: [{ id: 'wamid.e1', from: '503111', type: 'text', text: { body: 'a' }, timestamp: '1' }] } }] },
+        { changes: [
+          { value: { messages: [{ id: 'wamid.e2', from: '503222', type: 'text', text: { body: 'b' }, timestamp: '2' }] } },
+          { value: { statuses: [{ id: 'wamid.x', status: 'delivered' }] } },
+        ] },
+      ]
+    }
+    const results = parseWebhookMessages(multiEntry)
+    expect(results.map(r => r.messageId)).toEqual(['wamid.e1', 'wamid.e2'])
+  })
+
+  it('devuelve array vacío para payloads sin mensajes o malformados', () => {
+    expect(parseWebhookMessages({ entry: [] })).toEqual([])
+    expect(parseWebhookMessages(null)).toEqual([])
+    expect(parseWebhookMessages('basura')).toEqual([])
+  })
+
+  it('parseWebhook (legacy) devuelve el primero del batch', () => {
+    const result = parseWebhook(textPayload)
+    expect(result?.messageId).toBe('wamid.abc123')
   })
 })
 

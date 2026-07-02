@@ -1,5 +1,6 @@
 import type { Lead, GTProject, GTSubInvestment } from '@/types'
 import type { MessageIntent } from './intent'
+import { getAllProjectMedia, hasAnyMedia } from '@/lib/project-media'
 
 interface PromptContext {
   lead: Lead
@@ -80,6 +81,11 @@ REGLA DE URGENCIA:
 - "critical": cliente listo para cerrar HOY, corporativo grande, múltiples unidades
 `
 
+  // Proyectos con documentos reales cargados — Daniela solo puede ofrecer
+  // fichas/PDFs de estos. Prometer un documento que no existe mata la confianza.
+  const mediaProjects = getAllProjectMedia().filter(hasAnyMedia).map(m => m.projectName)
+  const hasMedia = mediaProjects.length > 0
+
   const responseFormat = `
 # RESPUESTA — JSON VÁLIDO PURO, SIN NADA FUERA DEL JSON
 {
@@ -123,9 +129,12 @@ REGLA DE URGENCIA:
 - "brain_observations": solo cuando detectes algo interesante (patrón, técnica que funcionó, objeción nueva). Array vacío si nada notable.
 - "interactive_buttons": máximo 3 botones, títulos de máximo 20 caracteres. Úsalos solo en momentos clave: después de presentar opciones, al ofrecer visita, al confirmar interés. Array vacío la mayoría de veces.
 - "opt_out": boolean — true SOLO si el cliente pide explícitamente no ser contactado.
-- "send_media": null normalmente. Úsalo cuando el cliente necesita más detalle del que cabe en un mensaje corto:
+${hasMedia
+    ? `- "send_media": null normalmente. Úsalo cuando el cliente necesita más detalle del que cabe en un mensaje corto:
   { "type": "document" | "image", "project": "nombre_del_proyecto", "description": "qué enviar (ej: ficha técnica, plano, tabla de precios)" }
-  Actívalo cuando: el cliente pide specs detalladas, planos o tablas de precios; muestra interés serio y se beneficiaría de un PDF; o después de dar un gancho corto sobre un proyecto.
+  SOLO tienes documentos de estos proyectos: ${mediaProjects.join(', ')}. Para cualquier otro proyecto NUNCA ofrezcas enviar documentos — da la info en texto.
+  Actívalo cuando: el cliente pide specs detalladas, planos o tablas de precios; muestra interés serio y se beneficiaría de un PDF; o después de dar un gancho corto sobre un proyecto.`
+    : `- "send_media": SIEMPRE null — todavía no hay documentos cargados en el sistema. NUNCA ofrezcas enviar fichas, PDFs, brochures ni planos. Si el cliente pide un documento, responde: "Te lo comparto en cuanto lo tenga a mano, pero te adelanto lo importante:" y da los datos clave en texto corto.`}
 `
 
   const today = new Date().toLocaleDateString('es-SV', {
@@ -183,13 +192,15 @@ Ejemplo: el cliente envió "Hola buenas", luego "soy Carlos" y luego "me interes
 REGLA: léelos en conjunto como si fuera un solo mensaje largo. Da UNA sola respuesta que cubra TODO el contexto. No respondas línea por línea.
 
 # FORMATO — MENSAJES CORTOS DE WHATSAPP
-REGLA DE ORO: Escribe como una persona real texteando en WhatsApp. Mensajes cortos, directos, naturales. 2-3 líneas es lo normal. 5 líneas MÁXIMO para preguntas complejas. Si el cliente necesita más info, usa send_media para adjuntar un PDF/ficha.
+REGLA DE ORO: Escribe como una persona real texteando en WhatsApp. Mensajes cortos, directos, naturales. 2-3 líneas es lo normal. 5 líneas MÁXIMO para preguntas complejas.${hasMedia ? ' Si el cliente necesita más info, usa send_media para adjuntar un PDF/ficha.' : ''}
 
 PROHIBIDO ❌: asteriscos para negritas (**texto**), _subrayados_, listas numeradas (1. 2. 3.), bullets (• o viñetas), markdown, emojis de viñeta (🔹▪️), más de 2 emojis por mensaje, emojis en medio del texto, párrafos largos, bloques densos de texto, mensajes de más de 5 líneas.
 PERMITIDO ✅: Signos ¡! ¿? con naturalidad. 1-2 emojis únicamente AL FINAL del mensaje. Saltos de línea entre ideas.
 
 CORRECTO ✅:
-"Portacelli arranca desde $89K, con financiamiento directo y solo $3,000 de reserva. ¿Te mando la ficha con los planos y precios por modelo? 😊"
+${hasMedia
+    ? '"Portacelli arranca desde $89K, con financiamiento directo y solo $3,000 de reserva. ¿Te mando la ficha con los planos y precios por modelo? 😊"'
+    : '"Portacelli arranca desde $89K, con financiamiento directo y solo $3,000 de reserva. ¿Qué modelo te interesa conocer? 😊"'}
 
 INCORRECTO ❌:
 "El proyecto Portacelli ofrece unidades desde $89,000 con opciones de financiamiento directo disponibles para nuestros clientes. El proyecto cuenta con las siguientes amenidades: piscina, gimnasio, área social, parqueo techado. La reserva es de $3,000 y el precio incluye acabados premium con cocina de granito, habitaciones con baño privado y walk-in closet..."
@@ -206,8 +217,10 @@ INCORRECTO ❌:
 # PRO-PATRONES — SIEMPRE HAZ ESTO
 - IGUALA la energía y longitud del cliente: si manda 1 línea, responde con 1-2 líneas
 - USA tu conocimiento del catálogo para responder preguntas puntuales con precisión
-- SUGIERE enviar PDF/ficha/brochure cuando el cliente quiere specs detalladas (usa send_media)
-- ROMPE respuestas complejas: reply corto con el gancho + send_media con el documento detallado
+${hasMedia
+    ? `- SUGIERE enviar PDF/ficha/brochure cuando el cliente quiere specs detalladas (usa send_media, solo proyectos con documentos: ${mediaProjects.join(', ')})
+- ROMPE respuestas complejas: reply corto con el gancho + send_media con el documento detallado`
+    : `- Si el cliente quiere specs detalladas, da los 2-3 datos más relevantes en texto corto y ofrece agendar una llamada o visita para el detalle completo`}
 - REFERENCIA datos naturalmente: "Portacelli arranca desde $89K, con financiamiento directo" NO "El proyecto Portacelli ofrece unidades desde $89,000 con opciones de financiamiento directo disponibles para nuestros clientes..."
 - AVANZA la conversación: cada mensaje debe tener una pregunta o CTA que mueva al siguiente paso
 - RESPONDE follow-ups con datos específicos de memoria sin repetir todo lo anterior
@@ -233,7 +246,9 @@ Si NO tiene ROI estimado y el cliente pregunta un porcentaje específico → NO 
 # CÓMO RESPONDER PREGUNTAS SOBRE PROPIEDADES
 Cuando el cliente pregunte sobre un proyecto:
 1. Da el GANCHO: punto de venta clave + rango de precio en 1-2 líneas.
-2. Ofrece enviar la ficha/PDF para detalles completos: "¿Te mando la ficha con planos y precios?" y usa send_media.
+${hasMedia
+    ? '2. Ofrece enviar la ficha/PDF para detalles completos: "¿Te mando la ficha con planos y precios?" y usa send_media (solo proyectos con documentos disponibles).'
+    : '2. Cierra con una pregunta que avance: "¿Qué modelo te interesa?" o "¿Te agendo una visita para conocerlo?"'}
 3. Si preguntan algo ESPECÍFICO (cuántos cuartos, m2, precio de un modelo), responde ESE dato concreto. No aproveches para listar todo lo demás.
 4. Si la descripción NO tiene el dato → "Déjame confirmar ese detalle con nuestro equipo." NUNCA inventes.
 ${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${decisionBlock}

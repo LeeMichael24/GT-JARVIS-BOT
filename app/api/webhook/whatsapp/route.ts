@@ -1,5 +1,6 @@
 import { waitUntil } from '@vercel/functions'
-import { parseWebhook, verifySignature } from '@/services/whatsapp/webhook'
+import { parseWebhookMessages, verifySignature } from '@/services/whatsapp/webhook'
+import type { ParsedWebhook } from '@/types'
 import { callClaude, parseClaudeResponse } from '@/services/claude/client'
 import { buildSystemPrompt } from '@/services/claude/prompts'
 import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
@@ -70,22 +71,20 @@ export async function POST(request: Request): Promise<Response> {
 
   const payload = JSON.parse(body) as unknown
 
+  // Meta puede agrupar varios mensajes en un webhook — procesamos todos.
   // Run synchronously in dev to avoid waitUntil issues with Turbopack
+  const messages = parseWebhookMessages(payload)
   if (process.env.NODE_ENV === 'development') {
-    await processMessage(payload)
+    for (const parsed of messages) await processMessage(parsed)
   } else {
-    waitUntil(processMessage(payload))
+    for (const parsed of messages) waitUntil(processMessage(parsed))
   }
 
   return new Response('OK', { status: 200 })
 }
 
-async function processMessage(payload: unknown): Promise<void> {
+async function processMessage(parsed: ParsedWebhook): Promise<void> {
   try {
-    // 1. Parse the incoming webhook
-    const parsed = parseWebhook(payload)
-    if (!parsed) return
-
     // 1a. Resolve message body — transcribe audio, describe image, or skip unsupported types
     let messageBody = parsed.body
     if (parsed.messageType === 'audio' && parsed.mediaId) {
@@ -285,9 +284,25 @@ async function processMessage(payload: unknown): Promise<void> {
       adContext,
       escalationOverride,
     })
-    const rawResponse = await callClaude(systemPrompt, history)
-    console.log('[processMessage] Raw GPT-4o response:', rawResponse.slice(0, 300))
-    const claudeResponse = parseClaudeResponse(rawResponse)
+    let claudeResponse: ReturnType<typeof parseClaudeResponse>
+    try {
+      const rawResponse = await callClaude(systemPrompt, history)
+      console.log('[processMessage] Raw GPT-4o response:', rawResponse.slice(0, 300))
+      claudeResponse = parseClaudeResponse(rawResponse)
+    } catch (err) {
+      // El modelo falló o devolvió JSON inválido — NUNCA dejar al cliente en visto.
+      // Enviamos un puente humano y salimos; el mensaje del cliente ya está guardado
+      // y el próximo mensaje reintenta el flujo completo.
+      console.error('[processMessage] GPT-4o failed — sending fallback reply:', err instanceof Error ? err.message : err)
+      const fallback = 'Dame un momento, estoy confirmando ese detalle y ya te escribo 🙌'
+      try {
+        const fallbackWaId = await sendText(parsed.from, fallback)
+        await saveConversation({ leadId: lead.id, role: 'assistant', content: fallback, waMessageId: fallbackWaId ?? undefined })
+      } catch (sendErr) {
+        console.error('[processMessage] Fallback send also failed:', sendErr instanceof Error ? sendErr.message : sendErr)
+      }
+      return
+    }
     console.log('[processMessage] Parsed action:', JSON.stringify(claudeResponse.agent_action))
 
     // 9b. Save deal summary for future conversations, merging in the burst pattern update
