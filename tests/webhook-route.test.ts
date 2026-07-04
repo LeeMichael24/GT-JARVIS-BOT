@@ -208,38 +208,64 @@ describe('webhook con bot activo', () => {
     expect(wa.sendText).not.toHaveBeenCalled()
   })
 
-  it('si GPT falla, envía mensaje de respaldo — el cliente NUNCA queda en visto', async () => {
+  it('si GPT devuelve {} una vez, REINTENTA con corrección y responde normal (auto-sanación)', async () => {
     db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
     db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
     db.getUnprocessedUserMessages.mockResolvedValue([
       { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
     ])
-    ai.callClaude.mockRejectedValueOnce(new Error('OpenAI timeout'))
-
-    const res = await POST(buildRequest())
-    expect(res.status).toBe(200)
-    await flush()
-
-    // Se envió el puente humano y quedó guardado en el historial
-    expect(wa.sendText).toHaveBeenCalledWith('50312345678', expect.stringContaining('Dame un momento'))
-    expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
-      leadId: 'lead-1', role: 'assistant', content: expect.stringContaining('Dame un momento'),
-    }))
-  })
-
-  it('si GPT devuelve JSON inválido, también cae al mensaje de respaldo', async () => {
-    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
-    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
-    db.getUnprocessedUserMessages.mockResolvedValue([
-      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
-    ])
+    // Primer intento: JSON vacío inválido. Segundo (retry): el default '¡Hola!' válido
     ai.parseClaudeResponse.mockImplementationOnce(() => { throw new Error('missing reply field') })
 
     const res = await POST(buildRequest())
     expect(res.status).toBe(200)
     await flush()
 
-    expect(wa.sendText).toHaveBeenCalledWith('50312345678', expect.stringContaining('Dame un momento'))
+    expect(ai.callClaude).toHaveBeenCalledTimes(2)
+    // El prompt del reintento incluye la corrección explícita
+    expect(String(ai.callClaude.mock.calls[1][0])).toContain('REINTENTO')
+    // Respondió el mensaje REAL, no el fallback
+    expect(wa.sendText).toHaveBeenCalledWith('50312345678', '¡Hola!')
+  })
+
+  it('si GPT falla DOS veces, envía mensaje de respaldo — el cliente NUNCA queda en visto', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    ai.callClaude
+      .mockRejectedValueOnce(new Error('OpenAI timeout'))
+      .mockRejectedValueOnce(new Error('OpenAI timeout'))
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    // Se envió un puente humano (cualquiera de las variantes) y quedó en el historial
+    const fallbackCall = wa.sendText.mock.calls.find(c => /momento|momentito|te cuento/.test(String(c[1])))
+    expect(fallbackCall).toBeDefined()
+    expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
+      leadId: 'lead-1', role: 'assistant', content: expect.stringMatching(/momento|momentito|te cuento/),
+    }))
+  })
+
+  it('si GPT devuelve JSON inválido dos veces, también cae al respaldo', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    ai.parseClaudeResponse
+      .mockImplementationOnce(() => { throw new Error('missing reply field') })
+      .mockImplementationOnce(() => { throw new Error('missing reply field') })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    const fallbackCall = wa.sendText.mock.calls.find(c => /momento|momentito|te cuento/.test(String(c[1])))
+    expect(fallbackCall).toBeDefined()
   })
 
   it('procesa TODOS los mensajes cuando Meta agrupa un batch en un webhook', async () => {

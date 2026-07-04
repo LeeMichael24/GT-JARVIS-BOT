@@ -6,7 +6,7 @@ import type {
 } from '@/types'
 
 const MODEL = 'gpt-4o'
-const MAX_TOKENS = 1024
+const MAX_TOKENS = 2048
 
 export async function callClaude(
   systemPrompt: string,
@@ -28,11 +28,17 @@ export async function callClaude(
   const response = await openai.chat.completions.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
+    temperature: 0.85,
     messages,
     response_format: { type: 'json_object' },
   })
 
-  const content = response.choices[0]?.message?.content
+  const choice = response.choices[0]
+  // 'length' = JSON truncado; cualquier cosa distinta de 'stop' es sospechosa
+  if (choice?.finish_reason && choice.finish_reason !== 'stop') {
+    console.warn(`[claude] finish_reason inesperado: ${choice.finish_reason}`)
+  }
+  const content = choice?.message?.content
   if (!content) throw new Error('OpenAI returned empty response')
   return content
 }

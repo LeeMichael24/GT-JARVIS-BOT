@@ -291,15 +291,31 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     })
     let claudeResponse: ReturnType<typeof parseClaudeResponse>
     try {
-      const rawResponse = await callClaude(systemPrompt, history)
-      console.log('[processMessage] Raw GPT-4o response:', rawResponse.slice(0, 300))
-      claudeResponse = parseClaudeResponse(rawResponse)
+      let rawResponse: string
+      try {
+        rawResponse = await callClaude(systemPrompt, history)
+        console.log('[processMessage] Raw GPT-4o response:', rawResponse.slice(0, 300))
+        claudeResponse = parseClaudeResponse(rawResponse)
+      } catch (firstErr) {
+        // GPT-4o a veces devuelve {} u JSON inválido con prompts grandes.
+        // Reintentamos UNA vez con corrección explícita antes de rendirnos.
+        console.warn('[processMessage] Respuesta inválida de GPT-4o — reintentando:', firstErr instanceof Error ? firstErr.message : firstErr)
+        const nudgedPrompt = systemPrompt + '\n\n# ATENCIÓN — REINTENTO\nTu respuesta anterior fue un JSON vacío o inválido. Responde AHORA con el JSON COMPLETO del formato especificado arriba. El campo "reply" es OBLIGATORIO: contiene tu mensaje de WhatsApp para el cliente, con tu personalidad de siempre.'
+        rawResponse = await callClaude(nudgedPrompt, history)
+        console.log('[processMessage] Raw GPT-4o response (retry):', rawResponse.slice(0, 300))
+        claudeResponse = parseClaudeResponse(rawResponse)
+      }
     } catch (err) {
-      // El modelo falló o devolvió JSON inválido — NUNCA dejar al cliente en visto.
-      // Enviamos un puente humano y salimos; el mensaje del cliente ya está guardado
-      // y el próximo mensaje reintenta el flujo completo.
-      console.error('[processMessage] GPT-4o failed — sending fallback reply:', err instanceof Error ? err.message : err)
-      const fallback = 'Dame un momento, estoy confirmando ese detalle y ya te escribo 🙌'
+      // Dos intentos fallidos — NUNCA dejar al cliente en visto. Puente humano
+      // variado (no repetir siempre la misma línea) y salimos; el mensaje del
+      // cliente ya está guardado y el próximo mensaje reintenta el flujo.
+      console.error('[processMessage] GPT-4o failed twice — sending fallback reply:', err instanceof Error ? err.message : err)
+      const fallbacks = [
+        'Dame un momento, estoy confirmando ese detalle y ya te escribo 🙌',
+        'Déjame revisar eso bien y te respondo en un momentito 😊',
+        'Buena pregunta — déjame confirmarlo y ya te cuento 🙌',
+      ]
+      const fallback = fallbacks[Date.now() % fallbacks.length]
       try {
         const fallbackWaId = await sendText(parsed.from, fallback)
         await saveConversation({ leadId: lead.id, role: 'assistant', content: fallback, waMessageId: fallbackWaId ?? undefined })
