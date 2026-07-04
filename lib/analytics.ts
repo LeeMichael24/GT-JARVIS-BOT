@@ -253,6 +253,53 @@ export async function getTopObjections(limit = 6): Promise<ObjectionStat[]> {
     .slice(0, limit)
 }
 
+// ── Deal warnings (estilo Gong): leads A abandonados ─────────
+// Un lead calificado A sin actividad >48h es dinero enfriándose.
+
+export interface NeglectedLead {
+  id: string
+  name: string | null
+  phone: string
+  project_interest: string | null
+  hoursIdle: number
+}
+
+export async function getNeglectedALeads(hours = 48): Promise<NeglectedLead[]> {
+  const { scoreLead } = await import('@/lib/lead-scoring')
+  const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString()
+  const { data, error } = await getServiceClient()
+    .from('leads')
+    .select('id, name, phone, stage, qualification_data, project_interest, last_message_at, opted_out')
+    .not('phone', 'like', 'n_%')
+    .eq('opted_out', false)
+    .neq('stage', 'cold')
+    .lt('last_message_at', cutoff)
+  if (error) throw new Error(`getNeglectedALeads: ${error.message}`)
+
+  interface Row {
+    id: string
+    name: string | null
+    phone: string
+    stage: 'new' | 'warm' | 'hot' | 'cold'
+    qualification_data: Parameters<typeof scoreLead>[0]['qualification_data']
+    project_interest: string | null
+    last_message_at: string
+  }
+
+  const now = Date.now()
+  return ((data ?? []) as Row[])
+    .filter(l => scoreLead(l).score === 'A')
+    .map(l => ({
+      id: l.id,
+      name: l.name,
+      phone: l.phone,
+      project_interest: l.project_interest,
+      hoursIdle: Math.round((now - Date.parse(l.last_message_at)) / (60 * 60 * 1000)),
+    }))
+    .sort((a, b) => b.hoursIdle - a.hoursIdle)
+    .slice(0, 8)
+}
+
 export interface SourceBreakdown {
   source: string
   count: number

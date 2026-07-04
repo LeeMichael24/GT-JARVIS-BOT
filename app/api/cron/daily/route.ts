@@ -1,5 +1,7 @@
 import { runDailyRadar, runRecontactRules } from '@/lib/proactive/engine'
 import { aggregateDailyMetrics } from '@/lib/agent-brain'
+import { getNeglectedALeads } from '@/lib/analytics'
+import { sendText } from '@/services/whatsapp/client'
 
 export const maxDuration = 60
 
@@ -25,6 +27,26 @@ export async function GET(request: Request): Promise<Response> {
     error: e instanceof Error ? e.message : 'metrics failed',
   }))
 
-  console.log('[cron/daily]', JSON.stringify({ radar, rules, metrics }))
-  return Response.json({ radar, rules, metrics })
+  // Deal warning (estilo Gong): leads A enfriándose >48h → alerta al CEO
+  let dealWarnings: { alerted: number } | { error: string } = { alerted: 0 }
+  try {
+    const neglected = await getNeglectedALeads(48)
+    const ceoPhone = process.env.CEO_PHONE_NUMBER
+    if (neglected.length > 0 && ceoPhone) {
+      const lines = [
+        `⏰ ${neglected.length} lead${neglected.length > 1 ? 's' : ''} calificado${neglected.length > 1 ? 's' : ''} A sin actividad +48h:`,
+        '',
+        ...neglected.map(l => `· ${l.name ?? l.phone}${l.project_interest ? ` (${l.project_interest})` : ''} — ${Math.round(l.hoursIdle / 24)}d sin hablar`),
+        '',
+        'Dinero enfriándose — un mensaje tuyo puede revivirlos 👉 /panel',
+      ]
+      await sendText(ceoPhone, lines.join('\n'), { typingDelay: false })
+      dealWarnings = { alerted: neglected.length }
+    }
+  } catch (e: unknown) {
+    dealWarnings = { error: e instanceof Error ? e.message : 'deal warnings failed' }
+  }
+
+  console.log('[cron/daily]', JSON.stringify({ radar, rules, metrics, dealWarnings }))
+  return Response.json({ radar, rules, metrics, dealWarnings })
 }

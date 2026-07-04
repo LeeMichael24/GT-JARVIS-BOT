@@ -159,6 +159,12 @@ El cliente debe sentir que habla con UNA PERSONA, no con un sistema. Estas regla
 4. MICRO-HUMANIDAD: de vez en cuando (no siempre) usa expresiones naturales salvadoreñas suaves: "vaya", "cabal", "de una", "fíjate que", "qué bueno que preguntas". Una por mensaje MÁXIMO, y solo si fluye.
 5. TRATO: por defecto tuteas. Cambia a "usted" si el cliente es claramente corporativo, formal o mayor — y mantente consistente.
 
+# IDIOMA — CLIENTE GLOBAL 🌎
+Detecta el idioma del cliente y responde SIEMPRE en ese idioma, con el mismo carácter:
+- Cliente escribe en inglés → respondes en inglés natural de ventas (inversionistas de la diáspora y extranjeros son compradores clave). Los datos del catálogo los traduces tú.
+- Spanglish → responde en el idioma dominante del mensaje.
+- NUNCA cambies de idioma si el cliente no cambió. Todas las reglas de personalidad aplican igual en inglés (react first, no call-center phrases, mirror their energy).
+
 # FRASES PROHIBIDAS — SUENAN A ROBOT DE CALL CENTER ❌
 NUNCA uses estas frases ni variantes cercanas:
 - "Estoy aquí para..." (ayudarte, guiarte, acompañarte, apoyarte — TODA la familia está prohibida; en su lugar DEMUESTRA la ayuda con una acción o pregunta concreta)
@@ -408,19 +414,35 @@ ${investmentBlock}
   const blocks = [rentalBlock, residentialBlock, investmentBlock].filter(Boolean).join('\n\n')
 
   if (detected) {
-    const othersCount = projects.length - 1
+    // Recorte inteligente: con proyecto detectado solo cargamos las alternativas
+    // de SU categoría. Menos tokens (límite TPM de OpenAI, ~5K/mensaje),
+    // menos costo y menos deriva de tema. El resto queda como resumen.
+    const inRental = rental.some(p => p.name === detected.name)
+    const inInvestment = investment.some(p => p.name === detected.name)
+    const sameCategory = inRental ? rental : inInvestment ? investment : residential
+    const sameLabel = inRental ? 'ALQUILER MENSUAL (precio por mes)' : inInvestment ? 'INVERSIÓN / ROI (precio total)' : 'COMPRA RESIDENCIAL (precio total)'
+    const sameBlock = sameCategory
+      .filter(p => p.name !== detected.name)
+      .map(p => formatProjectLine(p, inRental ? 'rental' : 'purchase'))
+      .join('\n')
+    const otherCounts = [
+      !inRental && rental.length ? `${rental.length} propiedades en alquiler` : null,
+      inRental || inInvestment ? (residential.length ? `${residential.length} residenciales en venta` : null) : null,
+      !inInvestment && investment.length ? `${investment.length} productos de inversión` : null,
+    ].filter(Boolean).join(', ')
+
     return `
 # PROYECTO ACTUAL — EL CLIENTE ESTÁ HABLANDO DE ESTE
-Empieza respondiendo sobre este proyecto. Muestra alternativas del catálogo solo si el cliente las pide.
-Tienes ${othersCount} propiedades más en el catálogo de referencia abajo.
+Empieza respondiendo sobre este proyecto. Muestra alternativas solo si el cliente las pide.
 
 ${formatProjectFull(detected)}
-
-# CATÁLOGO COMPLETO — referencia cuando el cliente pida alternativas
-Los precios de ALQUILER son por mes. Los de COMPRA son precio total. Son incomparables — no mezcles.
-
-${blocks}
-`
+${sameBlock ? `
+# ALTERNATIVAS DE LA MISMA CATEGORÍA — ${sameLabel}
+${sameBlock}
+` : ''}${otherCounts ? `
+# RESTO DEL PORTAFOLIO
+Además tenemos ${otherCounts}. Si el cliente cambia de tema (ej: de compra a alquiler), di que tienes opciones y pregunta qué busca — el detalle te llegará en el siguiente turno.
+` : ''}`
   }
 
   return `

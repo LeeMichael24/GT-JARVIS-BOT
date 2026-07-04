@@ -179,10 +179,17 @@ export function Dashboard({ stats, leadsByDay, sources, daniela, funnel, objecti
       {/* Daniela Performance */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
         <h3 className="mb-3 text-sm font-medium text-zinc-400">Rendimiento de Daniela (30d)</h3>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <div>
             <p className="text-xs text-zinc-500">Conversaciones</p>
             <p className="mt-0.5 text-xl font-bold text-white">{daniela.totalConversations}</p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500">Resolución sola</p>
+            <p className="mt-0.5 text-xl font-bold text-emerald-400">
+              {daniela.totalConversations > 0 ? `${100 - daniela.escalationRate}%` : '—'}
+            </p>
+            <p className="text-[10px] text-zinc-600">sin intervención humana</p>
           </div>
           <div>
             <p className="text-xs text-zinc-500">Manejadas sola</p>

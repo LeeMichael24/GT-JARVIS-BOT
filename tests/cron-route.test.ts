@@ -11,6 +11,16 @@ const brain = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/agent-brain', () => brain)
 
+const analytics = vi.hoisted(() => ({
+  getNeglectedALeads: vi.fn(async (): Promise<unknown[]> => []),
+}))
+vi.mock('@/lib/analytics', () => analytics)
+
+const wa = vi.hoisted(() => ({
+  sendText: vi.fn(async () => 'wamid.warn1'),
+}))
+vi.mock('@/services/whatsapp/client', () => wa)
+
 import { GET } from '@/app/api/cron/daily/route'
 
 process.env.CRON_SECRET = 'sec123'
@@ -45,6 +55,7 @@ describe('cron daily', () => {
       radar: { newListings: 1, campaignsCreated: 1 },
       rules: { campaignsCreated: 2 },
       metrics: undefined,
+      dealWarnings: { alerted: 0 },
     })
   })
 
@@ -55,5 +66,28 @@ describe('cron daily', () => {
     const body = await res.json()
     expect(body.radar).toEqual({ error: 'GT API caída' })
     expect(body.rules).toEqual({ campaignsCreated: 2 })
+  })
+
+  it('alerta al CEO cuando hay leads A abandonados +48h', async () => {
+    process.env.CEO_PHONE_NUMBER = '50370000000'
+    analytics.getNeglectedALeads.mockResolvedValueOnce([
+      { id: 'l1', name: 'Andrea Vega', phone: '503111', project_interest: 'Portacelli Alta', hoursIdle: 72 },
+      { id: 'l2', name: null, phone: '503222', project_interest: null, hoursIdle: 50 },
+    ])
+    const res = await GET(req('Bearer sec123'))
+    const body = await res.json()
+    expect(body.dealWarnings).toEqual({ alerted: 2 })
+    const [to, msg] = wa.sendText.mock.calls[0] as [string, string, unknown]
+    expect(to).toBe('50370000000')
+    expect(msg).toContain('Andrea Vega')
+    expect(msg).toContain('Portacelli Alta')
+    expect(msg).toContain('3d sin hablar')
+  })
+
+  it('sin leads abandonados no molesta al CEO', async () => {
+    process.env.CEO_PHONE_NUMBER = '50370000000'
+    const res = await GET(req('Bearer sec123'))
+    expect((await res.json()).dealWarnings).toEqual({ alerted: 0 })
+    expect(wa.sendText).not.toHaveBeenCalled()
   })
 })
