@@ -44,6 +44,7 @@ const wa = vi.hoisted(() => ({
   sendInternalNotification: vi.fn(async () => {}),
   downloadMedia: vi.fn(async () => ({ buffer: Buffer.from(''), mimeType: 'audio/ogg' })),
   markAsRead: vi.fn(async () => {}),
+  sendTypingIndicator: vi.fn(async () => {}),
 }))
 vi.mock('@/services/whatsapp/client', () => wa)
 
@@ -154,6 +155,9 @@ describe('webhook con bot activo', () => {
     expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
       leadId: 'lead-1', role: 'assistant', content: '¡Hola!', waMessageId: 'wamid.out1',
     }))
+    // Señales visuales: visto azul al recibir + "escribiendo..." antes de generar
+    expect(wa.markAsRead).toHaveBeenCalledWith('wamid.in1')
+    expect(wa.sendTypingIndicator).toHaveBeenCalledWith('wamid.in1')
   })
 
   it('no responde si NO es el último mensaje de la ráfaga (debounce)', async () => {
@@ -168,6 +172,8 @@ describe('webhook con bot activo', () => {
 
     expect(ai.callClaude).not.toHaveBeenCalled()
     expect(wa.sendText).not.toHaveBeenCalled()
+    // No es el último de la ráfaga → tampoco muestra "escribiendo..."
+    expect(wa.sendTypingIndicator).not.toHaveBeenCalled()
   })
 
   it('marca opted_out cuando Daniela detecta opt-out', async () => {

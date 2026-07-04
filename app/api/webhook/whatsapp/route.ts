@@ -7,7 +7,7 @@ import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
 import { createCalendarEvent } from '@/services/google/calendar'
 import { getPlaybook, formatPlaybookForPrompt } from '@/lib/knowledge-base'
-import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendInternalNotification, markAsRead } from '@/services/whatsapp/client'
+import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendInternalNotification, markAsRead, sendTypingIndicator } from '@/services/whatsapp/client'
 import { transcribeAudio } from '@/services/openai/whisper'
 import {
   upsertLead,
@@ -189,6 +189,11 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       console.log(`[processMessage] Bot paused during debounce for lead ${lead.id} — no AI reply`)
       return
     }
+
+    // 4d. "Escribiendo..." — a partir de aquí SÍ vamos a responder. Los puntos
+    //     se muestran mientras GPT genera + el typing delay redacta, y se apagan
+    //     solos al enviar el mensaje. El cliente ve a Daniela leyendo y tecleando.
+    sendTypingIndicator(parsed.messageId).catch(() => {})
 
     // Combine all pending messages into a single body for intent/project detection
     const combinedBody = pending.map(m => m.content).join('\n')

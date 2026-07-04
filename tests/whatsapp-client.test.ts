@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { calculateTypingDelay, sendText, sendTemplate } from '@/services/whatsapp/client'
+import { calculateTypingDelay, sendText, sendTemplate, markAsRead, sendTypingIndicator } from '@/services/whatsapp/client'
 
 describe('calculateTypingDelay', () => {
   it('returns minimum 1500ms for very short messages', () => {
@@ -62,6 +62,67 @@ describe('sendText — wa_message_id y delay', () => {
     const promise = sendText('50312345678', 'mensaje largo de prueba para delay', { typingDelay: false })
     // Sin avanzar timers debe resolver (no hay setTimeout pendiente)
     await expect(promise).resolves.toBe('wamid.x')
+  })
+})
+
+describe('markAsRead y sendTypingIndicator — visto y "escribiendo..."', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    process.env.WA_ACCESS_TOKEN = 'token'
+    process.env.WA_PHONE_NUMBER_ID = '12345'
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('markAsRead envía status:read con el message_id (visto azul)', async () => {
+    const calls: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      calls.push(JSON.parse(init.body))
+      return { ok: true, json: async () => ({}), text: async () => '' }
+    }))
+    await markAsRead('wamid.in7')
+    expect(calls[0]).toEqual({
+      messaging_product: 'whatsapp',
+      status: 'read',
+      message_id: 'wamid.in7',
+    })
+  })
+
+  it('sendTypingIndicator agrega typing_indicator (puntos de escribiendo)', async () => {
+    const calls: unknown[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      calls.push(JSON.parse(init.body))
+      return { ok: true, json: async () => ({}), text: async () => '' }
+    }))
+    await sendTypingIndicator('wamid.in7')
+    expect(calls[0]).toEqual({
+      messaging_product: 'whatsapp',
+      status: 'read',
+      message_id: 'wamid.in7',
+      typing_indicator: { type: 'text' },
+    })
+  })
+
+  it('si Meta responde error, loguea warning pero NO lanza (no mata el flujo)', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false, status: 400,
+      json: async () => ({}), text: async () => '{"error":"bad request"}',
+    })))
+    await expect(markAsRead('wamid.in7')).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('markAsRead failed (400)'), expect.any(String))
+  })
+
+  it('usa la versión v23.0 de la Cloud API (typing requiere versión reciente)', async () => {
+    const urls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      urls.push(url)
+      return { ok: true, json: async () => ({}), text: async () => '' }
+    }))
+    await sendTypingIndicator('wamid.in7')
+    expect(urls[0]).toContain('graph.facebook.com/v23.0/')
   })
 })
 

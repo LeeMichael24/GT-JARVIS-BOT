@@ -1,6 +1,8 @@
 import type { AgentAction } from '@/types'
 
-const WA_API_VERSION = 'v19.0'
+// v23.0: v19 ya expiró (Meta la sirve con fallback) y el typing_indicator
+// requiere versión reciente de la Cloud API
+const WA_API_VERSION = 'v23.0'
 const WA_BASE = `https://graph.facebook.com/${WA_API_VERSION}`
 
 function headers(): Record<string, string> {
@@ -41,20 +43,37 @@ async function postWithRetry(
   }
 }
 
-export async function markAsRead(messageId: string): Promise<void> {
+export async function markAsRead(
+  messageId: string,
+  opts: { typing?: boolean } = {}
+): Promise<void> {
   try {
-    await fetch(messagesUrl(), {
+    const body: Record<string, unknown> = {
+      messaging_product: 'whatsapp',
+      status: 'read',
+      message_id: messageId,
+    }
+    // typing_indicator muestra "escribiendo..." en el chat del cliente.
+    // Dura hasta 25s o hasta que se envía el siguiente mensaje.
+    if (opts.typing) body.typing_indicator = { type: 'text' }
+    const res = await fetch(messagesUrl(), {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        status: 'read',
-        message_id: messageId,
-      }),
+      body: JSON.stringify(body),
     })
-  } catch {
-    // Non-critical — don't fail the message flow
+    if (!res.ok) {
+      // Non-critical, pero SÍ visible: si el visto/typing falla queremos saber por qué
+      console.warn(`[whatsapp] markAsRead${opts.typing ? '+typing' : ''} failed (${res.status}):`, (await res.text()).slice(0, 300))
+    }
+  } catch (err) {
+    console.warn('[whatsapp] markAsRead error:', err instanceof Error ? err.message : err)
   }
+}
+
+// "Escribiendo..." mientras Daniela genera y redacta la respuesta.
+// Se apaga solo al enviar el mensaje (o a los 25s).
+export async function sendTypingIndicator(messageId: string): Promise<void> {
+  return markAsRead(messageId, { typing: true })
 }
 
 export function calculateTypingDelay(text: string): number {
