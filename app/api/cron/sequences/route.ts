@@ -13,7 +13,7 @@ import {
 } from '@/lib/supabase'
 import { isWithin24h } from '@/lib/wa-window'
 import { callClaude } from '@/services/claude/client'
-import { sendText } from '@/services/whatsapp/client'
+import { sendText, sendTemplate } from '@/services/whatsapp/client'
 import type { SequenceType } from '@/types'
 
 export const maxDuration = 60
@@ -61,14 +61,31 @@ export async function GET(request: Request): Promise<Response> {
       }
 
       // Ventana de 24h de Meta: fuera de ella el texto libre es RECHAZADO
-      // (error 131047). Chequear ANTES de generar el mensaje ahorra la llamada
-      // GPT. Avanzamos el paso para no reintentar eternamente un envío imposible.
-      // TODO: cuando existan plantillas HSM aprobadas, usar sendTemplate() aquí.
+      // (error 131047). Fuera de ventana usamos plantilla HSM aprobada si está
+      // configurada (WA_TEMPLATE_FOLLOWUP); si no, saltamos el paso.
       const lastUserAt = await getLatestUserMessageAt(seq.lead_id)
       if (!isWithin24h(lastUserAt)) {
-        console.warn(`[cron/sequences] Lead ${seq.lead_id} fuera de ventana 24h — paso ${seq.current_step} omitido (requiere plantilla HSM)`)
+        const tpl = process.env.WA_TEMPLATE_FOLLOWUP
+        if (!tpl) {
+          console.warn(`[cron/sequences] Lead ${seq.lead_id} fuera de ventana 24h — paso omitido (configura WA_TEMPLATE_FOLLOWUP)`)
+          await advanceSequence(seq.id, seq.sequence_type as SequenceType, seq.current_step)
+          skipped++
+          continue
+        }
+        const topic = (seq.context as Record<string, string>).project
+          ?? lead.project_interest
+          ?? 'tu consulta con Grupo Terranova'
+        const tplWaId = await sendTemplate(lead.phone, tpl, 'es', [lead.name ?? 'Hola', topic])
+        await saveConversation({
+          leadId: seq.lead_id,
+          role: 'assistant',
+          content: `[Plantilla ${tpl}] Seguimiento sobre ${topic}`,
+          waMessageId: tplWaId ?? undefined,
+        })
+        await updateLead(seq.lead_id, { last_proactive_at: now.toISOString() })
         await advanceSequence(seq.id, seq.sequence_type as SequenceType, seq.current_step)
-        skipped++
+        sent++
+        console.log(`[cron/sequences] Plantilla ${tpl} enviada a lead ${seq.lead_id} (fuera de ventana)`)
         continue
       }
 

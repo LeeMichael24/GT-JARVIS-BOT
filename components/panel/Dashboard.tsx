@@ -1,6 +1,6 @@
 'use client'
 
-import type { DashboardStats, DanielaStats, LeadsByDay, SourceBreakdown } from '@/lib/analytics'
+import type { DashboardStats, DanielaStats, FunnelStats, LeadsByDay, ObjectionStat, SourceBreakdown } from '@/lib/analytics'
 
 const SOURCE_LABELS: Record<string, string> = {
   meta_ad: 'Meta Ads',
@@ -42,13 +42,32 @@ function MiniBar({ data, maxVal }: { data: LeadsByDay[]; maxVal: number }) {
   )
 }
 
-export function Dashboard({ stats, leadsByDay, sources, daniela }: {
+function FunnelStep({ label, value, prev, color }: {
+  label: string
+  value: number
+  prev: number | null
+  color: string
+}) {
+  const pct = prev != null && prev > 0 ? Math.round((value / prev) * 100) : null
+  return (
+    <div className="flex-1 rounded-lg bg-zinc-950 p-3 text-center">
+      <p className={`text-xl font-bold ${color}`}>{value}</p>
+      <p className="mt-0.5 text-[11px] text-zinc-500">{label}</p>
+      {pct != null && <p className="text-[10px] text-zinc-600">{pct}% del anterior</p>}
+    </div>
+  )
+}
+
+export function Dashboard({ stats, leadsByDay, sources, daniela, funnel, objections }: {
   stats: DashboardStats
   leadsByDay: LeadsByDay[]
   sources: SourceBreakdown[]
   daniela: DanielaStats
+  funnel: FunnelStats
+  objections: ObjectionStat[]
 }) {
   const maxLeads = Math.max(1, ...leadsByDay.map(d => d.count))
+  const maxObjection = Math.max(1, ...objections.map(o => o.count))
 
   return (
     <div className="space-y-6">
@@ -83,6 +102,38 @@ export function Dashboard({ stats, leadsByDay, sources, daniela }: {
           color="text-emerald-400"
         />
       </div>
+
+      {/* Embudo de ventas — el camino del dinero */}
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+        <h3 className="mb-3 text-sm font-medium text-zinc-400">Embudo de ventas (30d)</h3>
+        <div className="flex gap-2 overflow-x-auto">
+          <FunnelStep label="Leads" value={funnel.total} prev={null} color="text-white" />
+          <FunnelStep label="Interesados" value={funnel.interested} prev={funnel.total} color="text-sky-400" />
+          <FunnelStep label="Calificados" value={funnel.qualified} prev={funnel.interested} color="text-amber-400" />
+          <FunnelStep label="Citas" value={funnel.meetings} prev={funnel.qualified} color="text-emerald-400" />
+          <FunnelStep label="Escalados CEO" value={funnel.escalated} prev={null} color="text-red-400" />
+        </div>
+      </div>
+
+      {/* Objeciones — por qué NO compran */}
+      {objections.length > 0 && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <h3 className="mb-3 text-sm font-medium text-zinc-400">Objeciones más comunes</h3>
+          <div className="space-y-2">
+            {objections.map(o => (
+              <div key={o.objection}>
+                <div className="flex justify-between text-xs">
+                  <span className="capitalize text-zinc-300">{o.objection}</span>
+                  <span className="text-zinc-500">{o.count}</span>
+                </div>
+                <div className="mt-1 h-1.5 rounded-full bg-zinc-800">
+                  <div className="h-full rounded-full bg-red-700" style={{ width: `${Math.round((o.count / maxObjection) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">

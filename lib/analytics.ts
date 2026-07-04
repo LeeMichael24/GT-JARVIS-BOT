@@ -178,6 +178,81 @@ export async function getDanielaStats(days = 30): Promise<DanielaStats> {
   }
 }
 
+// ── Embudo de ventas ─────────────────────────────────────────
+// total → interesados (warm+hot) → calificados (presupuesto o timeline
+// confirmado) → citas agendadas → escalados al CEO
+
+export interface FunnelStats {
+  total: number
+  interested: number
+  qualified: number
+  meetings: number
+  escalated: number
+}
+
+export async function getFunnelStats(days = 30): Promise<FunnelStats> {
+  const supabase = getServiceClient()
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+  const [leadsRes, meetingsRes, escalationsRes] = await Promise.all([
+    supabase.from('leads')
+      .select('stage, qualification_data')
+      .not('phone', 'like', 'n_%')
+      .gte('created_at', since),
+    supabase.from('activity_log').select('id', { count: 'exact', head: true })
+      .eq('action', 'meeting_scheduled')
+      .gte('created_at', since),
+    supabase.from('activity_log').select('id', { count: 'exact', head: true })
+      .eq('action', 'escalate_ceo')
+      .gte('created_at', since),
+  ])
+
+  const leads = (leadsRes.data ?? []) as { stage: string; qualification_data: Record<string, unknown> | null }[]
+  const interested = leads.filter(l => l.stage === 'warm' || l.stage === 'hot').length
+  const qualified = leads.filter(l => {
+    const q = l.qualification_data
+    return q?.budget_ok === true || q?.timeline === 'inmediato' || q?.timeline === '3_meses'
+  }).length
+
+  return {
+    total: leads.length,
+    interested,
+    qualified,
+    meetings: meetingsRes.count ?? 0,
+    escalated: escalationsRes.count ?? 0,
+  }
+}
+
+// ── Objeciones más comunes (de la memoria de deals) ──────────
+
+export interface ObjectionStat {
+  objection: string
+  count: number
+}
+
+export async function getTopObjections(limit = 6): Promise<ObjectionStat[]> {
+  const { data, error } = await getServiceClient()
+    .from('deal_summaries')
+    .select('signals')
+  if (error) throw new Error(`getTopObjections: ${error.message}`)
+
+  const counts = new Map<string, number>()
+  for (const row of (data ?? []) as { signals: { objections?: unknown } | null }[]) {
+    const objections = row.signals?.objections
+    if (!Array.isArray(objections)) continue
+    for (const raw of objections) {
+      if (typeof raw !== 'string' || !raw.trim()) continue
+      const key = raw.trim().toLowerCase()
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([objection, count]) => ({ objection, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit)
+}
+
 export interface SourceBreakdown {
   source: string
   count: number

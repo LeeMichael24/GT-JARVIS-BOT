@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { updateLeadStage } from '@/app/panel/actions'
 import { groupByStage, KANBAN_STAGES } from '@/components/panel/inbox-filtering'
+import { scoreLead, SCORE_STYLES } from '@/lib/lead-scoring'
 import type { InboxLead } from '@/lib/panel-data'
 import type { LeadStage } from '@/types'
 
@@ -100,7 +101,15 @@ export function KanbanBoard({ items }: { items: InboxLead[] }) {
                     <Link href={`/panel/chat/${lead.id}`} className="truncate font-medium text-white hover:underline">
                       {lead.name ?? lead.phone}
                     </Link>
-                    {!lead.bot_active && <span className="shrink-0 text-xs" title="Daniela pausada">✋</span>}
+                    <span className="flex shrink-0 items-center gap-1">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${SCORE_STYLES[scoreLead(lead).score]}`}
+                        title={scoreLead(lead).reasons.join(' · ') || 'Sin señales aún'}
+                      >
+                        {scoreLead(lead).score}
+                      </span>
+                      {!lead.bot_active && <span className="text-xs" title="Daniela pausada">✋</span>}
+                    </span>
                   </div>
                   {snippet && <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{snippet}</p>}
                   <div className="mt-auto flex items-center gap-1 overflow-hidden">

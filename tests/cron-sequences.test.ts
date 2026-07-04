@@ -32,6 +32,7 @@ vi.mock('@/services/claude/client', () => ai)
 
 const wa = vi.hoisted(() => ({
   sendText: vi.fn(async () => 'wamid.seq1'),
+  sendTemplate: vi.fn(async () => 'wamid.tpl1'),
 }))
 vi.mock('@/services/whatsapp/client', () => wa)
 
@@ -56,6 +57,7 @@ const lead = {
 beforeEach(() => {
   vi.clearAllMocks()
   seqLib.isWithinBusinessHours.mockReturnValue(true)
+  delete process.env.WA_TEMPLATE_FOLLOWUP
 })
 
 describe('cron sequences — ventana de 24h de Meta', () => {
@@ -76,6 +78,25 @@ describe('cron sequences — ventana de 24h de Meta', () => {
     expect(body.sent).toBe(1)
     expect(ai.callClaude).toHaveBeenCalledTimes(1)
     expect(wa.sendText).toHaveBeenCalledWith('50312345678', expect.stringContaining('Portacelli'), { typingDelay: false })
+    expect(seqLib.advanceSequence).toHaveBeenCalledWith('seq-1', 'hot_close', 0)
+  })
+
+  it('FUERA de ventana CON plantilla configurada: envía sendTemplate con nombre y proyecto', async () => {
+    process.env.WA_TEMPLATE_FOLLOWUP = 'seguimiento_interes'
+    seqLib.getDueSequences.mockResolvedValue([{ ...dueSeq, context: { project: 'Portacelli Alta' } }])
+    db.getLeadById.mockResolvedValue(lead)
+    db.getLatestUserMessageAt.mockResolvedValue(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString())
+
+    const res = await GET(req('Bearer sec123'))
+    const body = await res.json()
+
+    expect(body.sent).toBe(1)
+    expect(ai.callClaude).not.toHaveBeenCalled()
+    expect(wa.sendText).not.toHaveBeenCalled()
+    expect(wa.sendTemplate).toHaveBeenCalledWith('50312345678', 'seguimiento_interes', 'es', ['Carlos', 'Portacelli Alta'])
+    expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
+      role: 'assistant', content: expect.stringContaining('Portacelli Alta'),
+    }))
     expect(seqLib.advanceSequence).toHaveBeenCalledWith('seq-1', 'hot_close', 0)
   })
 

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { InboxLead } from '@/lib/panel-data'
+import { scoreLead, SCORE_STYLES } from '@/lib/lead-scoring'
 
 const SOURCE_BADGE: Record<string, { label: string; cls: string }> = {
   meta_ad: { label: 'Meta Ad', cls: 'bg-purple-900/60 text-purple-300' },
@@ -46,6 +47,7 @@ export function InboxList({ items, selectMode = false, selected, onToggle }: {
     <ul className="mx-auto w-full max-w-3xl flex-1 space-y-0.5 overflow-y-auto">
       {items.map(({ lead, snippet, snippetRole, tags, assignedName, sourceType }) => {
         const isSelected = selected?.has(lead.id) ?? false
+        const scored = scoreLead(lead)
 
         if (selectMode) {
           return (
@@ -111,6 +113,12 @@ export function InboxList({ items, selectMode = false, selected, onToggle }: {
                 {!lead.bot_active && <span className="shrink-0 text-xs" title="Daniela pausada">✋</span>}
               </div>
               <div className="flex items-center gap-1.5 overflow-hidden pl-[46px] sm:pl-[42px]">
+                <span
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-bold ${SCORE_STYLES[scored.score]}`}
+                  title={scored.reasons.join(' · ') || 'Sin señales aún'}
+                >
+                  {scored.score}
+                </span>
                 <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STAGE_STYLES[lead.stage] ?? STAGE_STYLES.cold}`}>
                   {STAGE_LABEL[lead.stage] ?? lead.stage}
                 </span>
