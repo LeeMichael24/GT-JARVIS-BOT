@@ -3,6 +3,7 @@
 import { useState, useTransition, useMemo } from 'react'
 import { createBrainEntry, updateBrainEntry, deleteBrainEntry } from '@/app/panel/actions'
 import type { BrainEntry } from '@/types'
+import { ExpandableText } from '@/components/panel/ExpandableText'
 
 const CATEGORIES: { value: string; label: string; color: string }[] = [
   { value: 'pattern', label: 'Patrón', color: 'bg-blue-900/60 text-blue-300' },
@@ -290,7 +291,7 @@ export function BrainEditor({ entries: initial }: { entries: BrainEntry[] }) {
                 </button>
               </div>
             </div>
-            <p className="mt-1.5 text-sm leading-relaxed text-zinc-300">{entry.content}</p>
+            <div className="mt-1.5"><ExpandableText text={entry.content} limit={220} className="text-sm leading-relaxed text-zinc-300" /></div>
             {entry.lead_id && (
               <p className="mt-1 text-[11px] text-zinc-600">De conversación con lead</p>
             )}

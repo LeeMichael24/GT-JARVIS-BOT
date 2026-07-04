@@ -5,6 +5,7 @@ import {
   addLeadTag, addNote, assignLead, removeLeadTag, updateLeadStage,
 } from '@/app/panel/actions'
 import { setLeadOptOut } from '@/app/panel/proactive-actions'
+import { ExpandableText } from '@/components/panel/ExpandableText'
 import type { ActionResult } from '@/app/panel/actions'
 import type { LeadBundle } from '@/lib/panel-data'
 import type { SessionMember } from '@/lib/auth'
@@ -150,7 +151,7 @@ export function LeadSheet({ bundle, member }: { bundle: LeadBundle; member: Sess
         <div className="mt-1.5 space-y-2">
           {bundle.notes.map(n => (
             <div key={n.id} className="rounded-lg bg-zinc-900 p-2.5 text-xs">
-              <p className="whitespace-pre-wrap text-zinc-200">{n.content}</p>
+              <ExpandableText text={n.content} limit={200} className="text-zinc-200" />
               <p className="mt-1 text-[10px] text-zinc-500">
                 {n.author_name} · {new Date(n.created_at).toLocaleString('es-SV', { dateStyle: 'short', timeStyle: 'short' })}
               </p>

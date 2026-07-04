@@ -70,7 +70,7 @@ export function CampaignsView({ pending, history, costPerSend }: {
                   </span>
                 </div>
 
-                <p className="mt-3 rounded-lg bg-zinc-950 p-3 text-sm text-zinc-300">
+                <p className="mt-3 line-clamp-4 rounded-lg bg-zinc-950 p-3 text-sm text-zinc-300">
                   {recipients[0]
                     ? renderTemplate(template.body_preview, recipients[0].variables)
                     : template.body_preview}

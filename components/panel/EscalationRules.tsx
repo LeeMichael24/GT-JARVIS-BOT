@@ -305,7 +305,7 @@ export function EscalationRules({ rules: initial }: { rules: EscalationRule[] })
               </div>
             </div>
             {rule.description && (
-              <p className="mt-1.5 text-sm leading-relaxed text-zinc-300">{rule.description}</p>
+              <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-zinc-300">{rule.description}</p>
             )}
           </div>
         ))}

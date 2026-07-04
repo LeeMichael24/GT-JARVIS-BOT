@@ -144,7 +144,23 @@ export async function sendInternalNotification(params: NotificationParams): Prom
     return
   }
   const message = formatNotification(params)
-  await sendText(ceoPhone, message, { typingDelay: false })
+  try {
+    await sendText(ceoPhone, message, { typingDelay: false })
+  } catch (err) {
+    // El texto libre falla si el CEO no le ha escrito al bot en 24h (error 131047).
+    // Fallback: plantilla HSM aprobada — llega SIEMPRE, con o sin ventana.
+    const tpl = process.env.WA_TEMPLATE_CEO_ALERT
+    if (!tpl) {
+      console.error('[notification] Free-form al CEO rechazado y WA_TEMPLATE_CEO_ALERT no está configurada — la alerta NO llegó:', err instanceof Error ? err.message : err)
+      throw err
+    }
+    console.warn(`[notification] Free-form al CEO rechazado — reintentando con plantilla "${tpl}"`)
+    await sendTemplate(ceoPhone, tpl, 'es', [
+      params.leadName,
+      `+${params.leadPhone}`,
+      params.action.reason ?? (params.action.type === 'escalate_ceo' ? 'Cliente listo para cerrar' : 'Daniela necesita apoyo'),
+    ])
+  }
 }
 
 export async function sendDocument(

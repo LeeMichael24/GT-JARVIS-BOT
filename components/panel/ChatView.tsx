@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/lib/supabase-browser'
 import { sendHumanMessage, setBotActive } from '@/app/panel/actions'
 import { LeadSheet } from '@/components/panel/LeadSheet'
+import { ExpandableText } from '@/components/panel/ExpandableText'
 import type { LeadBundle } from '@/lib/panel-data'
 import type { SessionMember } from '@/lib/auth'
 import type { Conversation } from '@/types'
@@ -176,7 +177,7 @@ export function ChatView({ bundle, member }: { bundle: LeadBundle; member: Sessi
                   </div>
                 )}
                 <div className={`flex ${m.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                  <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap sm:max-w-[75%] ${
+                  <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm sm:max-w-[75%] ${
                     m.role === 'user'
                       ? 'rounded-tl-md bg-zinc-800 text-zinc-100'
                       : 'rounded-tr-md bg-emerald-900 text-emerald-50'
@@ -186,7 +187,7 @@ export function ChatView({ bundle, member }: { bundle: LeadBundle; member: Sessi
                         {m.role === 'assistant' ? 'Daniela' : memberName(m.sent_by)}
                       </p>
                     )}
-                    {m.content}
+                    <ExpandableText text={m.content} limit={350} />
                     <p className="mt-1 text-right text-[10px] opacity-40">
                       {formatMsgTime(m.created_at)}
                     </p>
