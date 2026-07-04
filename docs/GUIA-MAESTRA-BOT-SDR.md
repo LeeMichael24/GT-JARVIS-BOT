@@ -107,11 +107,12 @@ WhatsApp → webhook (verifica firma) → parse TODOS los mensajes del batch
 
 ### Infraestructura y deploy
 
-**P1. "No veo los cambios en producción" (el más caro de todos)**
-- *Síntoma*: pusheábamos a main y producción seguía igual. Días de confusión.
-- *Causa*: la integración GitHub→Vercel murió silenciosamente (11 jun). Los "Redeploy" del dashboard reconstruyen el commit VIEJO, no traen el código nuevo.
-- *Fix*: Vercel → Settings → Git → Disconnect → reconectar el repo.
-- *Prevención*: tras cada push, verificar que en Deployments aparece un build con el HASH del commit nuevo. Si dice "Redeploy of...", NO es tu código.
+**P1. "No veo los cambios en producción" — 3 semanas de deploys rechazados EN SILENCIO (el más caro de todos)**
+- *Síntoma*: pusheábamos a main y producción seguía igual. Ni el push, ni "Create Deployment", ni un Deploy Hook generaban builds. Todo parecía "conectado".
+- *Causa REAL*: `vercel.json` tenía un cron `0 */2 * * *` (cada 2 horas). **El plan Hobby de Vercel solo permite crons de 1 vez al día** — cualquier expresión más frecuente hace que el deployment sea RECHAZADO en validación, sin build visible ni error en el dashboard. Cada push desde que se agregó ese cron fue rechazado en silencio; los "Redeploy" solo reconstruían el último build bueno (viejo).
+- *Pistas falsas que perseguimos*: reconectar GitHub↔Vercel (no era eso), webhooks del repo (no era eso), permisos de la app (no era eso).
+- *Fix*: todos los crons a frecuencia diaria o menor en Hobby (`30 15 * * *`). Para cadencia mayor: (a) plan Pro, o (b) pinger externo gratis (cron-job.org) llamando al endpoint con `Authorization: Bearer $CRON_SECRET`.
+- *Prevención*: tras CADA push, verificar que Deployments muestra un build con el HASH nuevo. Si un deploy "no aparece", buscar el error de validación: en Hobby los límites son crons diarios y 60s de maxDuration.
 
 **P2. GitHub Push Protection bloquea el push**
 - *Síntoma*: `git push` rechazado por "secret detected".

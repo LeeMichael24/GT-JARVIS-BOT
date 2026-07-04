@@ -10,7 +10,7 @@
   },
   "crons": [
     { "path": "/api/cron/daily", "schedule": "0 16 * * *" },
-    { "path": "/api/cron/sequences", "schedule": "0 */2 * * *" },
+    { "path": "/api/cron/sequences", "schedule": "30 15 * * *" },
     { "path": "/api/cron/weekly", "schedule": "0 14 * * 1" }
   ]
 }
