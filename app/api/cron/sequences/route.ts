@@ -75,7 +75,8 @@ export async function GET(request: Request): Promise<Response> {
         const topic = (seq.context as Record<string, string>).project
           ?? lead.project_interest
           ?? 'tu consulta con Grupo Terranova'
-        const tplWaId = await sendTemplate(lead.phone, tpl, 'es', [lead.name ?? 'Hola', topic])
+        // {{1}}=saludo: nombre real, o "de nuevo" → plantilla lee "Hola de nuevo 😊"
+        const tplWaId = await sendTemplate(lead.phone, tpl, 'es', [lead.name ?? 'de nuevo', topic])
         await saveConversation({
           leadId: seq.lead_id,
           role: 'assistant',

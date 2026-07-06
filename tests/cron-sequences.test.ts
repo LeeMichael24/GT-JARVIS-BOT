@@ -100,6 +100,17 @@ describe('cron sequences — ventana de 24h de Meta', () => {
     expect(seqLib.advanceSequence).toHaveBeenCalledWith('seq-1', 'hot_close', 0)
   })
 
+  it('lead sin nombre: el saludo de la plantilla usa "de nuevo" (no "Hola Hola")', async () => {
+    process.env.WA_TEMPLATE_FOLLOWUP = 'seguimiento_interes'
+    seqLib.getDueSequences.mockResolvedValue([{ ...dueSeq, context: { project: 'Foresta' } }])
+    db.getLeadById.mockResolvedValue({ ...lead, name: null })
+    db.getLatestUserMessageAt.mockResolvedValue(new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString())
+
+    await GET(req('Bearer sec123'))
+
+    expect(wa.sendTemplate).toHaveBeenCalledWith('50312345678', 'seguimiento_interes', 'es', ['de nuevo', 'Foresta'])
+  })
+
   it('FUERA de ventana: NO llama a GPT ni envía (Meta lo rechazaría) y avanza el paso', async () => {
     seqLib.getDueSequences.mockResolvedValue([dueSeq])
     db.getLeadById.mockResolvedValue(lead)
