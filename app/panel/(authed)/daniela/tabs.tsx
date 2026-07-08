@@ -2,21 +2,23 @@
 
 import { useState, type ReactNode } from 'react'
 
-type Tab = 'brain' | 'escalation' | 'media'
+type Tab = 'brain' | 'scripts' | 'escalation' | 'media'
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'brain', label: 'Conocimiento' },
+  { value: 'scripts', label: 'Guiones' },
   { value: 'escalation', label: 'Escalamiento' },
   { value: 'media', label: 'Media' },
 ]
 
 interface DanielaTabsProps {
   brainEditor: ReactNode
+  scriptsEditor: ReactNode
   escalationRules: ReactNode
   projectMedia: ReactNode
 }
 
-export function DanielaTabs({ brainEditor, escalationRules, projectMedia }: DanielaTabsProps) {
+export function DanielaTabs({ brainEditor, scriptsEditor, escalationRules, projectMedia }: DanielaTabsProps) {
   const [tab, setTab] = useState<Tab>('brain')
 
   return (
@@ -37,6 +39,7 @@ export function DanielaTabs({ brainEditor, escalationRules, projectMedia }: Dani
         ))}
       </div>
       {tab === 'brain' && brainEditor}
+      {tab === 'scripts' && scriptsEditor}
       {tab === 'escalation' && escalationRules}
       {tab === 'media' && projectMedia}
     </>

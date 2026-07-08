@@ -12,6 +12,7 @@ import {
 import { isWithin24h } from '@/lib/wa-window'
 import { sendText } from '@/services/whatsapp/client'
 import type { BrainEntry, EscalationAction, EscalationRule, EscalationTriggerType, Lead, LeadStage, TeamRole } from '@/types'
+import type { ProjectScript } from '@/lib/project-scripts'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -437,4 +438,94 @@ export async function deleteEscalationRule(id: string): Promise<ActionResult> {
 
 export async function toggleEscalationRule(id: string, active: boolean): Promise<ActionResult> {
   return updateEscalationRule(id, { active })
+}
+
+// ── Guiones de venta por proyecto (project_scripts) ─────────
+
+export async function getProjectScripts(): Promise<ProjectScript[]> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('project_scripts')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) {
+    // Tabla aun no migrada — el tab muestra vacio en vez de romper la pagina
+    console.warn('[panel] project_scripts no disponible:', error.message)
+    return []
+  }
+  return (data as ProjectScript[]) ?? []
+}
+
+function parseKeywords(raw: string): string[] {
+  return Array.from(new Set(
+    raw.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0),
+  ))
+}
+
+export async function createProjectScript(
+  projectName: string, keywordsRaw: string, script: string,
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const keywords = parseKeywords(keywordsRaw)
+    if (!projectName.trim() || !script.trim()) return { ok: false, error: 'EMPTY' }
+    if (keywords.length === 0) return { ok: false, error: 'NO_KEYWORDS' }
+    const { error } = await getServiceClient().from('project_scripts').insert({
+      project_name: projectName.trim(),
+      trigger_keywords: keywords,
+      script: script.trim(),
+      active: true,
+    })
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function updateProjectScript(
+  id: string,
+  updates: { project_name?: string; keywordsRaw?: string; script?: string; active?: boolean },
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (updates.project_name !== undefined) {
+      if (!updates.project_name.trim()) return { ok: false, error: 'EMPTY' }
+      patch.project_name = updates.project_name.trim()
+    }
+    if (updates.keywordsRaw !== undefined) {
+      const keywords = parseKeywords(updates.keywordsRaw)
+      if (keywords.length === 0) return { ok: false, error: 'NO_KEYWORDS' }
+      patch.trigger_keywords = keywords
+    }
+    if (updates.script !== undefined) {
+      if (!updates.script.trim()) return { ok: false, error: 'EMPTY' }
+      patch.script = updates.script.trim()
+    }
+    if (updates.active !== undefined) patch.active = updates.active
+    const { error } = await getServiceClient().from('project_scripts').update(patch).eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function deleteProjectScript(id: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const { error } = await getServiceClient().from('project_scripts').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function toggleProjectScript(id: string, active: boolean): Promise<ActionResult> {
+  return updateProjectScript(id, { active })
 }

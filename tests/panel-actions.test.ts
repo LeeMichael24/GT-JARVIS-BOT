@@ -37,7 +37,7 @@ vi.mock('@/services/whatsapp/client', () => wa)
 
 vi.mock('next/cache', () => ({ refresh: vi.fn(), revalidatePath: vi.fn() }))
 
-import { sendHumanMessage, assignLead, setBotActive, addLeadTag, addNote, updateLeadStage, deleteTag, setMemberActive } from '@/app/panel/actions'
+import { sendHumanMessage, assignLead, setBotActive, addLeadTag, addNote, updateLeadStage, deleteTag, setMemberActive, createProjectScript, updateProjectScript } from '@/app/panel/actions'
 
 const admin = { id: 'adm1', name: 'Michael', email: 'm@gt.com', role: 'admin' }
 const asesor = { id: 'ase1', name: 'Ana', email: 'a@gt.com', role: 'asesor' }
@@ -195,3 +195,43 @@ describe('autorización de acciones restantes', () => {
     expect(serviceChain.update).not.toHaveBeenCalled()
   })
 })
+
+describe('guiones por proyecto (project_scripts)', () => {
+  it('crear requiere admin', async () => {
+    state.member = asesor
+    const res = await createProjectScript('Portacelli', 'portacelli', 'PASO 1...')
+    expect(res).toEqual({ ok: false, error: 'FORBIDDEN' })
+    expect(serviceChain.insert).not.toHaveBeenCalled()
+  })
+
+  it('rechaza guion sin nombre o sin texto', async () => {
+    state.member = admin
+    expect(await createProjectScript('  ', 'portacelli', 'PASO 1')).toEqual({ ok: false, error: 'EMPTY' })
+    expect(await createProjectScript('Portacelli', 'portacelli', '   ')).toEqual({ ok: false, error: 'EMPTY' })
+  })
+
+  it('rechaza guion sin keywords', async () => {
+    state.member = admin
+    const res = await createProjectScript('Portacelli', ' ,  , ', 'PASO 1...')
+    expect(res).toEqual({ ok: false, error: 'NO_KEYWORDS' })
+  })
+
+  it('crea normalizando keywords (minúsculas, sin duplicados, trim)', async () => {
+    state.member = admin
+    const res = await createProjectScript('Portacelli', ' Portacelli, PORTA CELLI , portacelli ', 'PASO 1 — SALUDO\n"Buen día!"')
+    expect(res).toEqual({ ok: true })
+    expect(serviceChain.insert).toHaveBeenCalledWith(expect.objectContaining({
+      project_name: 'Portacelli',
+      trigger_keywords: ['portacelli', 'porta celli'],
+      active: true,
+    }))
+  })
+
+  it('update parcial: keywords vacías rechazadas sin tocar DB', async () => {
+    state.member = admin
+    const res = await updateProjectScript('s1', { keywordsRaw: '  ' })
+    expect(res).toEqual({ ok: false, error: 'NO_KEYWORDS' })
+    expect(serviceChain.update).not.toHaveBeenCalled()
+  })
+})
+
