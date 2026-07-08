@@ -1,6 +1,5 @@
 import type { Lead, GTProject, GTSubInvestment } from '@/types'
 import type { MessageIntent } from './intent'
-import { getAllProjectMedia, hasAnyMedia } from '@/lib/project-media'
 
 interface PromptContext {
   lead: Lead
@@ -14,6 +13,10 @@ interface PromptContext {
   brainLearnings?: string | null
   adContext?: string | null
   escalationOverride?: string | null
+  /** Guion oficial de venta del proyecto detectado (formateado) */
+  projectScript?: string | null
+  /** Proyectos que SÍ tienen media disponible para enviar */
+  mediaProjects?: string[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -32,6 +35,8 @@ export function buildSystemPrompt({
   brainLearnings = null,
   adContext = null,
   escalationOverride = null,
+  projectScript = null,
+  mediaProjects = [],
 }: PromptContext): string {
   const intentBlock = buildIntentInstruction(intent, lastBotMessage, gtUrlSection)
   const catalogBlock = buildCatalogSection(projects, project, intent)
@@ -83,7 +88,7 @@ REGLA DE URGENCIA:
 
   // Proyectos con documentos reales cargados — Daniela solo puede ofrecer
   // fichas/PDFs de estos. Prometer un documento que no existe mata la confianza.
-  const mediaProjects = getAllProjectMedia().filter(hasAnyMedia).map(m => m.projectName)
+  // Media disponible viene del route (DB) — el prompt solo la lista
   const hasMedia = mediaProjects.length > 0
 
   const responseFormat = `
@@ -122,18 +127,20 @@ REGLA DE URGENCIA:
   },
   "brain_observations": [],
   "interactive_buttons": [],
-  "send_media": null
+  "send_media": null,
+  "extra_messages": []
 }
 - "agent_action": SIEMPRE incluir. Es tu decisión como SDR.
 - "deal_summary": SIEMPRE incluir. Resume el estado del deal para tu yo futuro.
 - "brain_observations": solo cuando detectes algo interesante (patrón, técnica que funcionó, objeción nueva). Array vacío si nada notable.
 - "interactive_buttons": máximo 3 botones, títulos de máximo 20 caracteres. Úsalos solo en momentos clave: después de presentar opciones, al ofrecer visita, al confirmar interés. Array vacío la mayoría de veces.
 - "opt_out": boolean — true SOLO si el cliente pide explícitamente no ser contactado.
+- "extra_messages": burbujas ADICIONALES que se envían DESPUÉS del reply (máx 2). Así textea la gente real: mensajes separados, no un bloque. Úsalo cuando el guion pida doble mensaje, o cuando dividir en 2 burbujas cortas sea más natural que una larga. Vacío la mayoría de veces. Orden de envío: reply → media (si hay) → extra_messages.
 ${hasMedia
-    ? `- "send_media": null normalmente. Úsalo cuando el cliente necesita más detalle del que cabe en un mensaje corto:
-  { "type": "document" | "image", "project": "nombre_del_proyecto", "description": "qué enviar (ej: ficha técnica, plano, tabla de precios)" }
-  SOLO tienes documentos de estos proyectos: ${mediaProjects.join(', ')}. Para cualquier otro proyecto NUNCA ofrezcas enviar documentos — da la info en texto.
-  Actívalo cuando: el cliente pide specs detalladas, planos o tablas de precios; muestra interés serio y se beneficiaría de un PDF; o después de dar un gancho corto sobre un proyecto.`
+    ? `- "send_media": null normalmente. Úsalo para adjuntar material del proyecto:
+  { "type": "document" | "image" | "video" | "link", "project": "nombre_del_proyecto", "description": "qué enviar (ej: brochure, ubicación, avances de obra)" }
+  SOLO tienes material de estos proyectos: ${mediaProjects.join(', ')}. Para cualquier otro proyecto NUNCA ofrezcas enviar material — da la info en texto.
+  Actívalo cuando: el guion lo indique; el cliente pida brochure/planos/precios (document), fotos o avances (image), videos (video), o ubicación (link); o tras dar un gancho corto sobre un proyecto.`
     : `- "send_media": SIEMPRE null — todavía no hay documentos cargados en el sistema. NUNCA ofrezcas enviar fichas, PDFs, brochures ni planos. Si el cliente pide un documento, responde: "Te lo comparto en cuanto lo tenga a mano, pero te adelanto lo importante:" y da los datos clave en texto corto.`}
 `
 
@@ -281,7 +288,7 @@ ${hasMedia
     : '2. Cierra con una pregunta que avance: "¿Qué modelo te interesa?" o "¿Te agendo una visita para conocerlo?"'}
 3. Si preguntan algo ESPECÍFICO (cuántos cuartos, m2, precio de un modelo), responde ESE dato concreto. No aproveches para listar todo lo demás.
 4. Si la descripción NO tiene el dato → "Déjame confirmar ese detalle con nuestro equipo." NUNCA inventes.
-${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${decisionBlock}
+${projectScript ? '\n' + projectScript + '\n' : ''}${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${decisionBlock}
 # PERFIL DEL CLIENTE
 Nombre: ${lead.name ?? 'desconocido'}
 Etapa: ${lead.stage}

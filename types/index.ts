@@ -147,6 +147,9 @@ export interface ClaudeResponse {
   brain_observations: BrainObservation[]
   interactive_buttons: InteractiveButton[]
   send_media: SendMedia | null
+  // Burbujas adicionales tras el reply — como textea la gente real (máx 2).
+  // El guion de proyecto las usa para los pasos de "doble mensaje".
+  extra_messages: string[]
 }
 
 // ── SDR Agent types ──────────────────────────────────────────
@@ -231,7 +234,7 @@ export interface InteractiveButton {
 }
 
 export interface SendMedia {
-  type: 'document' | 'image'
+  type: 'document' | 'image' | 'video' | 'link'
   project: string
   description: string
 }

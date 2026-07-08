@@ -83,9 +83,20 @@ vi.mock('@/lib/escalation-rules', () => ({
   matchKeywordRules: vi.fn(() => []),
   formatEscalationRulesForPrompt: vi.fn(() => ''),
 }))
-vi.mock('@/lib/project-media', () => ({
-  getProjectMedia: vi.fn(() => null),
+const media = vi.hoisted(() => ({
+  getAllProjectMediaItems: vi.fn(async (): Promise<unknown[]> => []),
+  mediaForProject: vi.fn((): unknown[] => []),
+  mediaProjectKeys: vi.fn((): string[] => []),
+  pickMediaToSend: vi.fn((): unknown[] => []),
 }))
+vi.mock('@/lib/project-media', () => media)
+
+const scripts = vi.hoisted(() => ({
+  getActiveProjectScripts: vi.fn(async (): Promise<unknown[]> => []),
+  matchProjectScript: vi.fn(() => null),
+  formatScriptForPrompt: vi.fn(() => ''),
+}))
+vi.mock('@/lib/project-scripts', () => scripts)
 
 import { POST } from '@/app/api/webhook/whatsapp/route'
 
@@ -287,5 +298,58 @@ describe('webhook con bot activo', () => {
     // Ambos mensajes del batch se guardaron (bot pausado: solo guarda, no responde)
     expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({ waMessageId: 'wamid.b1' }))
     expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({ waMessageId: 'wamid.b2' }))
+  })
+
+  it('envía las burbujas extra DESPUÉS del reply y las guarda en el historial', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Soy Carlos', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Un gusto, Carlos! 🤝', stage: 'new', name_captured: 'Carlos',
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      qualified: false, schedule_meeting: null, opt_out: false,
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
+      extra_messages: ['Para enviarle la información correcta, cuénteme un poco:'],
+    })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    const sent = wa.sendText.mock.calls.map(c => String(c[1]))
+    expect(sent[0]).toBe('Un gusto, Carlos! 🤝')
+    expect(sent[1]).toContain('cuénteme un poco')
+    expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
+      role: 'assistant', content: expect.stringContaining('cuénteme un poco'),
+    }))
+  })
+
+  it('send_media type link: envía el texto con la URL desde project_media', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'donde queda?', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    const linkItem = { id: 'm1', project_key: 'portacelli', media_type: 'link', url: 'https://earth.google.com/x', caption: 'Ubicación exacta 🌍', sort_order: 1, active: true }
+    media.mediaForProject.mockReturnValueOnce([linkItem])
+    media.pickMediaToSend.mockReturnValueOnce([linkItem])
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Le comparto la ubicación exacta:', stage: 'warm', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      qualified: false, schedule_meeting: null, opt_out: false,
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
+      send_media: { type: 'link', project: 'Portacelli', description: 'ubicación' },
+      extra_messages: [],
+    })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    const linkSend = wa.sendText.mock.calls.find(c => String(c[1]).includes('earth.google.com'))
+    expect(linkSend).toBeDefined()
+    expect(String(linkSend![1])).toContain('Ubicación exacta 🌍')
   })
 })

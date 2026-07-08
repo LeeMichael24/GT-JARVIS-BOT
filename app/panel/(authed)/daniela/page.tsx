@@ -3,16 +3,16 @@ import { BrainEditor } from '@/components/panel/BrainEditor'
 import { EscalationRules } from '@/components/panel/EscalationRules'
 import { ProjectMedia } from '@/components/panel/ProjectMedia'
 import { getAllProjects } from '@/services/projects/gt-api'
-import { getAllProjectMedia } from '@/lib/project-media'
+import { getAllProjectMediaItems } from '@/lib/project-media'
 import { DanielaTabs } from './tabs'
 
 export default async function DanielaPage() {
-  const [entries, rules, projects] = await Promise.all([
+  const [entries, rules, projects, mediaItems] = await Promise.all([
     getBrainEntries(),
     getEscalationRules(),
     getAllProjects(),
+    getAllProjectMediaItems(),
   ])
-  const media = getAllProjectMedia()
 
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col overflow-hidden px-3 py-4 sm:px-6">
@@ -25,7 +25,7 @@ export default async function DanielaPage() {
       <DanielaTabs
         brainEditor={<BrainEditor entries={entries} />}
         escalationRules={<EscalationRules rules={rules} />}
-        projectMedia={<ProjectMedia projects={projects} media={media} />}
+        projectMedia={<ProjectMedia projects={projects} items={mediaItems} />}
       />
     </div>
   )

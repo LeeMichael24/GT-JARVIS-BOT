@@ -76,7 +76,17 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     brain_observations: parseBrainObservations((parsed as Record<string, unknown>).brain_observations),
     interactive_buttons: parseInteractiveButtons((parsed as Record<string, unknown>).interactive_buttons),
     send_media: parseSendMedia((parsed as Record<string, unknown>).send_media),
+    extra_messages: parseExtraMessages((parsed as Record<string, unknown>).extra_messages),
   }
+}
+
+// Burbujas adicionales: máx 2, texto plano, con tope de largo por burbuja
+function parseExtraMessages(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+    .slice(0, 2)
+    .map(m => m.trim().slice(0, 900))
 }
 
 function parseAgentAction(raw: unknown): AgentAction | null {
@@ -142,7 +152,7 @@ function parseInteractiveButtons(raw: unknown): InteractiveButton[] {
 function parseSendMedia(raw: unknown): SendMedia | null {
   if (!raw || typeof raw !== 'object') return null
   const m = raw as Record<string, unknown>
-  const validTypes = ['document', 'image'] as const
+  const validTypes = ['document', 'image', 'video', 'link'] as const
   if (!validTypes.includes(m.type as typeof validTypes[number])) return null
   if (typeof m.project !== 'string' || typeof m.description !== 'string') return null
   return {

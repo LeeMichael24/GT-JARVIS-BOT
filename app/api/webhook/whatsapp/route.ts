@@ -7,7 +7,7 @@ import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
 import { createCalendarEvent } from '@/services/google/calendar'
 import { getPlaybook, formatPlaybookForPrompt } from '@/lib/knowledge-base'
-import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendInternalNotification, markAsRead, sendTypingIndicator } from '@/services/whatsapp/client'
+import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendVideo, sendInternalNotification, markAsRead, sendTypingIndicator } from '@/services/whatsapp/client'
 import { transcribeAudio } from '@/services/openai/whisper'
 import {
   upsertLead,
@@ -27,7 +27,8 @@ import { saveLeadSource, getLeadSource, getActiveAdCampaigns, matchAdCampaign, f
 import { logActivity } from '@/lib/activity-log'
 import { autoTagProject, autoTagSource } from '@/lib/auto-tag'
 import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPrompt } from '@/lib/escalation-rules'
-import { getProjectMedia } from '@/lib/project-media'
+import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, type ProjectMediaItem } from '@/lib/project-media'
+import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } from '@/lib/project-scripts'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -218,16 +219,29 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     let brainLearnings: string = ''
     let adContext: string | null = null
     let escalationOverride: string | null = null
+    let projectScript: string | null = null
+    let mediaItems: ProjectMediaItem[] = []
     const existingDeal = existingDealForDebounce
     try {
-      const [projectsResult, playbookEntries, brainEntries, leadSource, activeAds, escalationRules] = await Promise.all([
+      const [projectsResult, playbookEntries, brainEntries, leadSource, activeAds, escalationRules, scripts, mediaResult] = await Promise.all([
         getAllProjects(),
         getPlaybook(),
         getHighConfidenceLearnings(),
         getLeadSource(lead.id),
         getActiveAdCampaigns(),
         getActiveEscalationRules(),
+        getActiveProjectScripts(),
+        getAllProjectMediaItems(),
       ])
+      mediaItems = mediaResult
+
+      // Guion oficial: activo si el mensaje menciona el proyecto O si el lead
+      // ya venía en ese guion (project_interest) — el guion persiste toda la conversación
+      const matchedScript = matchProjectScript(scripts, combinedBody, lead.project_interest)
+      if (matchedScript) {
+        projectScript = formatScriptForPrompt(matchedScript)
+        console.log(`[processMessage] Guion activo: ${matchedScript.project_name}`)
+      }
       projects = projectsResult
       salesPlaybook = formatPlaybookForPrompt(playbookEntries)
       brainLearnings = formatLearningsForPrompt(brainEntries)
@@ -288,6 +302,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       brainLearnings: brainLearnings || null,
       adContext,
       escalationOverride,
+      projectScript,
+      mediaProjects: mediaProjectKeys(mediaItems),
     })
     let claudeResponse: ReturnType<typeof parseClaudeResponse>
     try {
@@ -442,20 +458,46 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       console.error(`[processMessage] Failed to send WA reply to ${parsed.from}:`, err instanceof Error ? err.message : err)
     }
 
-    // 12b. Send media attachment if GPT-4o requested it
+    // 12b. Send media attachment if GPT-4o requested it (from project_media DB)
     if (claudeResponse.send_media) {
-      const media = getProjectMedia(claudeResponse.send_media.project)
-      if (media) {
-        try {
-          if (claudeResponse.send_media.type === 'document' && media.brochureUrl) {
-            await sendDocument(parsed.from, media.brochureUrl, `${claudeResponse.send_media.project}.pdf`, claudeResponse.send_media.description || undefined)
-          } else if (claudeResponse.send_media.type === 'image' && media.galleryUrls.length > 0) {
-            await sendImage(parsed.from, media.galleryUrls[0], claudeResponse.send_media.description || undefined)
+      const projectItems = mediaForProject(mediaItems, claudeResponse.send_media.project)
+      const toSend = pickMediaToSend(projectItems, claudeResponse.send_media.type)
+      try {
+        if (claudeResponse.send_media.type === 'image') {
+          // Galería: hasta 3 imágenes en ráfaga
+          for (const img of toSend.slice(0, 3)) {
+            await sendImage(parsed.from, img.url, img.caption ?? undefined)
           }
-          console.log(`[processMessage] Sent ${claudeResponse.send_media.type} for "${claudeResponse.send_media.project}"`)
-        } catch (err) {
-          console.error('[processMessage] Failed to send media:', err instanceof Error ? err.message : err)
+        } else if (toSend[0]) {
+          const item = toSend[0]
+          if (item.media_type === 'video') {
+            await sendVideo(parsed.from, item.url, item.caption ?? undefined)
+          } else if (item.media_type === 'link') {
+            await sendText(parsed.from, `${item.caption ? item.caption + '\n' : ''}${item.url}`, { typingDelay: false })
+          } else {
+            await sendDocument(parsed.from, item.url, `${claudeResponse.send_media.project}.pdf`, item.caption ?? undefined)
+          }
         }
+        if (toSend.length > 0) {
+          console.log(`[processMessage] Sent ${claudeResponse.send_media.type} (${toSend.length} item/s) for "${claudeResponse.send_media.project}"`)
+        }
+      } catch (err) {
+        console.error('[processMessage] Failed to send media:', err instanceof Error ? err.message : err)
+      }
+    }
+
+    // 12c. Burbujas adicionales (multi-mensaje humano / pasos dobles del guion)
+    for (const extra of claudeResponse.extra_messages ?? []) {
+      try {
+        const extraWaId = await sendText(parsed.from, extra)
+        await saveConversation({
+          leadId: lead.id,
+          role: 'assistant',
+          content: extra,
+          waMessageId: extraWaId ?? undefined,
+        })
+      } catch (err) {
+        console.error('[processMessage] Failed to send extra bubble:', err instanceof Error ? err.message : err)
       }
     }
 

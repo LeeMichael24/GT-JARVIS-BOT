@@ -1,9 +1,11 @@
 import type { DealSignals } from '@/types'
 
-const DEFAULT_DEBOUNCE_MS = 4000
+// Objetivo: respuesta total <30s. El presupuesto por mensaje es
+// debounce + GPT (2-8s) + typing delay (1.5-4s) + burbujas extra.
+const DEFAULT_DEBOUNCE_MS = 3000
 const MIN_MULTI_DEBOUNCE_MS = 3000
-const MAX_MULTI_DEBOUNCE_MS = 10000
-const VOICE_DEBOUNCE_MS = 8000
+const MAX_MULTI_DEBOUNCE_MS = 8000
+const VOICE_DEBOUNCE_MS = 6000
 const SINGLE_DEBOUNCE_MS = 2000
 
 export function calculateAdaptiveDebounce(signals: DealSignals | null | undefined): number {

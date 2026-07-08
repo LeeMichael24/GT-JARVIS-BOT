@@ -1,56 +1,59 @@
+import { getServiceClient } from '@/lib/supabase'
+
 /**
- * Project media catalog — maps GT project names to their media assets
- * (brochures, price lists, floor plans, gallery images).
+ * Media por proyecto — brochures (PDF), imágenes, videos y links.
+ * Vive en la tabla `project_media` (Supabase): se agrega/edita SIN deploy.
  *
- * Currently a static config. In the future this can pull from the GT API
- * if the backend adds media URLs to the listing response.
+ * Las URLs deben ser PÚBLICAS: WhatsApp Cloud API las descarga server-side,
+ * no pueden estar detrás de auth. Límites de WhatsApp: PDF ≤100MB,
+ * imagen jpg/png ≤5MB, video mp4 ≤16MB.
  */
 
-export interface ProjectMedia {
-  projectName: string
-  brochureUrl: string | null
-  priceListUrl: string | null
-  floorPlanUrl: string | null
-  galleryUrls: string[]
+export type ProjectMediaType = 'brochure' | 'image' | 'video' | 'link' | 'price_list' | 'floor_plan'
+
+export interface ProjectMediaItem {
+  id: string
+  project_key: string
+  media_type: ProjectMediaType
+  url: string
+  caption: string | null
+  sort_order: number
+  active: boolean
 }
 
-/**
- * Static media catalog keyed by normalised project name (lowercase).
- * Add entries here as media assets become available.
- *
- * URL values should be publicly accessible (WhatsApp Cloud API fetches them
- * server-side, so they cannot be behind auth).
- */
-const MEDIA_CATALOG: Record<string, ProjectMedia> = {
-  // Example entries — replace URLs with real ones when available:
-  // 'foresta townhomes': {
-  //   projectName: 'Foresta Townhomes',
-  //   brochureUrl: 'https://assets.grupoterranovasv.com/docs/foresta-brochure.pdf',
-  //   priceListUrl: 'https://assets.grupoterranovasv.com/docs/foresta-precios.pdf',
-  //   floorPlanUrl: 'https://assets.grupoterranovasv.com/docs/foresta-planos.pdf',
-  //   galleryUrls: [
-  //     'https://assets.grupoterranovasv.com/img/foresta-1.jpg',
-  //     'https://assets.grupoterranovasv.com/img/foresta-2.jpg',
-  //   ],
-  // },
+/** Todos los items activos — se carga una vez por mensaje (tabla pequeña). */
+export async function getAllProjectMediaItems(): Promise<ProjectMediaItem[]> {
+  const { data, error } = await getServiceClient()
+    .from('project_media')
+    .select('*')
+    .eq('active', true)
+    .order('sort_order', { ascending: true })
+  if (error) {
+    // Tabla aún no migrada u otro fallo — sin media, pero el bot no muere
+    console.warn('[project-media] No se pudo cargar media:', error.message)
+    return []
+  }
+  return (data as ProjectMediaItem[]) ?? []
 }
 
-export function getProjectMedia(projectName: string): ProjectMedia | null {
-  const key = projectName.toLowerCase()
-  return MEDIA_CATALOG[key] ?? null
+/** Items cuyo project_key aparece en el nombre del proyecto (match laxo). */
+export function mediaForProject(items: ProjectMediaItem[], projectName: string): ProjectMediaItem[] {
+  const name = projectName.toLowerCase()
+  return items.filter(i => name.includes(i.project_key.toLowerCase()))
 }
 
-/**
- * Returns all configured project media entries — used by the admin panel
- * to show which projects have media and which don't.
- */
-export function getAllProjectMedia(): ProjectMedia[] {
-  return Object.values(MEDIA_CATALOG)
+/** Nombres de proyecto (keys) que tienen algún media — para avisarle al prompt. */
+export function mediaProjectKeys(items: ProjectMediaItem[]): string[] {
+  return Array.from(new Set(items.map(i => i.project_key)))
 }
 
-/**
- * Checks if a project has any media configured at all.
- */
-export function hasAnyMedia(media: ProjectMedia): boolean {
-  return !!(media.brochureUrl || media.priceListUrl || media.floorPlanUrl || media.galleryUrls.length > 0)
+/** Filtra por lo que el modelo pidió enviar (document agrupa los PDF). */
+export function pickMediaToSend(
+  items: ProjectMediaItem[],
+  type: 'document' | 'image' | 'video' | 'link',
+): ProjectMediaItem[] {
+  if (type === 'document') {
+    return items.filter(i => i.media_type === 'brochure' || i.media_type === 'price_list' || i.media_type === 'floor_plan')
+  }
+  return items.filter(i => i.media_type === type)
 }

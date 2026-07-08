@@ -198,6 +198,23 @@ export async function sendImage(
   return response?.messages?.[0]?.id ?? null
 }
 
+export async function sendVideo(
+  to: string,
+  videoUrl: string,
+  caption?: string
+): Promise<string | null> {
+  const video: Record<string, string> = { link: videoUrl }
+  if (caption) video.caption = caption
+  const response = await postWithRetry({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'video',
+    video,
+  }) as { messages?: { id?: string }[] } | null
+  return response?.messages?.[0]?.id ?? null
+}
+
 export async function downloadMedia(mediaId: string): Promise<{ buffer: Buffer; mimeType: string }> {
   const metaRes = await fetch(`${WA_BASE}/${mediaId}`, { headers: headers() })
   if (!metaRes.ok) throw new Error(`Media meta ${metaRes.status}`)
