@@ -16,6 +16,11 @@ const analytics = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/analytics', () => analytics)
 
+const mediaSync = vi.hoisted(() => ({
+  syncProjectMediaFromEcosystem: vi.fn(async () => ({ synced: 0 })),
+}))
+vi.mock('@/lib/media-sync', () => mediaSync)
+
 const wa = vi.hoisted(() => ({
   sendText: vi.fn(async () => 'wamid.warn1'),
 }))
@@ -56,6 +61,7 @@ describe('cron daily', () => {
       rules: { campaignsCreated: 2 },
       metrics: undefined,
       dealWarnings: { alerted: 0 },
+      mediaSync: { synced: 0 },
     })
   })
 

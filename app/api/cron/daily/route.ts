@@ -1,6 +1,7 @@
 import { runDailyRadar, runRecontactRules } from '@/lib/proactive/engine'
 import { aggregateDailyMetrics } from '@/lib/agent-brain'
 import { getNeglectedALeads } from '@/lib/analytics'
+import { syncProjectMediaFromEcosystem } from '@/lib/media-sync'
 import { sendText } from '@/services/whatsapp/client'
 
 export const maxDuration = 60
@@ -47,6 +48,12 @@ export async function GET(request: Request): Promise<Response> {
     dealWarnings = { error: e instanceof Error ? e.message : 'deal warnings failed' }
   }
 
-  console.log('[cron/daily]', JSON.stringify({ radar, rules, metrics, dealWarnings }))
-  return Response.json({ radar, rules, metrics, dealWarnings })
+  // Sync de media del Ecosistema Terranova → project_media (no-op si el
+  // endpoint aún no existe; ver docs/BRIEF-ECOSISTEMA-MEDIA.md)
+  const mediaSync = await syncProjectMediaFromEcosystem().catch((e: unknown) => ({
+    error: e instanceof Error ? e.message : 'media sync failed',
+  }))
+
+  console.log('[cron/daily]', JSON.stringify({ radar, rules, metrics, dealWarnings, mediaSync }))
+  return Response.json({ radar, rules, metrics, dealWarnings, mediaSync })
 }
