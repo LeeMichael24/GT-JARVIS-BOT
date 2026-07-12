@@ -35,6 +35,11 @@ export async function getHighConfidenceLearnings(minConfidence = 0.7): Promise<B
   return (data as BrainEntry[]) ?? []
 }
 
+// Presupuesto de caracteres del bloque de cerebro en el prompt.
+// Sin tope, 17 entradas largas pesaban ~12K chars (~3.3K tokens) POR MENSAJE
+// → latencia, costo y el techo de 30K tokens/min de OpenAI.
+const BRAIN_PROMPT_BUDGET_CHARS = 4500
+
 export function formatLearningsForPrompt(entries: BrainEntry[]): string {
   if (entries.length === 0) return ''
   const sorted = [...entries].sort((a, b) => {
@@ -42,12 +47,19 @@ export function formatLearningsForPrompt(entries: BrainEntry[]): string {
     if (b.source === 'team' && a.source !== 'team') return 1
     return b.confidence - a.confidence
   })
-  return sorted
-    .map(e => {
-      const prefix = e.source === 'team' ? 'REGLA DEL EQUIPO' : 'Observación'
-      return `- ${prefix} (${e.topic}): ${e.content}`
-    })
-    .join('\n')
+  const lines: string[] = []
+  let used = 0
+  for (const e of sorted) {
+    const prefix = e.source === 'team' ? 'REGLA DEL EQUIPO' : 'Observación'
+    // Entradas muy largas se truncan; el conocimiento completo vive en el
+    // panel — al prompt va la versión operativa
+    const content = e.content.length > 600 ? e.content.slice(0, 600) + '…' : e.content
+    const line = `- ${prefix} (${e.topic}): ${content}`
+    if (used + line.length > BRAIN_PROMPT_BUDGET_CHARS) break
+    lines.push(line)
+    used += line.length
+  }
+  return lines.join('\n')
 }
 
 export async function aggregateDailyMetrics(date: Date): Promise<void> {

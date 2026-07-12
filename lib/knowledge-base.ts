@@ -38,6 +38,9 @@ export async function getPlaybook(projectSlug?: string | null): Promise<KBEntry[
   return (data ?? []) as KBEntry[]
 }
 
+// Presupuesto del playbook en el prompt (sin tope pesaba ~11K chars/mensaje)
+const PLAYBOOK_PROMPT_BUDGET_CHARS = 6000
+
 export function formatPlaybookForPrompt(entries: KBEntry[]): string {
   if (!entries.length) return ''
 
@@ -58,9 +61,13 @@ export function formatPlaybookForPrompt(entries: KBEntry[]): string {
   const sections: string[] = []
   for (const [cat, items] of Object.entries(grouped)) {
     const label = categoryLabels[cat] ?? cat.toUpperCase()
-    const itemLines = items.map(i => `${i.title}: ${i.content}`).join('\n\n')
+    const itemLines = items.map(i => `${i.title}: ${i.content.length > 450 ? i.content.slice(0, 450) + '…' : i.content}`).join('\n\n')
     sections.push(`${label}\n${itemLines}`)
   }
 
-  return sections.join('\n\n')
+  const full = sections.join('\n\n')
+  // Tope total: si el playbook crece en la DB, el prompt no explota
+  return full.length > PLAYBOOK_PROMPT_BUDGET_CHARS
+    ? full.slice(0, PLAYBOOK_PROMPT_BUDGET_CHARS) + '\n…(playbook truncado — el resto vive en el panel)'
+    : full
 }

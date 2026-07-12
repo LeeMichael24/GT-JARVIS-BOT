@@ -77,7 +77,9 @@ export async function sendTypingIndicator(messageId: string): Promise<void> {
 }
 
 export function calculateTypingDelay(text: string): number {
-  return Math.min(Math.max(text.length * 30, 1500), 4000)
+  // Ágil pero humano: los clientes reportaban esperas largas con 30ms/char y
+  // techo de 4s. Los puntos de "escribiendo..." cubren la espera de GPT.
+  return Math.min(Math.max(text.length * 22, 1200), 2600)
 }
 
 export async function sendText(

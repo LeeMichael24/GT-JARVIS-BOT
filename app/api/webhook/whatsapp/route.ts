@@ -489,6 +489,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // 12c. Burbujas adicionales (multi-mensaje humano / pasos dobles del guion)
     for (const extra of claudeResponse.extra_messages ?? []) {
       try {
+        // Reactivar "escribiendo..." — la espera entre burbujas se ve viva
+        sendTypingIndicator(parsed.messageId).catch(() => {})
         const extraWaId = await sendText(parsed.from, extra)
         await saveConversation({
           leadId: lead.id,
