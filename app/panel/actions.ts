@@ -529,3 +529,243 @@ export async function deleteProjectScript(id: string): Promise<ActionResult> {
 export async function toggleProjectScript(id: string, active: boolean): Promise<ActionResult> {
   return updateProjectScript(id, { active })
 }
+
+// ── Ajustes vivos del agente (agent_settings) ─────────────────
+
+const SETTINGS_WHITELIST: Record<string, (v: string) => boolean> = {
+  emoji_policy: v => ['minimal', 'moderate', 'none'].includes(v),
+  learning_sensitivity: v => ['high', 'normal'].includes(v),
+  formality_default: v => ['tu', 'usted'].includes(v),
+  custom_instructions: v => v.length <= 3000,
+  reflection_enabled: v => ['true', 'false'].includes(v),
+}
+
+export interface AgentSettingRow {
+  key: string
+  value: string
+  description: string | null
+}
+
+export async function getAgentSettingsPanel(): Promise<{ rows: AgentSettingRow[]; tableReady: boolean }> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('agent_settings')
+    .select('key, value, description')
+    .order('key')
+  if (error) {
+    console.warn('[panel] agent_settings no disponible:', error.message)
+    return { rows: [], tableReady: false }
+  }
+  return { rows: (data as AgentSettingRow[]) ?? [], tableReady: true }
+}
+
+export async function saveAgentSettings(updates: Record<string, string>): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const service = getServiceClient()
+    for (const [key, raw] of Object.entries(updates)) {
+      const validator = SETTINGS_WHITELIST[key]
+      if (!validator) return { ok: false, error: 'INVALID_KEY' }
+      const value = raw.trim()
+      if (!validator(value)) return { ok: false, error: 'INVALID_VALUE' }
+      const { error } = await service
+        .from('agent_settings')
+        .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+      if (error) throw new Error(error.message)
+    }
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// ── Media por proyecto (project_media) — CRUD del panel ───────
+
+const MEDIA_TYPES = ['brochure', 'image', 'video', 'link', 'price_list', 'floor_plan'] as const
+
+export async function getProjectMediaAll(): Promise<import('@/lib/project-media').ProjectMediaItem[]> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('project_media')
+    .select('*')
+    .order('project_key')
+    .order('media_type')
+    .order('sort_order')
+  if (error) {
+    console.warn('[panel] project_media no disponible:', error.message)
+    return []
+  }
+  return (data as import('@/lib/project-media').ProjectMediaItem[]) ?? []
+}
+
+function validateMedia(projectKey: string, mediaType: string, url: string): string | null {
+  if (!projectKey.trim()) return 'EMPTY'
+  if (!(MEDIA_TYPES as readonly string[]).includes(mediaType)) return 'INVALID_TYPE'
+  if (!url.trim().startsWith('https://')) return 'INVALID_URL'
+  return null
+}
+
+export async function createProjectMediaItem(
+  projectKey: string, mediaType: string, url: string, caption: string | null, sortOrder: number,
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const invalid = validateMedia(projectKey, mediaType, url)
+    if (invalid) return { ok: false, error: invalid }
+    // No especificamos source/project_slug: compatibles pre y post migración 008
+    const { error } = await getServiceClient().from('project_media').insert({
+      project_key: projectKey.trim().toLowerCase(),
+      media_type: mediaType,
+      url: url.trim(),
+      caption: caption?.trim() || null,
+      sort_order: Number.isFinite(sortOrder) ? sortOrder : 0,
+      active: true,
+    })
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function updateProjectMediaItem(
+  id: string,
+  updates: { project_key?: string; media_type?: string; url?: string; caption?: string | null; sort_order?: number; active?: boolean },
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (updates.project_key !== undefined) {
+      if (!updates.project_key.trim()) return { ok: false, error: 'EMPTY' }
+      patch.project_key = updates.project_key.trim().toLowerCase()
+    }
+    if (updates.media_type !== undefined) {
+      if (!(MEDIA_TYPES as readonly string[]).includes(updates.media_type)) return { ok: false, error: 'INVALID_TYPE' }
+      patch.media_type = updates.media_type
+    }
+    if (updates.url !== undefined) {
+      if (!updates.url.trim().startsWith('https://')) return { ok: false, error: 'INVALID_URL' }
+      patch.url = updates.url.trim()
+    }
+    if (updates.caption !== undefined) patch.caption = updates.caption?.trim() || null
+    if (updates.sort_order !== undefined) patch.sort_order = updates.sort_order
+    if (updates.active !== undefined) patch.active = updates.active
+    const { error } = await getServiceClient().from('project_media').update(patch).eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function deleteProjectMediaItem(id: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const { error } = await getServiceClient().from('project_media').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// ── Playbook de ventas (knowledge_base) — CRUD del panel ──────
+
+const KB_CATEGORIES = ['sales_playbook', 'objection', 'closing_technique', 'project_pitch', 'faq'] as const
+
+export interface PlaybookRow {
+  id: string
+  category: string
+  topic: string
+  title: string
+  content: string
+  project_slug: string | null
+  priority: number
+  active: boolean
+}
+
+export async function getPlaybookEntries(): Promise<PlaybookRow[]> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('knowledge_base')
+    .select('id, category, topic, title, content, project_slug, priority, active')
+    .order('priority', { ascending: false })
+    .order('title')
+  if (error) {
+    console.warn('[panel] knowledge_base no disponible:', error.message)
+    return []
+  }
+  return (data as PlaybookRow[]) ?? []
+}
+
+export async function createPlaybookEntry(
+  category: string, title: string, content: string, projectSlug: string | null, priority: number,
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    if (!(KB_CATEGORIES as readonly string[]).includes(category)) return { ok: false, error: 'INVALID_CATEGORY' }
+    if (!title.trim() || !content.trim()) return { ok: false, error: 'EMPTY' }
+    const { error } = await getServiceClient().from('knowledge_base').insert({
+      category,
+      topic: title.trim().toLowerCase().replace(/\s+/g, '_').slice(0, 60),
+      title: title.trim(),
+      content: content.trim(),
+      project_slug: projectSlug?.trim() || null,
+      priority: Number.isFinite(priority) ? priority : 0,
+      active: true,
+    })
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function updatePlaybookEntry(
+  id: string,
+  updates: { category?: string; title?: string; content?: string; project_slug?: string | null; priority?: number; active?: boolean },
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (updates.category !== undefined) {
+      if (!(KB_CATEGORIES as readonly string[]).includes(updates.category)) return { ok: false, error: 'INVALID_CATEGORY' }
+      patch.category = updates.category
+    }
+    if (updates.title !== undefined) {
+      if (!updates.title.trim()) return { ok: false, error: 'EMPTY' }
+      patch.title = updates.title.trim()
+    }
+    if (updates.content !== undefined) {
+      if (!updates.content.trim()) return { ok: false, error: 'EMPTY' }
+      patch.content = updates.content.trim()
+    }
+    if (updates.project_slug !== undefined) patch.project_slug = updates.project_slug?.trim() || null
+    if (updates.priority !== undefined) patch.priority = updates.priority
+    if (updates.active !== undefined) patch.active = updates.active
+    const { error } = await getServiceClient().from('knowledge_base').update(patch).eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function deletePlaybookEntry(id: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const { error } = await getServiceClient().from('knowledge_base').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+

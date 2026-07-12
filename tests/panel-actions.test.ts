@@ -37,7 +37,7 @@ vi.mock('@/services/whatsapp/client', () => wa)
 
 vi.mock('next/cache', () => ({ refresh: vi.fn(), revalidatePath: vi.fn() }))
 
-import { sendHumanMessage, assignLead, setBotActive, addLeadTag, addNote, updateLeadStage, deleteTag, setMemberActive, createProjectScript, updateProjectScript } from '@/app/panel/actions'
+import { sendHumanMessage, assignLead, setBotActive, addLeadTag, addNote, updateLeadStage, deleteTag, setMemberActive, createProjectScript, updateProjectScript, saveAgentSettings, createProjectMediaItem, createPlaybookEntry } from '@/app/panel/actions'
 
 const admin = { id: 'adm1', name: 'Michael', email: 'm@gt.com', role: 'admin' }
 const asesor = { id: 'ase1', name: 'Ana', email: 'a@gt.com', role: 'asesor' }
@@ -56,7 +56,7 @@ beforeEach(() => {
   wa.sendText.mockImplementation(async () => 'wamid.h1')
   // reset chainable service mock
   for (const k of Object.keys(serviceChain)) delete serviceChain[k]
-  const methods = ['from', 'insert', 'update', 'delete', 'eq', 'select', 'maybeSingle'] as const
+  const methods = ['from', 'insert', 'update', 'delete', 'eq', 'select', 'maybeSingle', 'upsert'] as const
   for (const m of methods) {
     serviceChain[m] = vi.fn(() => Object.assign(Promise.resolve({ error: null, data: null, count: 0 }), serviceChain))
   }
@@ -232,6 +232,65 @@ describe('guiones por proyecto (project_scripts)', () => {
     const res = await updateProjectScript('s1', { keywordsRaw: '  ' })
     expect(res).toEqual({ ok: false, error: 'NO_KEYWORDS' })
     expect(serviceChain.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('ajustes vivos (agent_settings)', () => {
+  it('rechaza claves fuera de la whitelist', async () => {
+    state.member = admin
+    const res = await saveAgentSettings({ hacked_key: 'x' })
+    expect(res).toEqual({ ok: false, error: 'INVALID_KEY' })
+  })
+
+  it('rechaza valores inválidos para una clave válida', async () => {
+    state.member = admin
+    expect(await saveAgentSettings({ emoji_policy: 'muchos' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
+    expect(await saveAgentSettings({ reflection_enabled: 'quizas' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
+  })
+
+  it('acepta un lote válido y upserta cada clave', async () => {
+    state.member = admin
+    const res = await saveAgentSettings({ emoji_policy: 'none', custom_instructions: 'Prioriza Portacelli' })
+    expect(res).toEqual({ ok: true })
+    expect(serviceChain.upsert).toHaveBeenCalledTimes(2)
+  })
+
+  it('solo admin', async () => {
+    state.member = asesor
+    expect(await saveAgentSettings({ emoji_policy: 'none' })).toEqual({ ok: false, error: 'FORBIDDEN' })
+  })
+})
+
+describe('media desde el panel (project_media)', () => {
+  it('rechaza URL que no sea https', async () => {
+    state.member = admin
+    const res = await createProjectMediaItem('portacelli', 'brochure', 'http://inseguro/b.pdf', null, 1)
+    expect(res).toEqual({ ok: false, error: 'INVALID_URL' })
+  })
+
+  it('rechaza tipo inválido y normaliza project_key', async () => {
+    state.member = admin
+    expect(await createProjectMediaItem('portacelli', 'gif', 'https://x/a', null, 1)).toEqual({ ok: false, error: 'INVALID_TYPE' })
+    const res = await createProjectMediaItem('  PORTACELLI ', 'link', 'https://earth.google.com/x', 'Ubicación', 1)
+    expect(res).toEqual({ ok: true })
+    expect(serviceChain.insert).toHaveBeenCalledWith(expect.objectContaining({ project_key: 'portacelli', media_type: 'link' }))
+  })
+})
+
+describe('playbook desde el panel (knowledge_base)', () => {
+  it('valida categoría y campos vacíos', async () => {
+    state.member = admin
+    expect(await createPlaybookEntry('chismes', 'x', 'y', null, 0)).toEqual({ ok: false, error: 'INVALID_CATEGORY' })
+    expect(await createPlaybookEntry('faq', '  ', 'y', null, 0)).toEqual({ ok: false, error: 'EMPTY' })
+  })
+
+  it('crea con topic derivado del título', async () => {
+    state.member = admin
+    const res = await createPlaybookEntry('objection', 'Precio muy alto', 'Reencuadra a valor y plusvalía', null, 5)
+    expect(res).toEqual({ ok: true })
+    expect(serviceChain.insert).toHaveBeenCalledWith(expect.objectContaining({
+      category: 'objection', title: 'Precio muy alto', priority: 5,
+    }))
   })
 })
 

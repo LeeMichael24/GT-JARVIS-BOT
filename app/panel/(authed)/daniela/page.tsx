@@ -1,19 +1,20 @@
-import { getBrainEntries, getEscalationRules, getProjectScripts } from '@/app/panel/actions'
+import { getBrainEntries, getEscalationRules, getProjectScripts, getAgentSettingsPanel, getProjectMediaAll, getPlaybookEntries } from '@/app/panel/actions'
 import { BrainEditor } from '@/components/panel/BrainEditor'
 import { EscalationRules } from '@/components/panel/EscalationRules'
-import { ProjectMedia } from '@/components/panel/ProjectMedia'
+import { MediaEditor } from '@/components/panel/MediaEditor'
+import { PlaybookEditor } from '@/components/panel/PlaybookEditor'
 import { ScriptsEditor } from '@/components/panel/ScriptsEditor'
-import { getAllProjects } from '@/services/projects/gt-api'
-import { getAllProjectMediaItems } from '@/lib/project-media'
+import { SettingsEditor } from '@/components/panel/SettingsEditor'
 import { DanielaTabs } from './tabs'
 
 export default async function DanielaPage() {
-  const [entries, rules, projects, mediaItems, projectScripts] = await Promise.all([
+  const [entries, rules, projectScripts, settingsPanel, mediaItems, playbook] = await Promise.all([
     getBrainEntries(),
     getEscalationRules(),
-    getAllProjects(),
-    getAllProjectMediaItems(),
     getProjectScripts(),
+    getAgentSettingsPanel(),
+    getProjectMediaAll(),
+    getPlaybookEntries(),
   ])
 
   return (
@@ -21,14 +22,16 @@ export default async function DanielaPage() {
       <div className="mb-4">
         <h1 className="text-xl font-bold text-white">Cerebro de Daniela</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          Conocimiento, reglas de escalamiento y media que Daniela usa para responder.
+          Todo lo que Daniela sabe y cómo se comporta — editable en vivo, sin deploys.
         </p>
       </div>
       <DanielaTabs
         brainEditor={<BrainEditor entries={entries} />}
+        playbookEditor={<PlaybookEditor entries={playbook} />}
         scriptsEditor={<ScriptsEditor scripts={projectScripts} />}
         escalationRules={<EscalationRules rules={rules} />}
-        projectMedia={<ProjectMedia projects={projects} items={mediaItems} />}
+        projectMedia={<MediaEditor items={mediaItems} />}
+        settingsEditor={<SettingsEditor rows={settingsPanel.rows} tableReady={settingsPanel.tableReady} />}
       />
     </div>
   )
