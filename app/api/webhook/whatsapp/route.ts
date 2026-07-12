@@ -29,6 +29,7 @@ import { autoTagProject, autoTagSource } from '@/lib/auto-tag'
 import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPrompt } from '@/lib/escalation-rules'
 import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, type ProjectMediaItem } from '@/lib/project-media'
 import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } from '@/lib/project-scripts'
+import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -221,9 +222,10 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     let escalationOverride: string | null = null
     let projectScript: string | null = null
     let mediaItems: ProjectMediaItem[] = []
+    let agentSettings: AgentSettings = DEFAULT_SETTINGS
     const existingDeal = existingDealForDebounce
     try {
-      const [projectsResult, playbookEntries, brainEntries, leadSource, activeAds, escalationRules, scripts, mediaResult] = await Promise.all([
+      const [projectsResult, playbookEntries, brainEntries, leadSource, activeAds, escalationRules, scripts, mediaResult, settingsResult] = await Promise.all([
         getAllProjects(),
         getPlaybook(),
         getHighConfidenceLearnings(),
@@ -232,8 +234,10 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
         getActiveEscalationRules(),
         getActiveProjectScripts(),
         getAllProjectMediaItems(),
+        getAgentSettings(),
       ])
       mediaItems = mediaResult
+      agentSettings = settingsResult
 
       // Guion oficial: activo si el mensaje menciona el proyecto O si el lead
       // ya venía en ese guion (project_interest) — el guion persiste toda la conversación
@@ -304,6 +308,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       escalationOverride,
       projectScript,
       mediaProjects: mediaProjectKeys(mediaItems),
+      settings: agentSettings,
     })
     let claudeResponse: ReturnType<typeof parseClaudeResponse>
     try {
@@ -327,9 +332,9 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       // cliente ya está guardado y el próximo mensaje reintenta el flujo.
       console.error('[processMessage] GPT-4o failed twice — sending fallback reply:', err instanceof Error ? err.message : err)
       const fallbacks = [
-        'Dame un momento, estoy confirmando ese detalle y ya te escribo 🙌',
-        'Déjame revisar eso bien y te respondo en un momentito 😊',
-        'Buena pregunta — déjame confirmarlo y ya te cuento 🙌',
+        'Dame un momento, estoy confirmando ese detalle y ya te escribo.',
+        'Déjame revisar eso bien y te respondo en un momentito.',
+        'Buena pregunta — déjame confirmarlo y ya te cuento.',
       ]
       const fallback = fallbacks[Date.now() % fallbacks.length]
       try {

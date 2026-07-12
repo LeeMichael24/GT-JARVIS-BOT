@@ -98,6 +98,11 @@ const scripts = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/project-scripts', () => scripts)
 
+vi.mock('@/lib/agent-settings', () => ({
+  getAgentSettings: vi.fn(async () => ({ emoji_policy: 'minimal', learning_sensitivity: 'high', formality_default: 'tu', custom_instructions: '', reflection_enabled: true })),
+  DEFAULT_SETTINGS: { emoji_policy: 'minimal', learning_sensitivity: 'high', formality_default: 'tu', custom_instructions: '', reflection_enabled: true },
+}))
+
 import { POST } from '@/app/api/webhook/whatsapp/route'
 
 const SECRET = 'test_secret'

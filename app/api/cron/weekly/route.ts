@@ -24,7 +24,7 @@ export async function GET(request: Request): Promise<Response> {
   ])
 
   const lines = [
-    '📊 Reporte semanal de Daniela',
+    'Reporte semanal de Daniela',
     '',
     `Esta semana atendí ${funnel.total} leads nuevos.`,
     `${funnel.interested} mostraron interés real, ${funnel.qualified} quedaron calificados.`,
@@ -49,7 +49,7 @@ export async function GET(request: Request): Promise<Response> {
     lines.push('', `Proyectos más pedidos: ${top}.`)
   }
 
-  lines.push('', 'Detalle completo en el panel 👉 /panel/dashboard')
+  lines.push('', 'Detalle completo en el panel: /panel/dashboard')
   const report = lines.join('\n')
 
   try {

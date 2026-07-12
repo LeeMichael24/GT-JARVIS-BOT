@@ -2,6 +2,8 @@ import { runDailyRadar, runRecontactRules } from '@/lib/proactive/engine'
 import { aggregateDailyMetrics } from '@/lib/agent-brain'
 import { getNeglectedALeads } from '@/lib/analytics'
 import { syncProjectMediaFromEcosystem } from '@/lib/media-sync'
+import { runNightlyReflection } from '@/lib/reflection'
+import { getAgentSettings } from '@/lib/agent-settings'
 import { sendText } from '@/services/whatsapp/client'
 
 export const maxDuration = 60
@@ -35,11 +37,11 @@ export async function GET(request: Request): Promise<Response> {
     const ceoPhone = process.env.CEO_PHONE_NUMBER
     if (neglected.length > 0 && ceoPhone) {
       const lines = [
-        `⏰ ${neglected.length} lead${neglected.length > 1 ? 's' : ''} calificado${neglected.length > 1 ? 's' : ''} A sin actividad +48h:`,
+        `${neglected.length} lead${neglected.length > 1 ? 's' : ''} calificado${neglected.length > 1 ? 's' : ''} A sin actividad +48h:`,
         '',
         ...neglected.map(l => `· ${l.name ?? l.phone}${l.project_interest ? ` (${l.project_interest})` : ''} — ${Math.round(l.hoursIdle / 24)}d sin hablar`),
         '',
-        'Dinero enfriándose — un mensaje tuyo puede revivirlos 👉 /panel',
+        'Dinero enfriándose — un mensaje tuyo puede revivirlos: /panel',
       ]
       await sendText(ceoPhone, lines.join('\n'), { typingDelay: false })
       dealWarnings = { alerted: neglected.length }
@@ -54,6 +56,12 @@ export async function GET(request: Request): Promise<Response> {
     error: e instanceof Error ? e.message : 'media sync failed',
   }))
 
-  console.log('[cron/daily]', JSON.stringify({ radar, rules, metrics, dealWarnings, mediaSync }))
-  return Response.json({ radar, rules, metrics, dealWarnings, mediaSync })
+  // Reflexión nocturna: Daniela aprende sola de las conversaciones del día
+  const settings = await getAgentSettings()
+  const reflection = settings.reflection_enabled
+    ? await runNightlyReflection()
+    : { skipped: 'reflection_disabled' as const }
+
+  console.log('[cron/daily]', JSON.stringify({ radar, rules, metrics, dealWarnings, mediaSync, reflection }))
+  return Response.json({ radar, rules, metrics, dealWarnings, mediaSync, reflection })
 }

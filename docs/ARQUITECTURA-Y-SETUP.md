@@ -198,7 +198,45 @@ Ninguna se guarda en git — el `.gitignore` excluye `.env*` sin excepciones. En
 
 ---
 
-## 11. Documentos relacionados
+## 11. 🧩 Mapa modular — QUÉ tocar cuando el sistema crezca
+
+El sistema quedó organizado en capas con responsabilidades únicas. Esta tabla es la brújula: "quiero cambiar X → toco Y".
+
+| Quiero… | Módulo | Archivo(s) |
+|---------|--------|------------|
+| Cambiar el CARÁCTER de Daniela (personalidad base) | Prompt core | `services/claude/prompts.ts` |
+| Ajustar comportamiento SIN deploy (emojis, trato, aprendizaje, instrucciones extra) | **Config viva** | tabla `agent_settings` (Supabase) |
+| Guiones/parámetros por proyecto | Guiones | Panel → Guiones (tabla `project_scripts`) |
+| Conocimiento del negocio | Cerebro | Panel → Conocimiento (tabla `agent_brain`) |
+| Cuándo escalar | Escalamiento | Panel → Escalamiento (tabla `escalation_rules`) |
+| Material a enviar | Media | tabla `project_media` + sync Ecosistema (`lib/media-sync.ts`) |
+| Aprendizaje automático | Reflexión | `lib/reflection.ts` (nocturno) + `brain_observations` (inline) |
+| Tiempos (debounce, tipeo) | Timing | `lib/debounce.ts` + `calculateTypingDelay` en `services/whatsapp/client.ts` |
+| Presupuestos del prompt (tokens/costo) | Budgets | `BRAIN_PROMPT_BUDGET_CHARS` (`lib/agent-brain.ts`), `PLAYBOOK_PROMPT_BUDGET_CHARS` (`lib/knowledge-base.ts`) |
+| El modelo de IA / parámetros | Motor | `services/claude/client.ts` (`MODEL`, `MAX_TOKENS`, `temperature`) |
+| Scoring de leads | Scoring | `lib/lead-scoring.ts` |
+| Métricas del dashboard | Analytics | `lib/analytics.ts` |
+| El flujo del mensaje (orquestación) | Pipeline | `app/api/webhook/whatsapp/route.ts` |
+| Canal WhatsApp (envíos, plantillas) | Adaptador WA | `services/whatsapp/client.ts` |
+| Catálogo de propiedades | Adaptador catálogo | `services/projects/gt-api.ts` |
+
+**Regla de crecimiento:** contenido y comportamiento → base de datos (sin deploy). Estructura y canal → código. Si un ajuste se repite seguido, se convierte en una perilla de `agent_settings`.
+
+## 12. 📦 Checklist para CLONAR el bot a otro negocio
+
+Para replicar Daniela para otra empresa (otro rubro incluso), lo ÚNICO que cambia:
+
+1. **Identidad** — nombre del agente y empresa en `services/claude/prompts.ts` (bloque IDENTIDAD) y `formatNotification`.
+2. **Catálogo** — reemplazar `services/projects/gt-api.ts` por el adaptador del inventario del nuevo negocio (misma interfaz: `getAllProjects()` → lista con name/price/description).
+3. **Detección de proyecto** — sinónimos del rubro en `SYNONYMS` (gt-api.ts).
+4. **Variables de entorno** — las 14 de la sección 8 con las cuentas nuevas (Meta, Supabase, OpenAI).
+5. **Base de datos** — correr las migraciones 002→009 en el Supabase nuevo.
+6. **Contenido** — sembrar: playbook (`knowledge_base`), cerebro (`agent_brain`), guiones (`project_scripts`), reglas (`escalation_rules`), settings (`agent_settings`).
+7. **Meta** — app nueva + número + webhook + plantillas (manual `MANUAL-META-OPERACION.md`).
+
+Todo lo demás (pipeline, debounce, scoring, reflexión, panel, métricas) funciona igual sin tocar una línea.
+
+## 13. Documentos relacionados
 
 - `GUIA-MAESTRA-BOT-SDR.md` — checklist de lanzamiento + bitácora de 19 problemas resueltos.
 - `AUDITORIA-ENTERPRISE-2026-06.md` — auditoría técnica (confiabilidad, seguridad).

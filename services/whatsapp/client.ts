@@ -115,7 +115,7 @@ export function formatNotification(params: NotificationParams): string {
 
   if (isEscalation) {
     const lines = [
-      '🚨 LEAD HOT — Acción inmediata',
+      'LEAD HOT — Acción inmediata',
       '',
       `Cliente: ${leadName} (+${leadPhone})`,
       `Tipo: ${clientLabel}`,
@@ -123,12 +123,12 @@ export function formatNotification(params: NotificationParams): string {
     if (action.reason) lines.push(`Contexto: ${action.reason}`)
     if (dealSummary) lines.push(`Deal: ${dealSummary}`)
     lines.push(`Daniela le dijo: "${botReply.slice(0, 200)}"`)
-    lines.push('', '⚡ Este cliente está listo para cerrar.')
+    lines.push('', 'Este cliente está listo para cerrar.')
     return lines.join('\n')
   }
 
   const lines = [
-    '🔔 Daniela necesita tu apoyo',
+    'Daniela necesita tu apoyo',
     '',
     `Cliente: ${leadName} (+${leadPhone})`,
   ]

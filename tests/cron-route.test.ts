@@ -21,6 +21,16 @@ const mediaSync = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/media-sync', () => mediaSync)
 
+const reflection = vi.hoisted(() => ({
+  runNightlyReflection: vi.fn(async () => ({ learned: 0, conversations: 0 })),
+}))
+vi.mock('@/lib/reflection', () => reflection)
+
+const agentSettings = vi.hoisted(() => ({
+  getAgentSettings: vi.fn(async () => ({ emoji_policy: 'minimal', learning_sensitivity: 'high', formality_default: 'tu', custom_instructions: '', reflection_enabled: true })),
+}))
+vi.mock('@/lib/agent-settings', () => agentSettings)
+
 const wa = vi.hoisted(() => ({
   sendText: vi.fn(async () => 'wamid.warn1'),
 }))
@@ -62,6 +72,7 @@ describe('cron daily', () => {
       metrics: undefined,
       dealWarnings: { alerted: 0 },
       mediaSync: { synced: 0 },
+      reflection: { learned: 0, conversations: 0 },
     })
   })
 
