@@ -104,6 +104,7 @@ vi.mock('@/lib/agent-settings', () => ({
 }))
 
 import { POST } from '@/app/api/webhook/whatsapp/route'
+import { getAllProjects } from '@/services/projects/gt-api'
 
 const SECRET = 'test_secret'
 process.env.WA_APP_SECRET = SECRET
@@ -328,6 +329,106 @@ describe('webhook con bot activo', () => {
     expect(sent[1]).toContain('cuénteme un poco')
     expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
       role: 'assistant', content: expect.stringContaining('cuénteme un poco'),
+    }))
+  })
+
+  it('entrega duplicada del webhook (carrera): el perdedor NO llama al modelo ni responde doble', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    // El insert del mensaje choca con el índice único → otro worker ya lo procesa
+    db.saveConversation.mockResolvedValueOnce({ duplicate: true })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(ai.callClaude).not.toHaveBeenCalled()
+    expect(wa.sendText).not.toHaveBeenCalled()
+  })
+
+  it('si el envío del reply FALLA tras reintentos, NO guarda la respuesta — la ráfaga queda abierta', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    wa.sendText.mockRejectedValueOnce(new Error('WhatsApp API 429'))
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    // Se guardó SOLO el mensaje del usuario — jamás una respuesta que el cliente no recibió
+    const assistantSaves = db.saveConversation.mock.calls.filter(
+      c => (c[0] as { role?: string }).role === 'assistant'
+    )
+    expect(assistantSaves).toHaveLength(0)
+  })
+
+  it('stage null del modelo (inválido/ausente) conserva el stage actual del lead — nunca regresa a new', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: '¡Hola!', stage: null, name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      qualified: false, schedule_meeting: null, opt_out: false,
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
+    })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    // baseLead.stage = 'warm' → se conserva
+    expect(db.updateLead).toHaveBeenCalledWith('lead-1', expect.objectContaining({ stage: 'warm' }))
+  })
+
+  it('el catálogo GT caído NO tumba la respuesta (allSettled aísla cada fuente)', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sigo interesado', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    vi.mocked(getAllProjects).mockRejectedValueOnce(new Error('GT API caída'))
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(wa.sendText).toHaveBeenCalledWith('50312345678', '¡Hola!')
+  })
+
+  it('la calificación hace merge: null del modelo NO borra datos ya capturados', async () => {
+    const qualifiedLead = {
+      ...baseLead, bot_active: true,
+      qualification_data: { purpose: 'inversion', budget_ok: true, timeline: null, financing_needed: null, decision_maker: null },
+    }
+    db.upsertLead.mockResolvedValue(qualifiedLead)
+    db.getLeadById.mockResolvedValue(qualifiedLead)
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Lo quiero ya', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: '¡Hola!', stage: 'hot', name_captured: null,
+      // El modelo solo capturó timeline en este turno — el resto viene null
+      qualification_data: { purpose: null, budget_ok: null, timeline: 'inmediato', financing_needed: null, decision_maker: null },
+      qualified: false, schedule_meeting: null, opt_out: false,
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
+    })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(db.updateLead).toHaveBeenCalledWith('lead-1', expect.objectContaining({
+      stage: 'hot',
+      qualification_data: expect.objectContaining({
+        purpose: 'inversion',      // conservado del lead
+        budget_ok: true,           // conservado del lead
+        timeline: 'inmediato',     // nuevo del modelo
+      }),
     }))
   })
 

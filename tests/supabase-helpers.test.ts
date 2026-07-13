@@ -50,6 +50,32 @@ describe('saveConversation con rol human', () => {
   })
 })
 
+describe('saveConversation — dedup por wa_message_id', () => {
+  it('devuelve duplicate:false en un insert nuevo', async () => {
+    const res = await saveConversation({ leadId: 'lead-1', role: 'user', content: 'Hola', waMessageId: 'wamid.1' })
+    expect(res).toEqual({ duplicate: false })
+  })
+
+  it('devuelve duplicate:true cuando choca el índice único (23505) — entrega duplicada del webhook', async () => {
+    result.error = { code: '23505', message: 'duplicate key value violates unique constraint' }
+    const res = await saveConversation({ leadId: 'lead-1', role: 'user', content: 'Hola', waMessageId: 'wamid.1' })
+    expect(res).toEqual({ duplicate: true })
+  })
+
+  it('devuelve duplicate:true también cuando el error solo menciona "unique"', async () => {
+    result.error = { code: '', message: 'violates unique constraint idx_conversations_wa_message_id' }
+    const res = await saveConversation({ leadId: 'lead-1', role: 'user', content: 'Hola', waMessageId: 'wamid.1' })
+    expect(res).toEqual({ duplicate: true })
+  })
+
+  it('lanza en errores que NO son duplicado (no se tragan fallos reales)', async () => {
+    result.error = { code: '08006', message: 'connection refused' }
+    await expect(
+      saveConversation({ leadId: 'lead-1', role: 'user', content: 'Hola' })
+    ).rejects.toThrow('saveConversation')
+  })
+})
+
 describe('getLatestUserMessageAt', () => {
   it('devuelve el created_at del último mensaje del cliente', async () => {
     result.data = [{ created_at: '2026-06-10T12:00:00Z' }]

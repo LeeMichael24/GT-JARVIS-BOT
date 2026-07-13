@@ -65,7 +65,7 @@ export async function saveConversation(params: {
   content: string
   waMessageId?: string
   sentBy?: string
-}): Promise<void> {
+}): Promise<{ duplicate: boolean }> {
   const supabase = getServiceClient()
   const { error } = await supabase
     .from('conversations')
@@ -77,10 +77,16 @@ export async function saveConversation(params: {
       sent_by: params.sentBy ?? null,
     })
 
-  // Ignore unique constraint violation (duplicate message)
-  if (error && !error.message.includes('unique') && !error.code?.includes('23505')) {
+  if (error) {
+    // Violación del índice único en wa_message_id: entrega duplicada del
+    // webhook (Meta reintenta). Lo reportamos para que el caller pueda
+    // CORTAR el procesamiento — antes se ignoraba y el bot respondía doble.
+    if (error.code?.includes('23505') || error.message.includes('unique') || error.message.includes('duplicate')) {
+      return { duplicate: true }
+    }
     throw new Error(`saveConversation: ${error.message}`)
   }
+  return { duplicate: false }
 }
 
 export async function getConversationHistory(leadId: string, limit = 15): Promise<Conversation[]> {

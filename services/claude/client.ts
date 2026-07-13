@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import type {
-  ClaudeResponse, Conversation, MeetingRequest, QualificationData,
+  ClaudeResponse, Conversation, LeadStage, MeetingRequest, QualificationData,
   AgentAction, AgentActionType, DealSummary, DealSignals,
   BrainObservation, InteractiveButton, SendMedia,
 } from '@/types'
@@ -55,19 +55,11 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     throw new Error('Invalid Claude response: missing or invalid reply field')
   }
 
-  const emptyQual: QualificationData = {
-    purpose: null,
-    budget_ok: null,
-    timeline: null,
-    financing_needed: null,
-    decision_maker: null,
-  }
-
   return {
     reply: parsed.reply,
-    stage: parsed.stage ?? 'new',
+    stage: parseStage(parsed.stage),
     name_captured: parsed.name_captured ?? null,
-    qualification_data: parsed.qualification_data ?? emptyQual,
+    qualification_data: parseQualificationData(parsed.qualification_data),
     qualified: parsed.qualified ?? false,
     schedule_meeting: parseMeetingRequest(parsed.schedule_meeting),
     opt_out: parsed.opt_out ?? false,
@@ -87,6 +79,42 @@ function parseExtraMessages(raw: unknown): string[] {
     .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
     .slice(0, 2)
     .map(m => m.trim().slice(0, 900))
+}
+
+// Stage fuera de la whitelist u omitido → null: el orquestador conserva el
+// stage anterior del lead en vez de persistir un valor alucinado en el CRM
+function parseStage(raw: unknown): LeadStage | null {
+  const validStages: LeadStage[] = ['new', 'warm', 'hot', 'cold']
+  if (validStages.includes(raw as LeadStage)) return raw as LeadStage
+  if (raw != null) console.warn(`[claude] stage inválido del modelo: ${JSON.stringify(raw)}`)
+  return null
+}
+
+// Valida cada campo contra sus valores permitidos (QualificationData en types
+// y el response format del prompt deben coincidir). Campo inválido → null,
+// los campos válidos restantes se conservan. Booleanos deben ser booleanos
+// reales ("true" como string no cuenta). Nunca lanza — el parser es fail-safe.
+function parseQualificationData(raw: unknown): QualificationData {
+  const empty: QualificationData = {
+    purpose: null,
+    budget_ok: null,
+    timeline: null,
+    financing_needed: null,
+    decision_maker: null,
+  }
+  if (!raw || typeof raw !== 'object') return empty
+  const q = raw as Record<string, unknown>
+  const validPurpose = ['vivienda_propia', 'inversion', 'ambos'] as const
+  const validTimeline = ['inmediato', '3_meses', '6_meses', 'explorando'] as const
+  return {
+    purpose: validPurpose.includes(q.purpose as typeof validPurpose[number])
+      ? (q.purpose as QualificationData['purpose']) : null,
+    budget_ok: typeof q.budget_ok === 'boolean' ? q.budget_ok : null,
+    timeline: validTimeline.includes(q.timeline as typeof validTimeline[number])
+      ? (q.timeline as QualificationData['timeline']) : null,
+    financing_needed: typeof q.financing_needed === 'boolean' ? q.financing_needed : null,
+    decision_maker: typeof q.decision_maker === 'boolean' ? q.decision_maker : null,
+  }
 }
 
 function parseAgentAction(raw: unknown): AgentAction | null {

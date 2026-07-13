@@ -1,6 +1,6 @@
 # Daniela — Arquitectura, Configuración y Replicación
 
-Guía técnica completa del bot SDR de WhatsApp de Grupo Terranova. Cubre cómo está construido, qué usa por fuera, cómo conectamos Meta, y cómo replicarlo desde cero. Documento vivo — última actualización: 7 julio 2026.
+Guía técnica completa del bot SDR de WhatsApp de Grupo Terranova. Cubre cómo está construido, qué usa por fuera, cómo conectamos Meta, y cómo replicarlo desde cero. Documento vivo — última actualización: 12 julio 2026.
 
 ---
 
@@ -26,7 +26,7 @@ No es un árbol de botones: cada respuesta la genera un modelo de IA (GPT-4o) co
 | Calendario | **Google Calendar API** | googleapis 173 | Agenda citas automáticas |
 | Estilos | **Tailwind CSS** | 4 | UI |
 | Lenguaje | **TypeScript** | 5 | Todo el código |
-| Tests | **Vitest** | 4.1.7 | 275+ tests unitarios |
+| Tests | **Vitest** | 4.1.7 | 311 tests unitarios |
 
 > **Nota de nombres:** la carpeta `services/claude/` se llama así por legado, pero **usa OpenAI GPT-4o**, no Claude. El modelo está fijado en `services/claude/client.ts` (`MODEL = 'gpt-4o'`). Es solo el nombre de la carpeta.
 
@@ -113,6 +113,11 @@ El esquema se crea corriendo las migraciones **en orden** en el SQL Editor de Su
 | `004_proactive.sql` | Campañas, plantillas, reglas de recontacto |
 | `005_sdr_agent.sql` | `deal_summaries` (memoria), `sequences`, `agent_brain` (cerebro), métricas |
 | `006_escalation_rules.sql` | Reglas de escalación configurables desde el panel |
+| `007_project_scripts_media.sql` | `project_scripts` (guiones por proyecto) + `project_media` (material a enviar) |
+| `008_media_source.sql` | Columnas `source`/`project_slug` en `project_media` (distingue media manual vs. sincronizada del Ecosistema) |
+| `009_agent_settings.sql` | `agent_settings` — perillas de comportamiento vivas (emojis, trato, aprendizaje, instrucciones del equipo) |
+
+> ⚠️ **Estado go-live:** las migraciones **008 y 009 aún NO están corridas en Supabase.** Hasta correrlas, el tab *Ajustes* del panel muestra un aviso ámbar y el sync de media no distingue origen. El código degrada con valores por defecto (no crashea), pero para que TODO sea configurable desde el panel hay que correrlas. SQL combinado listo para pegar en el SQL Editor.
 
 Todas las tablas tienen **RLS (Row Level Security)** activado — el panel usa la llave `anon` con políticas; el bot usa la `service_role` (solo servidor, nunca en el browser).
 
@@ -124,11 +129,20 @@ Definidos en `vercel.json`:
 
 | Ruta | Horario (UTC) | Qué hace |
 |------|---------------|----------|
-| `/api/cron/daily` | `0 16 * * *` (10am SV) | Radar de propiedades nuevas + reglas de recontacto + alerta de leads "A" abandonados |
+| `/api/cron/daily` | `0 16 * * *` (10am SV) | Radar de propiedades nuevas + reglas de recontacto + alerta de leads "A" abandonados + **sync de media del Ecosistema** + **reflexión nocturna (aprendizaje autónomo)** |
 | `/api/cron/sequences` | `30 15 * * *` (9:30am SV) | Envía seguimientos programados (usa plantilla HSM fuera de la ventana de 24h) |
 | `/api/cron/weekly` | `0 14 * * 1` (lunes 8am SV) | Reporte semanal de Daniela al CEO |
 
-> ⚠️ **Plan Hobby de Vercel = máximo 1 cron por día.** Un cron más frecuente (`0 */2 * * *`) hace que Vercel **rechace TODO deploy en silencio**. Por eso todos son diarios. Para mayor frecuencia: plan Pro, o un pinger externo (cron-job.org) que llame al endpoint con `Authorization: Bearer $CRON_SECRET`. Todos los crons están protegidos con ese secreto.
+> ⚠️ **TRAMPA DE DEPLOY — Plan Hobby de Vercel = máximo 1 ejecución de cron por día.** Una expresión más frecuente (`0 */2 * * *`, `0 * * * *`, etc.) hace que Vercel **rechace TODO deploy en silencio** — sin build ni error visible en el dashboard. Fue la **causa raíz de 3 semanas sin deploys**. Por eso los tres crons son diarios o menos. Regla de oro: en Hobby, jamás pongas una expresión sub-diaria en `vercel.json`.
+
+> 🧠 **IMPACTO EN EL PRODUCTO — hay que cambiar el cron para que Daniela aprenda más rápido.** El aprendizaje (reflexión), el sync de media y las secuencias de seguimiento viven en crons **diarios**. En el plan gratis (Hobby) eso significa que **Daniela debe esperar TODO un día para analizar las conversaciones y mejorar**, y un seguimiento programado sale al día siguiente, no a las horas. Es aceptable para arrancar, pero es el techo del plan gratis y hay que tenerlo presente.
+>
+> **Para acelerarlo (recomendado al escalar) → subir a Vercel Pro** y cambiar `vercel.json` a cadencia más frecuente. Ejemplos:
+> - Reflexión/aprendizaje cada 6h: `0 */6 * * *` → Daniela mejora **4× más rápido**.
+> - Secuencias cada hora: `0 * * * *` → seguimientos a las horas, no al otro día.
+> - Sync de media cada hora → un PDF nuevo en el Ecosistema llega casi al instante.
+>
+> **Puente gratis (sin pagar Pro):** un pinger externo — [cron-job.org](https://cron-job.org) — que llame a cada endpoint con `Authorization: Bearer $CRON_SECRET` en la frecuencia que quieras. Los tres endpoints ya están protegidos con ese secreto y listos para dispararse las veces que sea; el pinger vive fuera de Vercel, así que la restricción de Hobby no aplica. Es el camino recomendado hasta que se justifique Pro.
 
 ---
 

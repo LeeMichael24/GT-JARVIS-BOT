@@ -48,6 +48,14 @@ function detectGTUrlSection(text: string): 'inversiones' | 'propiedades' | null 
   return m[1].toLowerCase() as 'inversiones' | 'propiedades'
 }
 
+// Desempaqueta un resultado de Promise.allSettled con fallback seguro.
+// Una fuente caída (p.ej. el GT API externo) NO debe arrastrar a las demás.
+function settle<T>(r: PromiseSettledResult<T>, fallback: T, label: string): T {
+  if (r.status === 'fulfilled') return r.value
+  console.warn(`[processMessage] ${label} falló — sigo con fallback:`, r.reason instanceof Error ? r.reason.message : r.reason)
+  return fallback
+}
+
 // GET: WhatsApp webhook verification handshake
 export async function GET(request: Request): Promise<Response> {
   const { searchParams } = new URL(request.url)
@@ -87,30 +95,39 @@ export async function POST(request: Request): Promise<Response> {
 
 async function processMessage(parsed: ParsedWebhook): Promise<void> {
   try {
-    // 1a. Resolve message body — transcribe audio, describe image, or skip unsupported types
-    let messageBody = parsed.body
-    if (parsed.messageType === 'audio' && parsed.mediaId) {
-      try {
-        const { buffer, mimeType } = await downloadMedia(parsed.mediaId)
-        messageBody = await transcribeAudio(buffer, mimeType)
-        console.log(`[processMessage] Transcribed audio: "${messageBody.slice(0, 100)}..."`)
-      } catch (err) {
-        console.error('[processMessage] Audio transcription failed:', err instanceof Error ? err.message : err)
-        messageBody = '[Nota de voz — no se pudo transcribir]'
+    // 1. Filtro rápido de tipos NO soportados — lo barato primero; el trabajo
+    //    caro (descargar/transcribir audio) va DESPUÉS del dedup para no
+    //    pagarlo dos veces en entregas duplicadas del webhook.
+    const isAudio = parsed.messageType === 'audio' && !!parsed.mediaId
+    const isImage = parsed.messageType === 'image' && !!parsed.mediaId
+    if (!isAudio && !isImage) {
+      if (parsed.messageType === 'interactive') {
+        // Button reply — body was already extracted by parseWebhook; skip if somehow empty
+        if (!parsed.body.trim()) return
+      } else if (parsed.messageType !== 'text' || !parsed.body.trim()) {
+        return
       }
-    } else if (parsed.messageType === 'image' && parsed.mediaId) {
-      messageBody = '[El cliente envió una imagen]'
-    } else if (parsed.messageType === 'interactive') {
-      // Button reply — body was already extracted by parseWebhook; skip if somehow empty
-      if (!parsed.body.trim()) return
-    } else if (parsed.messageType !== 'text' || !parsed.body.trim()) {
-      return
     }
 
     // 2. Deduplicate: ignore already-processed messages
     if (await isMessageProcessed(parsed.messageId)) {
       console.log(`[processMessage] Duplicate message ${parsed.messageId}, skipping`)
       return
+    }
+
+    // 2b. Resolve message body — transcribe audio or describe image
+    let messageBody = parsed.body
+    if (isAudio) {
+      try {
+        const { buffer, mimeType } = await downloadMedia(parsed.mediaId!)
+        messageBody = await transcribeAudio(buffer, mimeType)
+        console.log(`[processMessage] Transcribed audio: "${messageBody.slice(0, 100)}..."`)
+      } catch (err) {
+        console.error('[processMessage] Audio transcription failed:', err instanceof Error ? err.message : err)
+        messageBody = '[Nota de voz — no se pudo transcribir]'
+      }
+    } else if (isImage) {
+      messageBody = '[El cliente envió una imagen]'
     }
 
     // 2a. Mark as read immediately (blue checkmarks in WhatsApp)
@@ -147,12 +164,21 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // 4. Save the incoming user message ALWAYS and immediately: it must survive
     //    a human takeover, and other workers in the same burst need to see it
     //    during the debounce window.
-    await saveConversation({
+    const savedUserMsg = await saveConversation({
       leadId: lead.id,
       role: 'user',
       content: messageBody,
       waMessageId: parsed.messageId,
     })
+
+    // 4-bis. Carrera de entrega duplicada (TOCTOU): dos entregas del mismo
+    // wa_message_id pueden pasar el chequeo isMessageProcessed a la vez.
+    // El índice único decide UN ganador — el perdedor sale aquí para que
+    // el cliente nunca reciba la respuesta dos veces.
+    if (savedUserMsg?.duplicate) {
+      console.log(`[processMessage] Mensaje duplicado ${parsed.messageId} (carrera) — otro worker lo está procesando`)
+      return
+    }
 
     // 4a. Client responded — pause any active follow-up sequences
     try {
@@ -214,42 +240,47 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     const lastBotMessage = extractLastBotMessage(history)
     const gtUrlSection = detectGTUrlSection(combinedBody)
 
-    // 7. Fetch GT project catalog + sales playbook + lead source + escalation rules in parallel
-    let projects: Awaited<ReturnType<typeof getAllProjects>> = []
-    let salesPlaybook: string | null = null
-    let brainLearnings: string = ''
+    // 7. Fetch GT project catalog + sales playbook + lead source + escalation rules in parallel.
+    //    allSettled: cada fuente cae por separado — antes UN rechazo (p.ej. el GT API
+    //    externo caído) vaciaba también playbook, cerebro, guiones, media y settings.
     let adContext: string | null = null
     let escalationOverride: string | null = null
     let projectScript: string | null = null
-    let mediaItems: ProjectMediaItem[] = []
-    let agentSettings: AgentSettings = DEFAULT_SETTINGS
     const existingDeal = existingDealForDebounce
+
+    const [projectsR, playbookR, brainR, leadSourceR, activeAdsR, escalationR, scriptsR, mediaR, settingsR] = await Promise.allSettled([
+      getAllProjects(),
+      getPlaybook(),
+      getHighConfidenceLearnings(),
+      getLeadSource(lead.id),
+      getActiveAdCampaigns(),
+      getActiveEscalationRules(),
+      getActiveProjectScripts(),
+      getAllProjectMediaItems(),
+      getAgentSettings(),
+    ])
+
+    const projects = settle(projectsR, [], 'catálogo GT')
+    const playbookEntries = settle(playbookR, [], 'playbook')
+    const brainEntries = settle(brainR, [], 'cerebro')
+    const leadSource = settle(leadSourceR, null, 'fuente del lead')
+    const activeAds = settle(activeAdsR, [], 'campañas activas')
+    const escalationRules = settle(escalationR, [], 'reglas de escalación')
+    const scripts = settle(scriptsR, [], 'guiones')
+    const mediaItems: ProjectMediaItem[] = settle(mediaR, [], 'media')
+    const agentSettings: AgentSettings = settle(settingsR, DEFAULT_SETTINGS, 'settings')
+
+    // Guion oficial: activo si el mensaje menciona el proyecto O si el lead
+    // ya venía en ese guion (project_interest) — el guion persiste toda la conversación
+    const matchedScript = matchProjectScript(scripts, combinedBody, lead.project_interest)
+    if (matchedScript) {
+      projectScript = formatScriptForPrompt(matchedScript)
+      console.log(`[processMessage] Guion activo: ${matchedScript.project_name}`)
+    }
+    const salesPlaybook = formatPlaybookForPrompt(playbookEntries)
+    const brainLearnings = formatLearningsForPrompt(brainEntries)
+
     try {
-      const [projectsResult, playbookEntries, brainEntries, leadSource, activeAds, escalationRules, scripts, mediaResult, settingsResult] = await Promise.all([
-        getAllProjects(),
-        getPlaybook(),
-        getHighConfidenceLearnings(),
-        getLeadSource(lead.id),
-        getActiveAdCampaigns(),
-        getActiveEscalationRules(),
-        getActiveProjectScripts(),
-        getAllProjectMediaItems(),
-        getAgentSettings(),
-      ])
-      mediaItems = mediaResult
-      agentSettings = settingsResult
-
-      // Guion oficial: activo si el mensaje menciona el proyecto O si el lead
-      // ya venía en ese guion (project_interest) — el guion persiste toda la conversación
-      const matchedScript = matchProjectScript(scripts, combinedBody, lead.project_interest)
-      if (matchedScript) {
-        projectScript = formatScriptForPrompt(matchedScript)
-        console.log(`[processMessage] Guion activo: ${matchedScript.project_name}`)
-      }
-      projects = projectsResult
-      salesPlaybook = formatPlaybookForPrompt(playbookEntries)
-      brainLearnings = formatLearningsForPrompt(brainEntries)
-
       if (leadSource && leadSource.source_type !== 'organic') {
         const matchedCampaign = leadSource.campaign_id
           ? await matchAdCampaign(leadSource.campaign_id)
@@ -258,15 +289,15 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       } else {
         adContext = formatActiveAdsForPrompt(activeAds)
       }
-
-      // 7b. Check escalation rules against the user's message
-      const matchedRules = matchKeywordRules(combinedBody, escalationRules)
-      if (matchedRules.length > 0) {
-        escalationOverride = formatEscalationRulesForPrompt(matchedRules)
-        console.log(`[processMessage] Escalation rules matched: ${matchedRules.map(r => r.trigger_value).join(', ')}`)
-      }
     } catch (err) {
-      console.warn('[processMessage] Could not fetch GT projects/playbook:', err)
+      console.warn('[processMessage] Contexto de ads falló — sigo sin él:', err instanceof Error ? err.message : err)
+    }
+
+    // 7b. Check escalation rules against the user's message
+    const matchedRules = matchKeywordRules(combinedBody, escalationRules)
+    if (matchedRules.length > 0) {
+      escalationOverride = formatEscalationRulesForPrompt(matchedRules)
+      console.log(`[processMessage] Escalation rules matched: ${matchedRules.map(r => r.trigger_value).join(', ')}`)
     }
 
     console.log(`[processMessage] Intent: ${intent} | GT URL: ${gtUrlSection ?? 'none'} | History: ${history.length} msgs`)
@@ -347,6 +378,11 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     }
     console.log('[processMessage] Parsed action:', JSON.stringify(claudeResponse.agent_action))
 
+    // Stage efectivo: el del modelo ya viene validado (whitelist en el parser).
+    // null = ausente/inválido → conservamos el stage actual del lead, NUNCA
+    // regresamos a 'new' por un capricho del modelo.
+    const effectiveStage = claudeResponse.stage ?? lead.stage
+
     // 9b. Save deal summary for future conversations, merging in the burst pattern update
     if (claudeResponse.deal_summary) {
       try {
@@ -416,8 +452,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // 10c. Create follow-up sequence if agent decided one is needed
     if (action?.type === 'follow_up_needed') {
       try {
-        const seqType = claudeResponse.stage === 'hot' ? 'hot_close' as const
-          : claudeResponse.stage === 'cold' ? 'cold_reactivation' as const
+        const seqType = effectiveStage === 'hot' ? 'hot_close' as const
+          : effectiveStage === 'cold' ? 'cold_reactivation' as const
           : 'post_conversation' as const
         await createSequence(lead.id, seqType, {
           summary: claudeResponse.deal_summary?.summary ?? claudeResponse.reply.slice(0, 200),
@@ -431,16 +467,30 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     }
 
     // 11. Update lead with GPT-4o's analysis
-    if (claudeResponse.stage !== lead.stage) {
+    if (effectiveStage !== lead.stage) {
       await logActivity({
         actorType: 'bot', action: 'stage_change', entityType: 'lead', entityId: lead.id,
-        details: { from: lead.stage, to: claudeResponse.stage },
+        details: { from: lead.stage, to: effectiveStage },
       })
     }
+
+    // Calificación con merge que NUNCA borra: un campo que el modelo devuelve
+    // null (no capturado / inválido) conserva el valor ya guardado del lead.
+    // Un valor nuevo válido SÍ actualiza (el cliente puede corregirse).
+    const mergedQualification = { ...claudeResponse.qualification_data }
+    const prevQual = lead.qualification_data as typeof mergedQualification | null
+    if (prevQual) {
+      for (const key of Object.keys(mergedQualification) as (keyof typeof mergedQualification)[]) {
+        if (mergedQualification[key] === null || mergedQualification[key] === undefined) {
+          ;(mergedQualification as Record<keyof typeof mergedQualification, unknown>)[key] = prevQual[key] ?? null
+        }
+      }
+    }
+
     await updateLead(lead.id, {
-      stage: claudeResponse.stage,
+      stage: effectiveStage,
       ...(claudeResponse.name_captured ? { name: claudeResponse.name_captured } : {}),
-      qualification_data: claudeResponse.qualification_data,
+      qualification_data: mergedQualification,
       last_message_at: new Date().toISOString(),
     })
 
@@ -454,16 +504,44 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
 
     // 12. Send the reply — use interactive buttons if GPT-4o provided them
     let waMessageId: string | null = null
+    let replySent = false
     const buttons = claudeResponse.interactive_buttons
     try {
       waMessageId = buttons.length > 0
         ? await sendInteractiveButtons(parsed.from, claudeResponse.reply, buttons)
         : await sendText(parsed.from, claudeResponse.reply)
+      replySent = true
     } catch (err) {
       console.error(`[processMessage] Failed to send WA reply to ${parsed.from}:`, err instanceof Error ? err.message : err)
     }
 
-    // 12b. Send media attachment if GPT-4o requested it (from project_media DB)
+    // 12-bis. Si el envío FALLÓ tras los reintentos (429/red/Meta caída), NO
+    // guardamos la respuesta como si hubiera llegado: eso marcaría la ráfaga
+    // como contestada y el mensaje se perdería para siempre. Al salir aquí,
+    // la ráfaga queda abierta y el próximo mensaje del cliente re-dispara
+    // el flujo completo — la conversación se recupera sola.
+    if (!replySent) {
+      console.error(`[processMessage] Respuesta NO entregada al lead ${lead.id} — la ráfaga queda abierta para reintento`)
+      return
+    }
+
+    // 13. Save the bot's response ANTES de media/burbujas — el historial
+    //     conserva el orden real de la conversación: reply → media → extras
+    try {
+      await saveConversation({
+        leadId: lead.id,
+        role: 'assistant',
+        content: claudeResponse.reply,
+        waMessageId: waMessageId ?? undefined,
+      })
+    } catch (err) {
+      console.error(
+        `[processMessage] saveConversation failed — history will miss this reply:`,
+        err instanceof Error ? err.message : err
+      )
+    }
+
+    // 14. Send media attachment if GPT-4o requested it (from project_media DB)
     if (claudeResponse.send_media) {
       const projectItems = mediaForProject(mediaItems, claudeResponse.send_media.project)
       const toSend = pickMediaToSend(projectItems, claudeResponse.send_media.type)
@@ -491,7 +569,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       }
     }
 
-    // 12c. Burbujas adicionales (multi-mensaje humano / pasos dobles del guion)
+    // 15. Burbujas adicionales (multi-mensaje humano / pasos dobles del guion)
     for (const extra of claudeResponse.extra_messages ?? []) {
       try {
         // Reactivar "escribiendo..." — la espera entre burbujas se ve viva
@@ -508,22 +586,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       }
     }
 
-    // 13. Save the bot's response (even if WA send failed — the reply is still valid context)
-    try {
-      await saveConversation({
-        leadId: lead.id,
-        role: 'assistant',
-        content: claudeResponse.reply,
-        waMessageId: waMessageId ?? undefined,
-      })
-    } catch (err) {
-      console.error(
-        `[processMessage] saveConversation failed — history will miss this reply:`,
-        err instanceof Error ? err.message : err
-      )
-    }
-
-    console.log(`[processMessage] Done — lead ${lead.id} | stage: ${claudeResponse.stage} | qualified: ${claudeResponse.qualified}`)
+    console.log(`[processMessage] Done — lead ${lead.id} | stage: ${effectiveStage} | qualified: ${claudeResponse.qualified}`)
   } catch (error) {
     console.error('[processMessage] Unhandled error:', error instanceof Error ? error.message : error)
     if (error instanceof Error) console.error('[processMessage] Stack:', error.stack)

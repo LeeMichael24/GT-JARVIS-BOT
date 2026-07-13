@@ -34,6 +34,10 @@ export async function GET(request: Request): Promise<Response> {
   let sent = 0
   let skipped = 0
   let errors = 0
+  let failed = 0
+  let blockedMissingTemplate = 0
+  // Alerta UNA sola vez por corrida (no por lead) si falta la plantilla HSM
+  let missingTemplateAlerted = false
 
   for (const seq of due) {
     try {
@@ -61,22 +65,41 @@ export async function GET(request: Request): Promise<Response> {
       }
 
       // Ventana de 24h de Meta: fuera de ella el texto libre es RECHAZADO
-      // (error 131047). Fuera de ventana usamos plantilla HSM aprobada si está
-      // configurada (WA_TEMPLATE_FOLLOWUP); si no, saltamos el paso.
+      // (error 131047). Fuera de ventana la ÚNICA vía legal es una plantilla
+      // HSM aprobada (WA_TEMPLATE_FOLLOWUP).
       const lastUserAt = await getLatestUserMessageAt(seq.lead_id)
       if (!isWithin24h(lastUserAt)) {
         const tpl = process.env.WA_TEMPLATE_FOLLOWUP
         if (!tpl) {
-          console.warn(`[cron/sequences] Lead ${seq.lead_id} fuera de ventana 24h — paso omitido (configura WA_TEMPLATE_FOLLOWUP)`)
-          await advanceSequence(seq.id, seq.sequence_type as SequenceType, seq.current_step)
-          skipped++
+          // NO avanzamos el paso: queda pendiente y se reintenta en la próxima
+          // corrida, cuando la plantilla ya esté configurada. Avanzar aquí
+          // quemaría la secuencia en silencio sin contactar nunca al lead.
+          if (!missingTemplateAlerted) {
+            console.error(
+              '[cron/sequences] 🚨 WA_TEMPLATE_FOLLOWUP no está configurada: los follow-ups fuera de la ventana de 24h están BLOQUEADOS y quedan pendientes. Configura la plantilla HSM aprobada en las variables de entorno para reanudarlos.',
+            )
+            missingTemplateAlerted = true
+          }
+          blockedMissingTemplate++
           continue
         }
         const topic = (seq.context as Record<string, string>).project
           ?? lead.project_interest
           ?? 'tu consulta con Grupo Terranova'
         // {{1}}=saludo: nombre real, o "de nuevo" → plantilla lee "Hola de nuevo 😊"
-        const tplWaId = await sendTemplate(lead.phone, tpl, 'es', [lead.name ?? 'de nuevo', topic])
+        let tplWaId: string | null
+        try {
+          tplWaId = await sendTemplate(lead.phone, tpl, 'es', [lead.name ?? 'de nuevo', topic])
+        } catch (err) {
+          // Meta rechazó el envío de la plantilla: NO avanzamos el paso — queda
+          // pendiente y se reintenta en la próxima corrida del cron.
+          failed++
+          console.error(
+            `[cron/sequences] Error enviando plantilla ${tpl} para sequence ${seq.id} (lead ${seq.lead_id}):`,
+            err instanceof Error ? err.message : err,
+          )
+          continue
+        }
         await saveConversation({
           leadId: seq.lead_id,
           role: 'assistant',
@@ -149,6 +172,8 @@ Reglas:
     }
   }
 
-  console.log(`[cron/sequences] Done: ${sent} sent, ${skipped} skipped, ${errors} errors`)
-  return Response.json({ sent, skipped, errors })
+  console.log(
+    `[cron/sequences] Done: ${sent} sent, ${skipped} skipped, ${failed} failed, ${blockedMissingTemplate} bloqueados (sin plantilla), ${errors} errors`,
+  )
+  return Response.json({ sent, skipped, errors, failed, blocked_missing_template: blockedMissingTemplate })
 }

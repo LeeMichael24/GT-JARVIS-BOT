@@ -136,7 +136,9 @@ export interface LeadNote {
 
 export interface ClaudeResponse {
   reply: string
-  stage: LeadStage
+  // null = el modelo devolvió un stage inválido o lo omitió; el orquestador
+  // conserva el stage anterior del lead en vez de persistir un valor alucinado
+  stage: LeadStage | null
   name_captured: string | null
   qualification_data: QualificationData
   qualified: boolean

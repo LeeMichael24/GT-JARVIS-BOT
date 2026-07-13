@@ -2,6 +2,10 @@ import { createCache } from './cache'
 import type { GTProject } from '@/types'
 
 const ONE_HOUR = 60 * 60 * 1000
+// Timeout duro para la API de GT: si se cuelga, abortamos a los 5s en vez de
+// consumir todo el presupuesto de la función serverless (cliente sin respuesta).
+// El AbortError se propaga como cualquier otro error de fetch (los callers ya lo capturan).
+const GT_API_TIMEOUT_MS = 5000
 const projectsCache = createCache<GTProject[]>(ONE_HOUR)
 const projectCache = createCache<GTProject | null>(ONE_HOUR)
 
@@ -19,7 +23,10 @@ export async function getAllProjects(typeFilter?: string): Promise<GTProject[]> 
     const url = typeFilter
       ? `${gtApiUrl()}/listings?type=${typeFilter}`
       : `${gtApiUrl()}/listings`
-    const res = await fetch(url, { headers: gtApiHeaders() })
+    const res = await fetch(url, {
+      headers: gtApiHeaders(),
+      signal: AbortSignal.timeout(GT_API_TIMEOUT_MS),
+    })
     if (!res.ok) throw new Error(`GT API error: ${res.status} ${res.statusText}`)
     const data = await res.json() as GTProject[]
     return Array.isArray(data) ? data : []
@@ -30,6 +37,7 @@ export async function getProjectBySlug(slug: string): Promise<GTProject | null> 
   return projectCache.get(slug, async () => {
     const res = await fetch(`${gtApiUrl()}/listings/${slug}`, {
       headers: gtApiHeaders(),
+      signal: AbortSignal.timeout(GT_API_TIMEOUT_MS),
     })
     if (res.status === 404) return null
     if (!res.ok) throw new Error(`GT API error: ${res.status} ${res.statusText}`)

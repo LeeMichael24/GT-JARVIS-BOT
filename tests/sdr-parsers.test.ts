@@ -128,3 +128,88 @@ describe('parseClaudeResponse — SDR agent fields', () => {
     expect(result.interactive_buttons[0].id).toBe('btn_1')
   })
 })
+
+describe('parseClaudeResponse — validación de qualification_data', () => {
+  const base = { reply: 'Hola', stage: 'warm' }
+
+  it('qualification_data completamente válido pasa sin cambios', () => {
+    const raw = JSON.stringify({
+      ...base,
+      qualification_data: {
+        purpose: 'inversion',
+        budget_ok: true,
+        timeline: '3_meses',
+        financing_needed: false,
+        decision_maker: true,
+      },
+    })
+    const q = parseClaudeResponse(raw).qualification_data
+    expect(q).toEqual({
+      purpose: 'inversion',
+      budget_ok: true,
+      timeline: '3_meses',
+      financing_needed: false,
+      decision_maker: true,
+    })
+  })
+
+  it('un campo alucinado → null, los hermanos válidos se conservan', () => {
+    const raw = JSON.stringify({
+      ...base,
+      qualification_data: {
+        purpose: 'casa', // no existe en la whitelist
+        budget_ok: true,
+        timeline: 'inmediato',
+        financing_needed: null,
+        decision_maker: true,
+      },
+    })
+    const q = parseClaudeResponse(raw).qualification_data
+    expect(q.purpose).toBeNull()
+    expect(q.budget_ok).toBe(true)
+    expect(q.timeline).toBe('inmediato')
+    expect(q.financing_needed).toBeNull()
+    expect(q.decision_maker).toBe(true)
+  })
+
+  it('timeline inválido → null sin afectar purpose válido', () => {
+    const raw = JSON.stringify({
+      ...base,
+      qualification_data: { purpose: 'ambos', timeline: 'ya_mismo' },
+    })
+    const q = parseClaudeResponse(raw).qualification_data
+    expect(q.purpose).toBe('ambos')
+    expect(q.timeline).toBeNull()
+  })
+
+  it('booleanos deben ser booleanos reales: strings y números → null', () => {
+    const raw = JSON.stringify({
+      ...base,
+      qualification_data: {
+        purpose: 'vivienda_propia',
+        budget_ok: 'true', // string, no booleano
+        financing_needed: 1, // número, no booleano
+        decision_maker: false,
+      },
+    })
+    const q = parseClaudeResponse(raw).qualification_data
+    expect(q.budget_ok).toBeNull()
+    expect(q.financing_needed).toBeNull()
+    expect(q.decision_maker).toBe(false)
+    expect(q.purpose).toBe('vivienda_propia')
+  })
+
+  it('qualification_data no-objeto u omitido → todos los campos null', () => {
+    const vacio = {
+      purpose: null,
+      budget_ok: null,
+      timeline: null,
+      financing_needed: null,
+      decision_maker: null,
+    }
+    expect(parseClaudeResponse(JSON.stringify(base)).qualification_data).toEqual(vacio)
+    expect(parseClaudeResponse(JSON.stringify({
+      ...base, qualification_data: 'no soy un objeto',
+    })).qualification_data).toEqual(vacio)
+  })
+})
