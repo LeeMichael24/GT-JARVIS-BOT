@@ -358,6 +358,33 @@ export interface EscalationRule {
   updated_at: string
 }
 
+// ── Objetivos del negocio (agent_objectives) ────────────────
+
+export type ObjectiveScope = 'general' | 'project' | 'investment'
+
+export interface AgentObjective {
+  id: string
+  scope: ObjectiveScope
+  target_key: string | null
+  objective: string
+  priority: number
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ── Historial de crons (cron_runs) ──────────────────────────
+
+export interface CronRun {
+  id: string
+  job: string
+  started_at: string
+  finished_at: string
+  status: 'ok' | 'error'
+  result: Record<string, unknown>
+  error: string | null
+}
+
 // ── Activity Log ────────────────────────────────────────────
 
 export type ActorType = 'team' | 'system' | 'bot'

@@ -1,5 +1,6 @@
 import { getFunnelStats, getTopObjections, getDanielaStats } from '@/lib/analytics'
 import { sendText } from '@/services/whatsapp/client'
+import { recordCronRun } from '@/lib/cron-log'
 
 export const maxDuration = 60
 
@@ -12,8 +13,10 @@ export async function GET(request: Request): Promise<Response> {
     return new Response('Unauthorized', { status: 401 })
   }
 
+  const startedAt = new Date()
   const ceoPhone = process.env.CEO_PHONE_NUMBER
   if (!ceoPhone) {
+    await recordCronRun('weekly', startedAt, 'ok', { skipped: 'no_ceo_phone' })
     return Response.json({ skipped: 'no_ceo_phone' })
   }
 
@@ -55,10 +58,12 @@ export async function GET(request: Request): Promise<Response> {
   try {
     await sendText(ceoPhone, report, { typingDelay: false })
     console.log('[cron/weekly] Reporte semanal enviado al CEO')
+    await recordCronRun('weekly', startedAt, 'ok', { sent: true, leads: funnel.total })
     return Response.json({ sent: true, leads: funnel.total })
   } catch (err) {
     // Fuera de ventana de 24h sin plantilla dedicada: queda en logs, no es crítico
     console.error('[cron/weekly] No se pudo enviar el reporte:', err instanceof Error ? err.message : err)
+    await recordCronRun('weekly', startedAt, 'error', { sent: false, leads: funnel.total }, 'send_failed')
     return Response.json({ sent: false, error: 'send_failed', leads: funnel.total })
   }
 }

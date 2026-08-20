@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getSessionMember } from '@/lib/auth'
 import { countPendingCampaigns } from '@/lib/proactive/data'
+import { isAgentGloballyEnabled } from '@/lib/panel-data'
 import { LogoutButton } from '@/components/panel/LogoutButton'
 import { MobileNav } from '@/components/panel/MobileNav'
 
@@ -9,9 +10,10 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const member = await getSessionMember()
   if (!member) redirect('/panel/login')
 
-  const pendingCount = member.role === 'admin'
-    ? await countPendingCampaigns().catch(() => 0)
-    : 0
+  const [pendingCount, agentEnabled] = await Promise.all([
+    member.role === 'admin' ? countPendingCampaigns().catch(() => 0) : Promise.resolve(0),
+    isAgentGloballyEnabled(),
+  ])
 
   return (
     <div className="flex h-screen h-dvh flex-col overflow-hidden bg-zinc-950 text-zinc-100">
@@ -60,6 +62,15 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           pendingCount={pendingCount}
         />
       </header>
+      {!agentEnabled && (
+        <Link
+          href="/panel/daniela"
+          className="block shrink-0 bg-red-900/90 px-4 py-2 text-center text-sm font-medium text-red-100 transition-colors hover:bg-red-800"
+        >
+          🔴 Daniela está PAUSADA globalmente — no responde a ningún lead.
+          {member.role === 'admin' ? ' Toca aquí para reactivarla (tab Estado).' : ' Avisa a un admin para reactivarla.'}
+        </Link>
+      )}
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</main>
     </div>
   )

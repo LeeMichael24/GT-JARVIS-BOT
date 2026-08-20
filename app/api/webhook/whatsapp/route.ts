@@ -30,6 +30,8 @@ import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPr
 import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, type ProjectMediaItem } from '@/lib/project-media'
 import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } from '@/lib/project-scripts'
 import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
+import { getEffectivePromptBlocks, DEFAULT_PROMPT_BLOCKS } from '@/lib/prompt-blocks'
+import { getActiveObjectives, formatObjectivesForPrompt } from '@/lib/objectives'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -188,6 +190,15 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       console.warn('[processMessage] Failed to pause sequences:', err instanceof Error ? err.message : err)
     }
 
+    // 4b-global. PAUSA GLOBAL (agent_settings.agent_enabled = false):
+    //   Daniela no responde a NADIE — el mensaje ya quedó guardado y el
+    //   equipo lo ve en el inbox del panel. Se reactiva desde el tab Estado.
+    const agentSettings: AgentSettings = await getAgentSettings().catch(() => DEFAULT_SETTINGS)
+    if (!agentSettings.agent_enabled) {
+      console.log(`[processMessage] Daniela PAUSADA globalmente — mensaje de lead ${lead.id} guardado, sin respuesta`)
+      return
+    }
+
     // 4b. If a human took over, stop here: the message is stored, Daniela stays quiet
     if (!lead.bot_active) {
       console.log(`[processMessage] Bot paused for lead ${lead.id} — message saved, no AI reply`)
@@ -232,8 +243,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     const burstPatternUpdate = computeBurstPattern(burstTimestamps, existingDealForDebounce?.signals)
     // ── END DEBOUNCE ─────────────────────────────────────────────────────────
 
-    // 5. Load conversation history — last 15 messages, most recent (descending then reversed)
-    const history = await getConversationHistory(lead.id, 15)
+    // 5. Load conversation history — ventana configurable (agent_settings.history_window)
+    const history = await getConversationHistory(lead.id, agentSettings.history_window)
 
     // 6. Classify intent early so we can optimize the API call
     const intent = classifyIntent(combinedBody, history)
@@ -248,16 +259,17 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     let projectScript: string | null = null
     const existingDeal = existingDealForDebounce
 
-    const [projectsR, playbookR, brainR, leadSourceR, activeAdsR, escalationR, scriptsR, mediaR, settingsR] = await Promise.allSettled([
+    const [projectsR, playbookR, brainR, leadSourceR, activeAdsR, escalationR, scriptsR, mediaR, blocksR, objectivesR] = await Promise.allSettled([
       getAllProjects(),
       getPlaybook(),
-      getHighConfidenceLearnings(),
+      getHighConfidenceLearnings(agentSettings.brain_min_confidence),
       getLeadSource(lead.id),
       getActiveAdCampaigns(),
       getActiveEscalationRules(),
       getActiveProjectScripts(),
       getAllProjectMediaItems(),
-      getAgentSettings(),
+      getEffectivePromptBlocks(),
+      getActiveObjectives(),
     ])
 
     const projects = settle(projectsR, [], 'catálogo GT')
@@ -268,7 +280,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     const escalationRules = settle(escalationR, [], 'reglas de escalación')
     const scripts = settle(scriptsR, [], 'guiones')
     const mediaItems: ProjectMediaItem[] = settle(mediaR, [], 'media')
-    const agentSettings: AgentSettings = settle(settingsR, DEFAULT_SETTINGS, 'settings')
+    const promptBlocks = settle(blocksR, DEFAULT_PROMPT_BLOCKS, 'bloques del prompt')
+    const objectives = settle(objectivesR, [], 'objetivos')
 
     // Guion oficial: activo si el mensaje menciona el proyecto O si el lead
     // ya venía en ese guion (project_interest) — el guion persiste toda la conversación
@@ -296,7 +309,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // 7b. Check escalation rules against the user's message
     const matchedRules = matchKeywordRules(combinedBody, escalationRules)
     if (matchedRules.length > 0) {
-      escalationOverride = formatEscalationRulesForPrompt(matchedRules)
+      escalationOverride = formatEscalationRulesForPrompt(matchedRules, agentSettings.ceo_name)
       console.log(`[processMessage] Escalation rules matched: ${matchedRules.map(r => r.trigger_value).join(', ')}`)
     }
 
@@ -330,6 +343,13 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
 
     console.log(`[processMessage] Project: ${project?.name ?? 'none'} | Detected: ${detectedProject?.name ?? 'none'}`)
 
+    // 8b. Objetivos del negocio aplicables a este turno (general + proyecto + inversión)
+    const objectivesBlock = formatObjectivesForPrompt(objectives, {
+      projectNames: project ? [project.name, project.slug].filter(Boolean) : [],
+      investmentNames: project?.subInvestments?.map(s => s.name) ?? [],
+      isInvestmentTopic: intent === 'investment_query' || project?.entityType === 'investment',
+    }) || null
+
     // 9. Build the Daniela system prompt with full catalog and call GPT-4o
     const systemPrompt = buildSystemPrompt({
       lead, project, projects, intent, lastBotMessage, gtUrlSection, salesPlaybook,
@@ -340,12 +360,14 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       projectScript,
       mediaProjects: mediaProjectKeys(mediaItems),
       settings: agentSettings,
+      blocks: promptBlocks,
+      objectivesBlock,
     })
     let claudeResponse: ReturnType<typeof parseClaudeResponse>
     try {
       let rawResponse: string
       try {
-        rawResponse = await callClaude(systemPrompt, history)
+        rawResponse = await callClaude(systemPrompt, history, { temperature: agentSettings.llm_temperature })
         console.log('[processMessage] Raw GPT-4o response:', rawResponse.slice(0, 300))
         claudeResponse = parseClaudeResponse(rawResponse)
       } catch (firstErr) {
@@ -353,7 +375,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
         // Reintentamos UNA vez con corrección explícita antes de rendirnos.
         console.warn('[processMessage] Respuesta inválida de GPT-4o — reintentando:', firstErr instanceof Error ? firstErr.message : firstErr)
         const nudgedPrompt = systemPrompt + '\n\n# ATENCIÓN — REINTENTO\nTu respuesta anterior fue un JSON vacío o inválido. Responde AHORA con el JSON COMPLETO del formato especificado arriba. El campo "reply" es OBLIGATORIO: contiene tu mensaje de WhatsApp para el cliente, con tu personalidad de siempre.'
-        rawResponse = await callClaude(nudgedPrompt, history)
+        rawResponse = await callClaude(nudgedPrompt, history, { temperature: agentSettings.llm_temperature })
         console.log('[processMessage] Raw GPT-4o response (retry):', rawResponse.slice(0, 300))
         claudeResponse = parseClaudeResponse(rawResponse)
       }
@@ -396,10 +418,13 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       }
     }
 
-    // 9c. Save brain observations
+    // 9c. Save brain observations (dedup + auto-promoción por convergencia)
     if (claudeResponse.brain_observations.length > 0) {
       try {
-        await saveBrainObservations(lead.id, claudeResponse.brain_observations)
+        await saveBrainObservations(lead.id, claudeResponse.brain_observations, {
+          autoPromoteEnabled: agentSettings.auto_promote_enabled,
+          autoPromoteThreshold: agentSettings.auto_promote_threshold,
+        })
       } catch (err) {
         console.warn('[processMessage] Failed to save brain observations:', err instanceof Error ? err.message : err)
       }

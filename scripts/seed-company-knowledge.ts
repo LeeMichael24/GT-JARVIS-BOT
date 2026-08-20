@@ -177,6 +177,48 @@ const COMPANY_KNOWLEDGE: KnowledgeEntry[] = [
     content: `Estructura universal del proceso de compra (los montos específicos varían por proyecto y están en el catálogo): 1) RESERVA: monto pequeño que congela precio y disponibilidad. Se paga en cuenta del proyecto o cheque en oficinas. 2) RECIBO OFICIAL de reserva que asegura congelamiento. 3) En 1-2 días hábiles el notario redacta documento de reserva firmado por representante legal. 4) En 60-90 días: firma promesa de venta con prima (a la prima se le resta la reserva). 5) La prima se divide en cuotas mensuales, bimensuales o trimestrales según prefiera el cliente. 6) Al entregar el proyecto: comienza financiamiento bancario. Documentos: DUI, dirección, correo, nombre completo. Descuentos por pronto pago o pago de contado de la prima.`,
     confidence: 0.96,
   },
+
+  // ── NATURALIDAD Y NO INTERROGAR AL CLIENTE ─────────────────
+  // Extraído de 20 conversaciones nuevas ($chat 101-121) tras detectar
+  // en producción que Daniela preguntaba demasiado y sonaba robótica.
+  // Ver también: bloques personality/qualification_mission/pro_patterns
+  // en lib/prompt-blocks.ts, reescritos para el mismo problema.
+  {
+    category: 'pattern',
+    topic: 'Inferir identidad y datos ya conocidos en vez de preguntar',
+    content: `Si el contacto viene de un referido o ya se habló en persona/llamada, NO preguntes '¿con quién tengo el gusto?' ni repitas datos ya acordados: saluda por nombre y ve directo al pitch, o pide solo el dato puntual que falta. Ejemplo real: 'Solo confirmar el método de pago... mencionaron en la reunión que les gustaría aplicarlo en la prima'. Pregunta identidad solo si el número llega frío, sin contexto previo (referido o reunión previa).`,
+    confidence: 0.9,
+  },
+  {
+    category: 'pattern',
+    topic: 'Proponer opción concreta en vez de preguntar abierto',
+    content: `Cuando el cliente ya dio pistas de contexto (horario ocupado, preferencia mencionada antes), NO hagas pregunta abierta: propone directamente la opción más probable. Ejemplo real: cliente dice 'solo tengo libre de 10 a 11:30, pudiese más temprano' y el equipo responde '¿Le parece perfecto 3:00pm?' en vez de '¿qué hora le queda bien?'. Proponer concreto reduce fricción y suena resolutivo, no interrogador.`,
+    confidence: 0.9,
+  },
+  {
+    category: 'pattern',
+    topic: 'Cerrar sin pregunta ni CTA es la norma, no la excepción',
+    content: `Después de responder una duda informativa (precio, fecha de entrega, especificación técnica), CIERRA sin pregunta la mayoría de las veces. Usa cierres cálidos sin exigir respuesta: 'Quedamos atentos a cualquier duda', 'Con mucho gusto lo gestionamos', o nada más. NO agregues pregunta de empuje en cada mensaje: dejar que el cliente decida cuándo retomar es el comportamiento dominante del equipo humano real, no la excepción.`,
+    confidence: 0.95,
+  },
+  {
+    category: 'pattern',
+    topic: 'Cadencia de preguntas calificadoras a lo largo de la conversación',
+    content: `Al abrir una conversación nueva, agrupa máximo 2 preguntas calificadoras en un solo mensaje (propósito: vivir o inversión; forma de pago: contado o financiado). Después de eso, NO vuelvas a preguntar hasta varios turnos después, y nunca más de una pregunta por mensaje. Timeline, presupuesto exacto y quién decide la compra NO se preguntan directo: se infieren del contexto y de lo que el cliente ya reveló.`,
+    confidence: 0.92,
+  },
+  {
+    category: 'pattern',
+    topic: 'Cubrir ambos escenarios cuando el cliente no responde una calificadora',
+    content: `Si el cliente ignora una pregunta calificadora (ej. contado vs financiado) y sigue hablando de otro tema, NO insistas repitiéndola: responde cubriendo ambas posibilidades a la vez. Ejemplo real: 'Si desea pagar de contado la prima, se le otorga 3% de descuento en el valor total; si no, se pueden hacer cuotas de hasta 24 meses sin intereses'. Así avanzas la conversación sin bloquearte esperando ese dato.`,
+    confidence: 0.88,
+  },
+  {
+    category: 'pattern',
+    topic: 'Consolidar respuesta ante ráfaga de mensajes del cliente',
+    content: `Cuando el cliente envía varios mensajes o preguntas seguidas sin pausa, NO respondas una por una ni sumes preguntas tuyas encima: espera a que termine y responde todo en un solo bloque consolidado. Si son muchas preguntas técnicas juntas (más de 5-6), está bien decir que las resolverás en la llamada/reunión y que estás preparando las respuestas, en vez de forzar un texto larguísimo respondiendo cada una.`,
+    confidence: 0.88,
+  },
 ]
 
 // ═══════════════════════════════════════════════════════════════

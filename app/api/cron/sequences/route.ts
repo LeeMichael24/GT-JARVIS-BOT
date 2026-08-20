@@ -14,6 +14,8 @@ import {
 import { isWithin24h } from '@/lib/wa-window'
 import { callClaude } from '@/services/claude/client'
 import { sendText, sendTemplate } from '@/services/whatsapp/client'
+import { getAgentSettings } from '@/lib/agent-settings'
+import { recordCronRun } from '@/lib/cron-log'
 import type { SequenceType } from '@/types'
 
 export const maxDuration = 60
@@ -25,8 +27,18 @@ export async function GET(request: Request): Promise<Response> {
     return new Response('Unauthorized', { status: 401 })
   }
 
+  const startedAt = new Date()
+  const settings = await getAgentSettings()
+
+  // PAUSA GLOBAL: con Daniela pausada NO salen seguimientos automáticos
+  if (!settings.agent_enabled) {
+    await recordCronRun('sequences', startedAt, 'ok', { skipped: 'agent_paused' })
+    return Response.json({ skipped: 'agent_paused' })
+  }
+
   const now = new Date()
-  if (!isWithinBusinessHours(now)) {
+  if (!isWithinBusinessHours(now, settings.business_hours_start, settings.business_hours_end)) {
+    await recordCronRun('sequences', startedAt, 'ok', { skipped: 'outside_business_hours' })
     return Response.json({ skipped: 'outside_business_hours' })
   }
 
@@ -175,5 +187,7 @@ Reglas:
   console.log(
     `[cron/sequences] Done: ${sent} sent, ${skipped} skipped, ${failed} failed, ${blockedMissingTemplate} bloqueados (sin plantilla), ${errors} errors`,
   )
-  return Response.json({ sent, skipped, errors, failed, blocked_missing_template: blockedMissingTemplate })
+  const summary = { sent, skipped, errors, failed, blocked_missing_template: blockedMissingTemplate }
+  await recordCronRun('sequences', startedAt, errors > 0 ? 'error' : 'ok', summary)
+  return Response.json(summary)
 }

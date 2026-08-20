@@ -2,9 +2,13 @@
 
 import { useState, type ReactNode } from 'react'
 
-type Tab = 'brain' | 'playbook' | 'scripts' | 'escalation' | 'media' | 'settings'
+type Tab = 'status' | 'persona' | 'objectives' | 'training' | 'brain' | 'playbook' | 'scripts' | 'escalation' | 'media' | 'settings'
 
 const TABS: { value: Tab; label: string }[] = [
+  { value: 'status', label: 'Estado' },
+  { value: 'persona', label: 'Personalidad' },
+  { value: 'objectives', label: 'Objetivos' },
+  { value: 'training', label: 'Entrenamiento' },
   { value: 'brain', label: 'Conocimiento' },
   { value: 'playbook', label: 'Playbook' },
   { value: 'scripts', label: 'Guiones' },
@@ -14,6 +18,10 @@ const TABS: { value: Tab; label: string }[] = [
 ]
 
 interface DanielaTabsProps {
+  statusPanel: ReactNode
+  personaEditor: ReactNode
+  objectivesEditor: ReactNode
+  trainingStudio: ReactNode
   brainEditor: ReactNode
   playbookEditor: ReactNode
   scriptsEditor: ReactNode
@@ -22,8 +30,11 @@ interface DanielaTabsProps {
   settingsEditor: ReactNode
 }
 
-export function DanielaTabs({ brainEditor, playbookEditor, scriptsEditor, escalationRules, projectMedia, settingsEditor }: DanielaTabsProps) {
-  const [tab, setTab] = useState<Tab>('brain')
+export function DanielaTabs({
+  statusPanel, personaEditor, objectivesEditor, trainingStudio,
+  brainEditor, playbookEditor, scriptsEditor, escalationRules, projectMedia, settingsEditor,
+}: DanielaTabsProps) {
+  const [tab, setTab] = useState<Tab>('status')
 
   return (
     <>
@@ -32,7 +43,7 @@ export function DanielaTabs({ brainEditor, playbookEditor, scriptsEditor, escala
           <button
             key={t.value}
             onClick={() => setTab(t.value)}
-            className={`shrink-0 flex-1 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            className={`shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               tab === t.value
                 ? 'bg-zinc-800 text-white'
                 : 'text-zinc-400 hover:text-zinc-200'
@@ -42,6 +53,10 @@ export function DanielaTabs({ brainEditor, playbookEditor, scriptsEditor, escala
           </button>
         ))}
       </div>
+      {tab === 'status' && statusPanel}
+      {tab === 'persona' && personaEditor}
+      {tab === 'objectives' && objectivesEditor}
+      {tab === 'training' && trainingStudio}
       {tab === 'brain' && brainEditor}
       {tab === 'playbook' && playbookEditor}
       {tab === 'scripts' && scriptsEditor}

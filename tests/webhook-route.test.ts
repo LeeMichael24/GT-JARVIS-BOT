@@ -98,9 +98,24 @@ const scripts = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/project-scripts', () => scripts)
 
+const TEST_SETTINGS = vi.hoisted(() => ({
+  emoji_policy: 'minimal', learning_sensitivity: 'high', formality_default: 'tu',
+  custom_instructions: '', reflection_enabled: true,
+  agent_enabled: true, ceo_name: 'Michael Narváez',
+  escalation_budget_usd: 300_000, escalation_units: 3, reply_max_chars: 500,
+  llm_temperature: 0.85, reflection_temperature: 0.3,
+  business_hours_start: 8, business_hours_end: 18,
+  rental_threshold_usd: 30_000, history_window: 15, brain_min_confidence: 0.7,
+  auto_promote_enabled: true, auto_promote_threshold: 3,
+}))
+
+const agentSettingsMock = vi.hoisted(() => ({
+  getAgentSettings: vi.fn(async () => ({ ...TEST_SETTINGS })),
+}))
+
 vi.mock('@/lib/agent-settings', () => ({
-  getAgentSettings: vi.fn(async () => ({ emoji_policy: 'minimal', learning_sensitivity: 'high', formality_default: 'tu', custom_instructions: '', reflection_enabled: true })),
-  DEFAULT_SETTINGS: { emoji_policy: 'minimal', learning_sensitivity: 'high', formality_default: 'tu', custom_instructions: '', reflection_enabled: true },
+  getAgentSettings: agentSettingsMock.getAgentSettings,
+  DEFAULT_SETTINGS: { ...TEST_SETTINGS },
 }))
 
 import { POST } from '@/app/api/webhook/whatsapp/route'
@@ -151,6 +166,25 @@ describe('webhook con bot pausado (takeover)', () => {
     expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
       leadId: 'lead-1', role: 'user', content: 'Sigo interesado', waMessageId: 'wamid.in1',
     }))
+    expect(ai.callClaude).not.toHaveBeenCalled()
+    expect(wa.sendText).not.toHaveBeenCalled()
+  })
+})
+
+describe('webhook con PAUSA GLOBAL (agent_enabled=false)', () => {
+  it('guarda el mensaje pero Daniela no responde a NADIE, aunque el lead tenga bot_active', async () => {
+    agentSettingsMock.getAgentSettings.mockResolvedValueOnce({ ...TEST_SETTINGS, agent_enabled: false })
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    // El mensaje entrante SÍ se guarda (el equipo lo ve en el inbox)
+    expect(db.saveConversation).toHaveBeenCalledTimes(1)
+    expect(db.saveConversation).toHaveBeenCalledWith(expect.objectContaining({
+      leadId: 'lead-1', role: 'user', content: 'Sigo interesado',
+    }))
+    // Pero no hay modelo ni respuesta
     expect(ai.callClaude).not.toHaveBeenCalled()
     expect(wa.sendText).not.toHaveBeenCalled()
   })

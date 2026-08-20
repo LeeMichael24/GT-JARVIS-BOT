@@ -26,6 +26,24 @@ function leadVisible(member: SessionMember, lead: Lead): boolean {
   return member.role === 'admin' || lead.assigned_to === member.id
 }
 
+/**
+ * Estado FRESCO del interruptor global (sin el cache de 60s de
+ * agent-settings) — para el banner del panel. Fail-safe: sin tabla → true.
+ */
+export async function isAgentGloballyEnabled(): Promise<boolean> {
+  try {
+    const { data, error } = await getServiceClient()
+      .from('agent_settings')
+      .select('value')
+      .eq('key', 'agent_enabled')
+      .maybeSingle()
+    if (error || !data) return true
+    return data.value.trim() !== 'false'
+  } catch {
+    return true
+  }
+}
+
 export async function listInboxLeads(member: SessionMember): Promise<InboxLead[]> {
   const supabase = getServiceClient()
 

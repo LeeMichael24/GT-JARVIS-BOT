@@ -11,7 +11,16 @@ import {
 } from '@/lib/supabase'
 import { isWithin24h } from '@/lib/wa-window'
 import { sendText } from '@/services/whatsapp/client'
-import type { BrainEntry, EscalationAction, EscalationRule, EscalationTriggerType, Lead, LeadStage, TeamRole } from '@/types'
+import { logActivity, getRecentActivity } from '@/lib/activity-log'
+import { PROMPT_BLOCK_DEFS, PROMPT_BLOCK_KEYS, DEFAULT_PROMPT_BLOCKS } from '@/lib/prompt-blocks'
+import { analyzeTrainingText, type TrainingAnalysis } from '@/lib/training'
+import { runNightlyReflection } from '@/lib/reflection'
+import { runDailyRadar, runRecontactRules } from '@/lib/proactive/engine'
+import { aggregateDailyMetrics } from '@/lib/agent-brain'
+import { syncProjectMediaFromEcosystem } from '@/lib/media-sync'
+import { getAgentSettings } from '@/lib/agent-settings'
+import { recordCronRun, getRecentCronRuns } from '@/lib/cron-log'
+import type { ActivityLogEntry, AgentObjective, BrainEntry, CronRun, EscalationAction, EscalationRule, EscalationTriggerType, Lead, LeadStage, ObjectiveScope, TeamRole } from '@/types'
 import type { ProjectScript } from '@/lib/project-scripts'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
@@ -532,12 +541,32 @@ export async function toggleProjectScript(id: string, active: boolean): Promise<
 
 // ── Ajustes vivos del agente (agent_settings) ─────────────────
 
+// Validador numérico con rango — espejo de los rangos en lib/agent-settings.ts
+const inRange = (min: number, max: number) => (v: string) => {
+  const n = Number(v)
+  return Number.isFinite(n) && n >= min && n <= max
+}
+
 const SETTINGS_WHITELIST: Record<string, (v: string) => boolean> = {
   emoji_policy: v => ['minimal', 'moderate', 'none'].includes(v),
   learning_sensitivity: v => ['high', 'normal'].includes(v),
   formality_default: v => ['tu', 'usted'].includes(v),
   custom_instructions: v => v.length <= 3000,
   reflection_enabled: v => ['true', 'false'].includes(v),
+  agent_enabled: v => ['true', 'false'].includes(v),
+  ceo_name: v => v.length > 0 && v.length <= 80,
+  escalation_budget_usd: inRange(1_000, 100_000_000),
+  escalation_units: inRange(2, 1_000),
+  reply_max_chars: inRange(100, 2_000),
+  llm_temperature: inRange(0, 1.5),
+  reflection_temperature: inRange(0, 1.5),
+  business_hours_start: inRange(0, 23),
+  business_hours_end: inRange(1, 24),
+  rental_threshold_usd: inRange(0, 1_000_000),
+  history_window: inRange(4, 50),
+  brain_min_confidence: inRange(0.1, 1),
+  auto_promote_enabled: v => ['true', 'false'].includes(v),
+  auto_promote_threshold: inRange(2, 50),
 }
 
 export interface AgentSettingRow {
@@ -767,5 +796,366 @@ export async function deletePlaybookEntry(id: string): Promise<ActionResult> {
   } catch (error) {
     return fail(error)
   }
+}
+
+// ── PAUSA GLOBAL de Daniela (agent_settings.agent_enabled) ────
+
+export async function setAgentEnabled(enabled: boolean): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin()
+    const { error } = await getServiceClient()
+      .from('agent_settings')
+      .upsert(
+        { key: 'agent_enabled', value: enabled ? 'true' : 'false', updated_at: new Date().toISOString() },
+        { onConflict: 'key' },
+      )
+    if (error) throw new Error(error.message)
+    await logActivity({
+      actorId: admin.id, actorType: 'team',
+      action: enabled ? 'agent_resumed' : 'agent_paused',
+      entityType: 'agent', details: { by: admin.name },
+    })
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// ── Objetivos del negocio (agent_objectives) — CRUD ───────────
+
+const OBJECTIVE_SCOPES: ObjectiveScope[] = ['general', 'project', 'investment']
+
+export async function getObjectives(): Promise<AgentObjective[]> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('agent_objectives')
+    .select('*')
+    .order('scope')
+    .order('priority', { ascending: true })
+  if (error) {
+    // Tabla aún no migrada — el tab muestra vacío en vez de romper la página
+    console.warn('[panel] agent_objectives no disponible:', error.message)
+    return []
+  }
+  return (data as AgentObjective[]) ?? []
+}
+
+export async function createObjective(
+  scope: ObjectiveScope, targetKey: string | null, objective: string, priority: number,
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    if (!OBJECTIVE_SCOPES.includes(scope)) return { ok: false, error: 'INVALID_SCOPE' }
+    if (!objective.trim()) return { ok: false, error: 'EMPTY' }
+    if (scope !== 'general' && !targetKey?.trim()) return { ok: false, error: 'TARGET_REQUIRED' }
+    const { error } = await getServiceClient().from('agent_objectives').insert({
+      scope,
+      target_key: scope === 'general' ? null : targetKey!.trim(),
+      objective: objective.trim(),
+      priority: Number.isFinite(priority) ? priority : 100,
+      active: true,
+    })
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function updateObjective(
+  id: string,
+  updates: { scope?: ObjectiveScope; target_key?: string | null; objective?: string; priority?: number; active?: boolean },
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (updates.scope !== undefined) {
+      if (!OBJECTIVE_SCOPES.includes(updates.scope)) return { ok: false, error: 'INVALID_SCOPE' }
+      patch.scope = updates.scope
+    }
+    if (updates.target_key !== undefined) patch.target_key = updates.target_key?.trim() || null
+    if (updates.objective !== undefined) {
+      if (!updates.objective.trim()) return { ok: false, error: 'EMPTY' }
+      patch.objective = updates.objective.trim()
+    }
+    if (updates.priority !== undefined) patch.priority = updates.priority
+    if (updates.active !== undefined) patch.active = updates.active
+    const { error } = await getServiceClient().from('agent_objectives').update(patch).eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function deleteObjective(id: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const { error } = await getServiceClient().from('agent_objectives').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// ── Personalidad: bloques del prompt (prompt_blocks) ──────────
+
+export interface PromptBlockPanelRow {
+  key: string
+  title: string
+  description: string
+  /** Texto efectivo (override de la tabla, o default del código) */
+  content: string
+  enabled: boolean
+  /** true = existe override en la tabla (≠ default) */
+  customized: boolean
+  /** El texto default del código, para "Restaurar" y comparación */
+  defaultContent: string
+}
+
+const PROMPT_BLOCK_MAX_CHARS = 6000
+
+export async function getPromptBlocksPanel(): Promise<{ rows: PromptBlockPanelRow[]; tableReady: boolean }> {
+  await requireAdmin()
+  let overrides: Record<string, { content: string; enabled: boolean }> = {}
+  let tableReady = true
+  try {
+    const { data, error } = await getServiceClient()
+      .from('prompt_blocks')
+      .select('key, content, enabled')
+    if (error) {
+      tableReady = false
+    } else {
+      for (const row of (data ?? []) as { key: string; content: string; enabled: boolean }[]) {
+        overrides[row.key] = { content: row.content, enabled: row.enabled !== false }
+      }
+    }
+  } catch {
+    tableReady = false
+    overrides = {}
+  }
+
+  const rows: PromptBlockPanelRow[] = PROMPT_BLOCK_DEFS.map(def => {
+    const o = overrides[def.key]
+    return {
+      key: def.key,
+      title: def.title,
+      description: def.description,
+      content: o ? o.content : DEFAULT_PROMPT_BLOCKS[def.key],
+      enabled: o ? o.enabled : true,
+      customized: !!o,
+      defaultContent: DEFAULT_PROMPT_BLOCKS[def.key],
+    }
+  })
+  return { rows, tableReady }
+}
+
+export async function savePromptBlock(key: string, content: string, enabled: boolean): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin()
+    if (!PROMPT_BLOCK_KEYS.includes(key)) return { ok: false, error: 'INVALID_KEY' }
+    const trimmed = content.trim()
+    if (!trimmed) return { ok: false, error: 'EMPTY' }
+    if (trimmed.length > PROMPT_BLOCK_MAX_CHARS) return { ok: false, error: 'TOO_LONG' }
+    const { error } = await getServiceClient()
+      .from('prompt_blocks')
+      .upsert({ key, content: trimmed, enabled, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    if (error) throw new Error(error.message)
+    await logActivity({
+      actorId: admin.id, actorType: 'team', action: 'prompt_block_updated',
+      entityType: 'prompt_block', entityId: key, details: { enabled, chars: trimmed.length },
+    })
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/** Borra el override → el bloque vuelve al default del código. */
+export async function resetPromptBlock(key: string): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin()
+    if (!PROMPT_BLOCK_KEYS.includes(key)) return { ok: false, error: 'INVALID_KEY' }
+    const { error } = await getServiceClient().from('prompt_blocks').delete().eq('key', key)
+    if (error) throw new Error(error.message)
+    await logActivity({
+      actorId: admin.id, actorType: 'team', action: 'prompt_block_reset',
+      entityType: 'prompt_block', entityId: key,
+    })
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// ── Entrenamiento manual: pegar conversaciones reales ─────────
+
+export async function analyzeTraining(text: string): Promise<
+  { ok: true; analysis: TrainingAnalysis } | { ok: false; error: string }
+> {
+  try {
+    await requireAdmin()
+    const trimmed = text.trim()
+    if (!trimmed) return { ok: false, error: 'EMPTY' }
+    if (trimmed.length > 60_000) return { ok: false, error: 'TOO_LONG' }
+    const result = await analyzeTrainingText(trimmed)
+    if ('error' in result) return { ok: false, error: result.error }
+    return { ok: true, analysis: result }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'ANALYZE_FAILED'
+    if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') return { ok: false, error: msg }
+    console.error('[panel action] analyzeTraining:', msg)
+    return { ok: false, error: 'ANALYZE_FAILED' }
+  }
+}
+
+export async function saveTrainingLearnings(
+  entries: { category: string; topic: string; content: string; confidence: number }[],
+): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin()
+    if (entries.length === 0) return { ok: false, error: 'EMPTY' }
+    if (entries.length > 60) return { ok: false, error: 'TOO_MANY' }
+    const rows = []
+    for (const e of entries) {
+      if (!VALID_CATEGORIES.includes(e.category as typeof VALID_CATEGORIES[number])) return { ok: false, error: 'INVALID_CATEGORY' }
+      if (!e.topic.trim() || !e.content.trim()) return { ok: false, error: 'EMPTY' }
+      rows.push({
+        category: e.category,
+        topic: e.topic.trim().slice(0, 80),
+        content: e.content.trim().slice(0, 450),
+        source: 'team' as const,
+        lead_id: null,
+        confidence: Math.min(1, Math.max(0, e.confidence)),
+        active: true,
+      })
+    }
+    const { error } = await getServiceClient().from('agent_brain').insert(rows)
+    if (error) throw new Error(error.message)
+    await logActivity({
+      actorId: admin.id, actorType: 'team', action: 'training_imported',
+      entityType: 'agent_brain', details: { entries: rows.length },
+    })
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// ── Ejecutar trabajos de cron bajo demanda (esquiva los límites
+//    de horario de Vercel: Hobby corre crons 1 vez al día) ──────
+
+export type ManualJob = 'reflection' | 'radar' | 'recontact' | 'metrics' | 'media_sync'
+
+export async function runCronJobNow(job: ManualJob): Promise<
+  { ok: true; result: unknown } | { ok: false; error: string }
+> {
+  try {
+    const admin = await requireAdmin()
+    const startedAt = new Date()
+    let result: unknown
+
+    switch (job) {
+      case 'reflection':
+        result = await runNightlyReflection()
+        break
+      case 'radar': {
+        const settings = await getAgentSettings()
+        if (!settings.agent_enabled) return { ok: false, error: 'AGENT_PAUSED' }
+        result = await runDailyRadar()
+        break
+      }
+      case 'recontact': {
+        const settings = await getAgentSettings()
+        if (!settings.agent_enabled) return { ok: false, error: 'AGENT_PAUSED' }
+        result = await runRecontactRules()
+        break
+      }
+      case 'metrics': {
+        const yesterday = new Date()
+        yesterday.setUTCDate(yesterday.getUTCDate() - 1)
+        await aggregateDailyMetrics(yesterday)
+        result = { aggregated: true }
+        break
+      }
+      case 'media_sync':
+        result = await syncProjectMediaFromEcosystem()
+        break
+      default:
+        return { ok: false, error: 'INVALID_JOB' }
+    }
+
+    await recordCronRun(`manual:${job}`, startedAt, 'ok', result)
+    await logActivity({
+      actorId: admin.id, actorType: 'team', action: 'manual_job_run',
+      entityType: 'cron', entityId: job, details: { result },
+    })
+    refresh()
+    return { ok: true, result }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'JOB_FAILED'
+    if (msg === 'UNAUTHORIZED' || msg === 'FORBIDDEN') return { ok: false, error: msg }
+    console.error('[panel action] runCronJobNow:', msg)
+    return { ok: false, error: 'JOB_FAILED' }
+  }
+}
+
+// ── Supervisión: estado global, corridas de crons y actividad ──
+
+export interface SupervisionData {
+  agentEnabled: boolean
+  settingsTableReady: boolean
+  cronRuns: CronRun[]
+  activity: ActivityLogEntry[]
+  /** Aprendizajes de Daniela pendientes de revisión (confianza < umbral) */
+  pendingLearnings: number
+}
+
+export async function getSupervisionData(): Promise<SupervisionData> {
+  await requireAdmin()
+  const service = getServiceClient()
+
+  // agent_enabled FRESCO (sin el cache de 60s) — el toggle debe reflejarse al instante
+  let agentEnabled = true
+  let settingsTableReady = true
+  try {
+    const { data, error } = await service
+      .from('agent_settings')
+      .select('value')
+      .eq('key', 'agent_enabled')
+      .maybeSingle()
+    if (error) settingsTableReady = false
+    else if (data) agentEnabled = data.value.trim() !== 'false'
+  } catch {
+    settingsTableReady = false
+  }
+
+  const [cronRuns, activity, pending] = await Promise.all([
+    getRecentCronRuns(30),
+    getRecentActivity(50).catch(() => [] as ActivityLogEntry[]),
+    (async () => {
+      try {
+        const { count } = await service
+          .from('agent_brain')
+          .select('id', { count: 'exact', head: true })
+          .eq('source', 'agent')
+          .eq('active', true)
+          .lt('confidence', 0.7)
+        return count ?? 0
+      } catch {
+        return 0
+      }
+    })(),
+  ])
+
+  return { agentEnabled, settingsTableReady, cronRuns, activity, pendingLearnings: pending }
 }
 

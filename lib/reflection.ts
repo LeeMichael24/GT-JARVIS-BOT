@@ -1,6 +1,7 @@
 import { getServiceClient } from '@/lib/supabase'
 import { callClaude } from '@/services/claude/client'
 import { saveBrainObservations } from '@/lib/agent-brain'
+import { getAgentSettings } from '@/lib/agent-settings'
 import type { BrainObservation } from '@/types'
 
 /**
@@ -127,11 +128,21 @@ export async function runNightlyReflection(): Promise<ReflectionResult> {
       .limit(300)
     const existingTopics = Array.from(new Set((topics ?? []).map(t => (t as { topic: string }).topic)))
 
-    const raw = await callClaude(buildReflectionPrompt(groups, existingTopics), [])
+    // Temperatura baja (configurable): la reflexión es EXTRACCIÓN, no
+    // creatividad — a 0.85 el modelo inventaba "aprendizajes".
+    const settings = await getAgentSettings()
+    const raw = await callClaude(
+      buildReflectionPrompt(groups, existingTopics),
+      [],
+      { temperature: settings.reflection_temperature },
+    )
     const observations = toBrainObservations(JSON.parse(raw))
     if (observations.length === 0) return { learned: 0, conversations: groups.length }
 
-    await saveBrainObservations(null, observations)
+    await saveBrainObservations(null, observations, {
+      autoPromoteEnabled: settings.auto_promote_enabled,
+      autoPromoteThreshold: settings.auto_promote_threshold,
+    })
     console.log(`[reflection] ${observations.length} aprendizajes de ${groups.length} conversaciones`)
     return { learned: observations.length, conversations: groups.length }
   } catch (e) {

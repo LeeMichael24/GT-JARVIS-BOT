@@ -116,8 +116,11 @@ El esquema se crea corriendo las migraciones **en orden** en el SQL Editor de Su
 | `007_project_scripts_media.sql` | `project_scripts` (guiones por proyecto) + `project_media` (material a enviar) |
 | `008_media_source.sql` | Columnas `source`/`project_slug` en `project_media` (distingue media manual vs. sincronizada del Ecosistema) |
 | `009_agent_settings.sql` | `agent_settings` — perillas de comportamiento vivas (emojis, trato, aprendizaje, instrucciones del equipo) |
+| `010_rls_hardening.sql` | RLS en `knowledge_base` y `escalation_rules` (cierra fuga del playbook vía anon key) |
+| `011_repair_and_observability.sql` | DDL versionado de `lead_sources`, `ad_campaigns`, `activity_log` (tablas que existían solo a mano) + `cron_runs` (historial de crons para el tab Estado) |
+| `012_total_panel_config.sql` | **TODO configurable**: `prompt_blocks` (personalidad editable), `agent_objectives` (objetivos general/proyecto/inversión), columnas de convergencia en `agent_brain`, +14 perillas en `agent_settings` incl. `agent_enabled` (pausa global) |
 
-> ⚠️ **Estado go-live:** las migraciones **008 y 009 aún NO están corridas en Supabase.** Hasta correrlas, el tab *Ajustes* del panel muestra un aviso ámbar y el sync de media no distingue origen. El código degrada con valores por defecto (no crashea), pero para que TODO sea configurable desde el panel hay que correrlas. SQL combinado listo para pegar en el SQL Editor.
+> ⚠️ **Estado go-live:** las migraciones **008 → 012 aún NO están corridas en Supabase.** Hasta correrlas: el tab *Ajustes* solo muestra las 5 perillas viejas, los tabs *Estado/Personalidad/Objetivos* muestran avisos ámbar, la pausa global no funciona y la fuga RLS del playbook (010) sigue viva. El código degrada con valores por defecto (no crashea), pero para que TODO sea configurable desde el panel hay que correrlas **en orden** en el SQL Editor.
 
 Todas las tablas tienen **RLS (Row Level Security)** activado — el panel usa la llave `anon` con políticas; el bot usa la `service_role` (solo servidor, nunca en el browser).
 
@@ -181,7 +184,7 @@ Ninguna se guarda en git — el `.gitignore` excluye `.env*` sin excepciones. En
 
 ### Fase B — Supabase
 1. Crear proyecto → copiar las 4 llaves (`SUPABASE_URL`, `SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `ANON_KEY`).
-2. Correr las 5 migraciones **en orden** en el SQL Editor.
+2. Correr TODAS las migraciones (002→012) **en orden** en el SQL Editor.
 3. Verificar RLS: `SELECT tablename, rowsecurity FROM pg_tables WHERE schemaname='public';` → todo `true`.
 4. Crear el primer admin en `team_members` + usuario en Auth.
 
@@ -244,7 +247,7 @@ Para replicar Daniela para otra empresa (otro rubro incluso), lo ÚNICO que camb
 2. **Catálogo** — reemplazar `services/projects/gt-api.ts` por el adaptador del inventario del nuevo negocio (misma interfaz: `getAllProjects()` → lista con name/price/description).
 3. **Detección de proyecto** — sinónimos del rubro en `SYNONYMS` (gt-api.ts).
 4. **Variables de entorno** — las 14 de la sección 8 con las cuentas nuevas (Meta, Supabase, OpenAI).
-5. **Base de datos** — correr las migraciones 002→009 en el Supabase nuevo.
+5. **Base de datos** — correr las migraciones 002→012 en el Supabase nuevo.
 6. **Contenido** — sembrar: playbook (`knowledge_base`), cerebro (`agent_brain`), guiones (`project_scripts`), reglas (`escalation_rules`), settings (`agent_settings`).
 7. **Meta** — app nueva + número + webhook + plantillas (manual `MANUAL-META-OPERACION.md`).
 

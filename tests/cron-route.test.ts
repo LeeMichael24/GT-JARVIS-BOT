@@ -27,9 +27,23 @@ const reflection = vi.hoisted(() => ({
 vi.mock('@/lib/reflection', () => reflection)
 
 const agentSettings = vi.hoisted(() => ({
-  getAgentSettings: vi.fn(async () => ({ emoji_policy: 'minimal', learning_sensitivity: 'high', formality_default: 'tu', custom_instructions: '', reflection_enabled: true })),
+  getAgentSettings: vi.fn(async () => ({
+    emoji_policy: 'minimal', learning_sensitivity: 'high', formality_default: 'tu',
+    custom_instructions: '', reflection_enabled: true,
+    agent_enabled: true, ceo_name: 'Michael Narváez',
+    escalation_budget_usd: 300_000, escalation_units: 3, reply_max_chars: 500,
+    llm_temperature: 0.85, reflection_temperature: 0.3,
+    business_hours_start: 8, business_hours_end: 18,
+    rental_threshold_usd: 30_000, history_window: 15, brain_min_confidence: 0.7,
+    auto_promote_enabled: true, auto_promote_threshold: 3,
+  })),
 }))
 vi.mock('@/lib/agent-settings', () => agentSettings)
+
+const cronLog = vi.hoisted(() => ({
+  recordCronRun: vi.fn(async () => undefined),
+}))
+vi.mock('@/lib/cron-log', () => cronLog)
 
 const wa = vi.hoisted(() => ({
   sendText: vi.fn(async () => 'wamid.warn1'),

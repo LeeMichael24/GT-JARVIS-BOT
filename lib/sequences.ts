@@ -47,10 +47,12 @@ export const SEQUENCE_DEFINITIONS: Record<SequenceType, SequenceDef> = {
 
 const SV_OFFSET_HOURS = -6
 
-export function isWithinBusinessHours(date: Date): boolean {
+// Horario laboral configurable desde el panel (agent_settings:
+// business_hours_start / business_hours_end). Defaults 8-18 El Salvador.
+export function isWithinBusinessHours(date: Date, startHour = 8, endHour = 18): boolean {
   const utcHour = date.getUTCHours()
   const svHour = (utcHour + 24 + SV_OFFSET_HOURS) % 24
-  return svHour >= 8 && svHour < 18
+  return svHour >= startHour && svHour < endHour
 }
 
 export function getNextFireAt(from: Date, delayHours: number): string {

@@ -4,6 +4,7 @@ import { getNeglectedALeads } from '@/lib/analytics'
 import { syncProjectMediaFromEcosystem } from '@/lib/media-sync'
 import { runNightlyReflection } from '@/lib/reflection'
 import { getAgentSettings } from '@/lib/agent-settings'
+import { recordCronRun } from '@/lib/cron-log'
 import { sendText } from '@/services/whatsapp/client'
 
 export const maxDuration = 60
@@ -17,12 +18,23 @@ export async function GET(request: Request): Promise<Response> {
     return new Response('Unauthorized', { status: 401 })
   }
 
-  const radar = await runDailyRadar().catch((e: unknown) => ({
-    error: e instanceof Error ? e.message : 'radar failed',
-  }))
-  const rules = await runRecontactRules().catch((e: unknown) => ({
-    error: e instanceof Error ? e.message : 'rules failed',
-  }))
+  const startedAt = new Date()
+  const settingsEarly = await getAgentSettings()
+
+  // PAUSA GLOBAL: sin contacto proactivo con clientes. Métricas, media
+  // sync y reflexión (aprendizaje interno) sí corren — no tocan a nadie.
+  const paused = !settingsEarly.agent_enabled
+
+  const radar = paused
+    ? { skipped: 'agent_paused' }
+    : await runDailyRadar().catch((e: unknown) => ({
+        error: e instanceof Error ? e.message : 'radar failed',
+      }))
+  const rules = paused
+    ? { skipped: 'agent_paused' }
+    : await runRecontactRules().catch((e: unknown) => ({
+        error: e instanceof Error ? e.message : 'rules failed',
+      }))
 
   const yesterday = new Date()
   yesterday.setUTCDate(yesterday.getUTCDate() - 1)
@@ -57,11 +69,17 @@ export async function GET(request: Request): Promise<Response> {
   }))
 
   // Reflexión nocturna: Daniela aprende sola de las conversaciones del día
-  const settings = await getAgentSettings()
-  const reflection = settings.reflection_enabled
+  const reflection = settingsEarly.reflection_enabled
     ? await runNightlyReflection()
     : { skipped: 'reflection_disabled' as const }
 
-  console.log('[cron/daily]', JSON.stringify({ radar, rules, metrics, dealWarnings, mediaSync, reflection }))
-  return Response.json({ radar, rules, metrics, dealWarnings, mediaSync, reflection })
+  const summary = { radar, rules, metrics, dealWarnings, mediaSync, reflection }
+  console.log('[cron/daily]', JSON.stringify(summary))
+  // Observabilidad: el panel (tab Estado) muestra esta corrida.
+  // 'error' si CUALQUIER sub-paso falló — visible de un vistazo.
+  const hadError = Object.values(summary).some(
+    v => v && typeof v === 'object' && 'error' in (v as Record<string, unknown>),
+  )
+  await recordCronRun('daily', startedAt, hadError ? 'error' : 'ok', summary)
+  return Response.json(summary)
 }

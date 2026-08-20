@@ -8,9 +8,17 @@ import type {
 const MODEL = 'gpt-4o'
 const MAX_TOKENS = 2048
 
+export interface CallClaudeOptions {
+  /** Temperatura del modelo — configurable desde agent_settings.
+   *  Respuestas: llm_temperature (default 0.85). Reflexión/entrenamiento:
+   *  reflection_temperature (default 0.3 — extracción sin inventar). */
+  temperature?: number
+}
+
 export async function callClaude(
   systemPrompt: string,
-  history: Conversation[]
+  history: Conversation[],
+  opts: CallClaudeOptions = {},
 ): Promise<string> {
   // timeout 30s: sin esto una llamada colgada consume los 60s de maxDuration
   // y el cliente queda sin respuesta. 1 retry automático del SDK.
@@ -28,7 +36,7 @@ export async function callClaude(
   const response = await openai.chat.completions.create({
     model: MODEL,
     max_tokens: MAX_TOKENS,
-    temperature: 0.85,
+    temperature: opts.temperature ?? 0.85,
     messages,
     response_format: { type: 'json_object' },
   })

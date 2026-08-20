@@ -1,13 +1,77 @@
 import { getServiceClient } from '@/lib/supabase'
 import type { BrainObservation, BrainEntry } from '@/types'
 
+export interface SaveObservationOptions {
+  /** Auto-promoción por convergencia: una observación repetida N veces
+   *  (mismo tema) sube sola a confianza 0.72 y ENTRA al prompt — así el
+   *  loop de aprendizaje se cierra sin esperar revisión manual. */
+  autoPromoteEnabled?: boolean
+  autoPromoteThreshold?: number
+}
+
+// Confianza a la que se auto-promueve una observación convergente.
+// Justo sobre el umbral default (0.7) pero bajo las entradas del equipo
+// (0.85) — el equipo siempre puede bajarla o desactivarla en el panel.
+const AUTO_PROMOTE_CONFIDENCE = 0.72
+
 export async function saveBrainObservations(
   leadId: string | null,
   observations: BrainObservation[],
+  opts: SaveObservationOptions = {},
 ): Promise<void> {
   if (observations.length === 0) return
   const supabase = getServiceClient()
-  const rows = observations.map(o => ({
+  const threshold = opts.autoPromoteThreshold ?? 3
+  const autoPromote = opts.autoPromoteEnabled ?? true
+
+  // Dedup por tema: la misma observación repetida NO se inserta de nuevo —
+  // incrementa seen_count. Sin esto, con sensibilidad alta se acumulan
+  // miles de casi-duplicados a 0.5 que nadie revisa.
+  let existing: { id: string; topic: string; confidence: number; seen_count: number | null }[] = []
+  try {
+    const topics = observations.map(o => o.topic)
+    const { data } = await supabase
+      .from('agent_brain')
+      .select('id, topic, confidence, seen_count')
+      .eq('source', 'agent')
+      .eq('active', true)
+      .in('topic', topics)
+    existing = (data as typeof existing) ?? []
+  } catch {
+    // columnas/tabla sin migrar → seguimos con insert plano
+  }
+
+  const byTopic = new Map(existing.map(e => [e.topic.toLowerCase(), e]))
+  const toInsert: BrainObservation[] = []
+
+  for (const o of observations) {
+    const match = byTopic.get(o.topic.toLowerCase())
+    if (!match) {
+      toInsert.push(o)
+      continue
+    }
+    // Tema repetido: contar convergencia y auto-promover si tocó el umbral
+    const seenCount = (match.seen_count ?? 1) + 1
+    const promote = autoPromote && match.confidence < 0.7 && seenCount >= threshold
+    const { error } = await supabase
+      .from('agent_brain')
+      .update({
+        seen_count: seenCount,
+        last_seen_at: new Date().toISOString(),
+        ...(promote ? { confidence: AUTO_PROMOTE_CONFIDENCE } : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', match.id)
+    if (error) {
+      // Columnas 012 sin migrar: el dedup igual evitó el duplicado
+      console.warn('[agent-brain] Failed to update seen observation:', error.message)
+    } else if (promote) {
+      console.log(`[agent-brain] Auto-promovido "${o.topic}" (visto ${seenCount}×) → confianza ${AUTO_PROMOTE_CONFIDENCE}`)
+    }
+  }
+
+  if (toInsert.length === 0) return
+  const rows = toInsert.map(o => ({
     category: o.category,
     topic: o.topic,
     content: o.content,

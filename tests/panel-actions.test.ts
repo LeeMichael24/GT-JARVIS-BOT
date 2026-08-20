@@ -32,7 +32,11 @@ const db = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/supabase', () => db)
 
-const wa = vi.hoisted(() => ({ sendText: vi.fn(async () => 'wamid.h1' as string | null) }))
+const wa = vi.hoisted(() => ({
+  sendText: vi.fn(async () => 'wamid.h1' as string | null),
+  // requerido por lib/proactive/engine (importado transitivamente por actions.ts)
+  sendTemplate: vi.fn(async () => 'wamid.t1' as string | null),
+}))
 vi.mock('@/services/whatsapp/client', () => wa)
 
 vi.mock('next/cache', () => ({ refresh: vi.fn(), revalidatePath: vi.fn() }))
