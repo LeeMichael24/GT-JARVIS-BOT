@@ -63,6 +63,7 @@ QUÉ BUSCAR (en orden de valor):
 3. Frases o enfoques que movieron al cliente a interesarse o agendar
 4. Motivos por los que un cliente se enfrió o se fue
 5. Patrones del mercado (qué proyectos piden, qué presupuestos mencionan)
+6. Tono y fraseo: frases que sonaron naturales y generaron buena reacción, y frases que sonaron forzadas, robóticas o incomodaron al cliente
 
 TEMAS QUE YA EXISTEN EN EL CEREBRO (NO repitas estos temas, solo aporta si tienes un ángulo NUEVO):
 ${existingTopics.length ? existingTopics.map(t => `- ${t}`).join('\n') : '- (ninguno)'}
@@ -71,7 +72,7 @@ CONVERSACIONES DE HOY:
 ${groups.map((g, i) => `--- Conversación ${i + 1} ---\n${g.transcript}`).join('\n\n')}
 
 Responde SOLO JSON válido:
-{"learnings": [{"category": "pattern|objection_response|knowledge_gap|market_signal", "topic": "titulo corto y especifico", "content": "el aprendizaje, concreto y accionable, max 300 caracteres"}]}
+{"learnings": [{"category": "pattern|objection_response|knowledge_gap|market_signal|tone_pattern", "topic": "titulo corto y especifico", "content": "el aprendizaje, concreto y accionable, max 300 caracteres"}]}
 Máximo ${MAX_LEARNINGS} aprendizajes. Si el día no dejó nada nuevo, devuelve {"learnings": []}. Calidad sobre cantidad.`
 }
 
@@ -84,6 +85,7 @@ export function toBrainObservations(raw: unknown): BrainObservation[] {
     objection_response: 'pattern',
     knowledge_gap: 'observation',
     market_signal: 'metric',
+    tone_pattern: 'pattern',
   }
   return arr
     .filter((l): l is Record<string, string> =>

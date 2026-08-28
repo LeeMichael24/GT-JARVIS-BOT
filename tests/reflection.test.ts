@@ -57,6 +57,14 @@ describe('buildReflectionPrompt', () => {
   })
 })
 
+describe('buildReflectionPrompt — incluye tono y fraseo', () => {
+  it('pide observaciones de tono, no solo hechos de venta', () => {
+    const p = buildReflectionPrompt([{ leadId: 'a', transcript: 'CLIENTE: hola', userMsgs: 2 }], [])
+    expect(p).toContain('Tono y fraseo')
+    expect(p).toContain('tone_pattern')
+  })
+})
+
 describe('toBrainObservations — mapeo al cerebro', () => {
   it('mapea categorías y trunca largos', () => {
     const obs = toBrainObservations({
@@ -77,5 +85,13 @@ describe('toBrainObservations — mapeo al cerebro', () => {
     expect(toBrainObservations(null)).toEqual([])
     expect(toBrainObservations({ learnings: 'nope' })).toEqual([])
     expect(toBrainObservations({ learnings: [{ topic: 'sin content' }] })).toEqual([])
+  })
+
+  it('mapea tone_pattern a pattern', () => {
+    const obs = toBrainObservations({
+      learnings: [{ category: 'tone_pattern', topic: 'Frase que aterrizó bien', content: '"Fíjate que" generó buena reacción en clientes formales' }],
+    })
+    expect(obs).toHaveLength(1)
+    expect(obs[0].category).toBe('pattern')
   })
 })
