@@ -146,6 +146,14 @@ describe('buildSystemPrompt con bloques', () => {
     expect(prompt).toContain('- Agendar visitas')
   })
 
+  it('incluye un glosario de inversión para hablar con propiedad de retornos y financiamiento', () => {
+    const prompt = buildSystemPrompt({ lead, project: null })
+    expect(prompt).toContain('Flujo de caja')
+    expect(prompt).toContain('Plusvalía:')
+    expect(prompt).toContain('Apalancamiento')
+    expect(prompt).toContain('Punto de equilibrio')
+  })
+
   it('el marco de decisión escala en reunión, dinero y documentos legales; el descuento estándar no escala', () => {
     const prompt = buildSystemPrompt({ lead, project: null })
     expect(prompt).toContain('Se agenda o confirma una reunión')
