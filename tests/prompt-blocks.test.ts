@@ -145,4 +145,12 @@ describe('buildSystemPrompt con bloques', () => {
     expect(prompt).toContain('OBJETIVOS DEL NEGOCIO')
     expect(prompt).toContain('- Agendar visitas')
   })
+
+  it('el marco de decisión escala en reunión, dinero y documentos legales; el descuento estándar no escala', () => {
+    const prompt = buildSystemPrompt({ lead, project: null })
+    expect(prompt).toContain('Se agenda o confirma una reunión')
+    expect(prompt).toContain('cuenta bancaria, transferencia')
+    expect(prompt).toContain('promesa de venta, promesa de compraventa')
+    expect(prompt).toContain('El descuento estándar por pago de contado SÍ es tuyo para compartir')
+  })
 })
