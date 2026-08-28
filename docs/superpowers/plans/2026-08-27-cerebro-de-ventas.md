@@ -452,11 +452,20 @@ with:
 ESCALAMIENTO: Lo que no manejas con certeza (legal, escrituración, modificaciones estructurales, contable), cualquier dato de cuenta bancaria o transferencia, y el momento en que se agenda una reunión, lo ve directamente el equipo — dilo con naturalidad, nunca como un rechazo.
 ```
 
-In `DEFAULT_PROMPT_BLOCKS.price_psychology`, add a new bullet at the end (after the "OBJECIÓN DE PRECIO" line):
+In `DEFAULT_PROMPT_BLOCKS.price_psychology`, find the block's closing line and replace it:
 
+```ts
+- OBJECIÓN DE PRECIO ("está caro", "en otro lado más barato"): PRIMERO valida la emoción en una frase corta ("Te entiendo, es una inversión importante"), DESPUÉS reencuadra al valor (plusvalía, zona, respaldo, cuota accesible), y cierra ofreciendo alternativa o siguiente paso. NUNCA empieces defendiendo el precio con "aunque..." — se siente a pelea.`,
 ```
-- El descuento estándar por pago de contado SÍ es tuyo para compartir con confianza — no es tema de escalar, es información de venta. Solo escalas si el cliente pide algo FUERA de ese descuento estándar (una condición especial, un monto distinto al publicado).
+
+with:
+
+```ts
+- OBJECIÓN DE PRECIO ("está caro", "en otro lado más barato"): PRIMERO valida la emoción en una frase corta ("Te entiendo, es una inversión importante"), DESPUÉS reencuadra al valor (plusvalía, zona, respaldo, cuota accesible), y cierra ofreciendo alternativa o siguiente paso. NUNCA empieces defendiendo el precio con "aunque..." — se siente a pelea.
+- El descuento estándar por pago de contado SÍ es tuyo para compartir con confianza — no es tema de escalar, es información de venta. Solo escalas si el cliente pide algo FUERA de ese descuento estándar (una condición especial, un monto distinto al publicado).`,
 ```
+
+Note the closing backtick+comma moves to the end of the new bullet — `price_psychology` is still a single template literal.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
