@@ -574,6 +574,9 @@ describe('webhook agenda una reunión', () => {
     await flush()
 
     expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
+    const call = (wa.sendInternalNotification.mock.calls[0] as any[])[0]
+    expect(call.action.reason).toContain('Cliente corporativo')
+    expect(call.action.reason).toContain('agendó reunión')
   })
 
   it('notifica al equipo aunque falle la creación del evento de Calendar', async () => {

@@ -461,13 +461,22 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
 
       // Una reunión agendada SIEMPRE avisa al equipo, sin importar si el
       // evento de Calendar se creó o si el modelo también eligió escalar.
+      // Si el modelo YA traía su propia razón de escalamiento este turno
+      // (ej. mención de cuenta bancaria, cliente corporativo), se combina
+      // en el mismo aviso — así nunca se pierde una razón real por evitar
+      // un segundo mensaje duplicado.
+      const meetingReason = `Reunión agendada (${mtg.meeting_type}) — ${mtg.datetime_iso}${calendarNote}`
+      const combinedReason = claudeResponse.agent_action?.reason
+        ? `${claudeResponse.agent_action.reason} — además, agendó reunión (${mtg.meeting_type}, ${mtg.datetime_iso})${calendarNote}`
+        : meetingReason
+
       try {
         await sendInternalNotification({
           leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
           leadPhone: lead.phone,
           action: {
             type: 'escalate_ceo',
-            reason: `Reunión agendada (${mtg.meeting_type}) — ${mtg.datetime_iso}${calendarNote}`,
+            reason: combinedReason,
             urgency: 'high',
             client_type: claudeResponse.agent_action?.client_type ?? 'individual',
             follow_up_hint: null,
