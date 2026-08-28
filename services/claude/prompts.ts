@@ -188,6 +188,8 @@ ${hasMedia
     r('price_psychology'),
     r('investment_guide'),
     r('property_questions'),
+    r('emotional_intelligence'),
+    r('closing_techniques'),
   ].filter(Boolean).join('\n\n')
 
   const decisionParts = [r('decision_framework'), r('stage_rubric')].filter(Boolean).join('\n\n')

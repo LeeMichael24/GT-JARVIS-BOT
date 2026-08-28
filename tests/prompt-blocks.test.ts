@@ -153,4 +153,12 @@ describe('buildSystemPrompt con bloques', () => {
     expect(prompt).toContain('promesa de venta, promesa de compraventa')
     expect(prompt).toContain('El descuento estándar por pago de contado SÍ es tuyo para compartir')
   })
+
+  it('incluye inteligencia emocional y técnicas de cierre en el prompt ensamblado', () => {
+    const prompt = buildSystemPrompt({ lead, project: null })
+    expect(prompt).toContain('INTELIGENCIA EMOCIONAL')
+    expect(prompt).toContain('ESCEPTICISMO')
+    expect(prompt).toContain('TÉCNICAS DE CIERRE')
+    expect(prompt).toContain('ALTERNATIVA CERRADA')
+  })
 })
