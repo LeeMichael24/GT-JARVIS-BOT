@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createHmac } from 'crypto'
+import type { ClaudeResponse } from '@/types'
 
 const pending = vi.hoisted(() => ({ promises: [] as Promise<unknown>[] }))
 
@@ -27,7 +28,7 @@ vi.hoisted(() => { process.env.WA_DEBOUNCE_MS = '0' })
 
 const ai = vi.hoisted(() => ({
   callClaude: vi.fn(async () => '{"reply":"¡Hola!"}'),
-  parseClaudeResponse: vi.fn(() => ({
+  parseClaudeResponse: vi.fn((): Partial<ClaudeResponse> => ({
     reply: '¡Hola!', stage: 'new', name_captured: null,
     qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
     qualified: false, schedule_meeting: null, opt_out: false,
