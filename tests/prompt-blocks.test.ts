@@ -169,4 +169,10 @@ describe('buildSystemPrompt con bloques', () => {
     expect(prompt).toContain('TÉCNICAS DE CIERRE')
     expect(prompt).toContain('ALTERNATIVA CERRADA')
   })
+
+  it('el descuento estándar libre solo aplica cuando el catálogo trae la cifra para ese proyecto', () => {
+    const prompt = buildSystemPrompt({ lead, project: null })
+    expect(prompt).toContain('SOLO cuando el catálogo o playbook trae la cifra para ESE proyecto específico')
+    expect(prompt).toContain('Déjame confirmar ese descuento con el equipo')
+  })
 })

@@ -551,4 +551,54 @@ describe('webhook agenda una reunión', () => {
     // El reply al cliente se manda igual, la notificación fallida no lo bloquea
     expect(wa.sendText).toHaveBeenCalledWith('50312345678', 'Listo, agendado.')
   })
+
+  it('NO manda dos alertas cuando la reunión Y el agent_action son escalate_ceo en el mismo turno', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Somos una empresa, agendemos el viernes a las 3pm', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    vi.mocked(createCalendarEvent).mockResolvedValueOnce({ eventId: 'evt1', htmlLink: 'https://calendar.google.com/evt1' })
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Perfecto, agendado.', stage: 'hot', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      qualified: false,
+      schedule_meeting: { requested: true, datetime_iso: '2026-09-04T15:00:00-06:00', meeting_type: 'videollamada', project_name: null, notes: null },
+      opt_out: false,
+      agent_action: { type: 'escalate_ceo', reason: 'Cliente corporativo', urgency: 'high', client_type: 'corporate', follow_up_hint: null },
+      deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
+    })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
+  })
+
+  it('notifica al equipo aunque falle la creación del evento de Calendar', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'El viernes a las 3pm', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    vi.mocked(createCalendarEvent).mockRejectedValueOnce(new Error('Google API down'))
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Listo, agendado.', stage: 'hot', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      qualified: false,
+      schedule_meeting: { requested: true, datetime_iso: '2026-09-04T15:00:00-06:00', meeting_type: 'llamada', project_name: null, notes: null },
+      opt_out: false,
+      agent_action: { type: 'sell', reason: null, urgency: 'normal', client_type: 'individual', follow_up_hint: null },
+      deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
+    })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
+    const call = (wa.sendInternalNotification.mock.calls[0] as any[])[0]
+    expect(call.action.reason).toContain('NO se pudo crear')
+  })
 })

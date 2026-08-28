@@ -17,12 +17,18 @@ function rule(trigger_value: string, overrides: Partial<EscalationRule> = {}): E
 }
 
 // Refleja el rule set activo DESPUÉS de la migración 013: sin 'descuento',
-// con los disparadores nuevos de dinero y documentos legales.
+// con los disparadores nuevos de dinero y documentos legales, incluyendo
+// las variantes sin tilde ('numero de cuenta', 'deposito bancario') y sin
+// el 'depósito' suelto (que coincidía con preguntas normales de alquiler).
 const activeRules: EscalationRule[] = [
   rule('cuenta bancaria'),
   rule('número de cuenta'),
+  rule('numero de cuenta'),
   rule('transferencia'),
-  rule('depósito'),
+  rule('depósito bancario'),
+  rule('deposito bancario'),
+  rule('hacer un depósito'),
+  rule('hacer un deposito'),
   rule('promesa de venta'),
   rule('promesa de compraventa'),
   rule('documento de reserva'),
@@ -61,5 +67,16 @@ describe('matchKeywordRules — disparadores duros de traspaso', () => {
     const values = matched.map(r => r.trigger_value)
     expect(values).toContain('precio final')
     expect(values).toContain('contrato')
+  })
+
+  it('detecta variantes sin tilde de los mismos disparadores', () => {
+    expect(matchKeywordRules('cual es el numero de cuenta', activeRules).map(r => r.trigger_value))
+      .toContain('numero de cuenta')
+    expect(matchKeywordRules('quiero hacer un deposito bancario', activeRules).map(r => r.trigger_value))
+      .toEqual(expect.arrayContaining(['deposito bancario']))
+  })
+
+  it('NO dispara con una pregunta normal de depósito de alquiler', () => {
+    expect(matchKeywordRules('¿cuánto es el depósito de esa casa en renta?', activeRules)).toEqual([])
   })
 })

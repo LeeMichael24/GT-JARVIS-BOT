@@ -430,9 +430,16 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       }
     }
 
-    // 10. Create Google Calendar event if Daniela scheduled a meeting
+    // 10. Create Google Calendar event if Daniela scheduled a meeting, and
+    //     ALWAYS notify the team a meeting was agreed — independent of
+    //     whether the Calendar API call itself succeeds (a Google outage
+    //     is exactly when the team most needs the heads-up, since no
+    //     calendar entry will exist either), and independent of whatever
+    //     agent_action the model chose this same turn.
     const mtg = claudeResponse.schedule_meeting
+    let teamNotifiedForMeeting = false
     if (mtg?.requested && mtg.datetime_iso) {
+      let calendarNote = ''
       try {
         const event = await createCalendarEvent({
           leadName:    lead.name ?? claudeResponse.name_captured ?? 'Cliente',
@@ -447,33 +454,38 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
           details: { type: mtg.meeting_type, project: mtg.project_name, datetime: mtg.datetime_iso },
         })
         console.log(`[processMessage] Calendar event created: ${event.htmlLink}`)
-
-        // Una reunión agendada SIEMPRE avisa al equipo, sin importar qué
-        // agent_action haya elegido el modelo este turno — antes el evento
-        // se creaba en Calendar en silencio si el modelo no escalaba también.
-        try {
-          await sendInternalNotification({
-            leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
-            leadPhone: lead.phone,
-            action: {
-              type: 'escalate_ceo',
-              reason: `Reunión agendada (${mtg.meeting_type}) — ${mtg.datetime_iso}`,
-              urgency: 'high',
-              client_type: claudeResponse.agent_action?.client_type ?? 'individual',
-              follow_up_hint: null,
-            },
-            botReply: claudeResponse.reply,
-            dealSummary: claudeResponse.deal_summary?.summary ?? null,
-          })
-        } catch (err) {
-          console.error('[processMessage] Failed to notify team of scheduled meeting:', err instanceof Error ? err.message : err)
-        }
       } catch (err) {
         console.error('[processMessage] Failed to create calendar event:', err instanceof Error ? err.message : err)
+        calendarNote = ' (el evento de Calendar NO se pudo crear — revisar manualmente)'
+      }
+
+      // Una reunión agendada SIEMPRE avisa al equipo, sin importar si el
+      // evento de Calendar se creó o si el modelo también eligió escalar.
+      try {
+        await sendInternalNotification({
+          leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
+          leadPhone: lead.phone,
+          action: {
+            type: 'escalate_ceo',
+            reason: `Reunión agendada (${mtg.meeting_type}) — ${mtg.datetime_iso}${calendarNote}`,
+            urgency: 'high',
+            client_type: claudeResponse.agent_action?.client_type ?? 'individual',
+            follow_up_hint: null,
+          },
+          botReply: claudeResponse.reply,
+          dealSummary: claudeResponse.deal_summary?.summary ?? null,
+        })
+        teamNotifiedForMeeting = true
+      } catch (err) {
+        console.error('[processMessage] Failed to notify team of scheduled meeting:', err instanceof Error ? err.message : err)
       }
     }
 
-    // 10b. Route agent actions — notify CEO for consultations and escalations
+    // 10b. Route agent actions — notify CEO for consultations and escalations.
+    // The activity log always records the model's decision; the WhatsApp
+    // alert itself is skipped only if the meeting notification above
+    // already reached the team this same turn, so a booked meeting never
+    // sends two separate alerts for one event.
     const action = claudeResponse.agent_action
     if (action && (action.type === 'consult_team' || action.type === 'escalate_ceo')) {
       await logActivity({
@@ -481,17 +493,19 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
         details: { reason: action.reason, urgency: action.urgency, client_type: action.client_type },
       }).catch(err => console.error('[processMessage] logActivity failed:', err instanceof Error ? err.message : err))
 
-      try {
-        await sendInternalNotification({
-          leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
-          leadPhone: lead.phone,
-          action,
-          botReply: claudeResponse.reply,
-          dealSummary: claudeResponse.deal_summary?.summary ?? null,
-        })
-        console.log(`[processMessage] CEO notified: ${action.type} for lead ${lead.id}`)
-      } catch (err) {
-        console.error('[processMessage] Failed to send WA notification to CEO:', err instanceof Error ? err.message : err)
+      if (!teamNotifiedForMeeting) {
+        try {
+          await sendInternalNotification({
+            leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
+            leadPhone: lead.phone,
+            action,
+            botReply: claudeResponse.reply,
+            dealSummary: claudeResponse.deal_summary?.summary ?? null,
+          })
+          console.log(`[processMessage] CEO notified: ${action.type} for lead ${lead.id}`)
+        } catch (err) {
+          console.error('[processMessage] Failed to send WA notification to CEO:', err instanceof Error ? err.message : err)
+        }
       }
     }
 

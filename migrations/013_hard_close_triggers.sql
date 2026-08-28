@@ -20,16 +20,35 @@ SET active = false,
     updated_at = now()
 WHERE trigger_type = 'keyword' AND trigger_value = 'descuento';
 
-INSERT INTO escalation_rules (trigger_type, trigger_value, description, action) VALUES
+-- INSERT ... SELECT ... WHERE NOT EXISTS en vez de ON CONFLICT DO NOTHING:
+-- escalation_rules no tiene constraint único en (trigger_type, trigger_value)
+-- (solo PK por uuid), así que ON CONFLICT DO NOTHING no protegía nada — correr
+-- este archivo dos veces habría duplicado las 8 filas. Esta forma sí es segura
+-- de re-ejecutar. También se agregan versiones sin tilde ('numero de cuenta',
+-- 'deposito bancario') porque WhatsApp/celular omite tildes seguido y el
+-- matching de escalation_rules es substring literal, sin normalizar acentos.
+-- 'depósito' solo (sin calificar) se retira: coincidía con preguntas normales
+-- de "¿cuánto es el depósito?" sobre alquileres del catálogo.
+INSERT INTO escalation_rules (trigger_type, trigger_value, description, action)
+SELECT v.trigger_type, v.trigger_value, v.description, v.action
+FROM (VALUES
   ('keyword', 'cuenta bancaria',        'Cliente pide datos de cuenta para transferir dinero — Daniela nunca los comparte ella sola', 'escalate_ceo'),
   ('keyword', 'número de cuenta',       'Cliente pide datos de cuenta para transferir dinero — Daniela nunca los comparte ella sola', 'escalate_ceo'),
+  ('keyword', 'numero de cuenta',       'Igual que "número de cuenta", sin tilde — WhatsApp/celular la omite seguido',                'escalate_ceo'),
   ('keyword', 'transferencia',          'Mención de transferencia de dinero — requiere supervisión humana',                          'escalate_ceo'),
-  ('keyword', 'depósito',               'Mención de depósito de dinero — requiere supervisión humana',                                'escalate_ceo'),
+  ('keyword', 'depósito bancario',      'Mención de depósito bancario — requiere supervisión humana',                                'escalate_ceo'),
+  ('keyword', 'deposito bancario',      'Igual que "depósito bancario", sin tilde',                                                   'escalate_ceo'),
+  ('keyword', 'hacer un depósito',      'Intención de depositar dinero — requiere supervisión humana',                                'escalate_ceo'),
+  ('keyword', 'hacer un deposito',      'Igual que "hacer un depósito", sin tilde',                                                   'escalate_ceo'),
   ('keyword', 'promesa de venta',       'Documento legal de cierre — lo gestiona el equipo con notario',                              'escalate_ceo'),
   ('keyword', 'promesa de compraventa', 'Documento legal de cierre — lo gestiona el equipo con notario',                              'escalate_ceo'),
   ('keyword', 'documento de reserva',   'Documento legal de cierre — lo gestiona el equipo con notario',                              'escalate_ceo'),
   ('keyword', 'notario',                'Trámite legal — lo gestiona el equipo directamente',                                         'escalate_ceo')
-ON CONFLICT DO NOTHING;
+) AS v(trigger_type, trigger_value, description, action)
+WHERE NOT EXISTS (
+  SELECT 1 FROM escalation_rules r
+  WHERE r.trigger_type = v.trigger_type AND r.trigger_value = v.trigger_value
+);
 
 -- ────────────────────────────────────────────────────────────
 -- La base de conocimiento le ordenaba a Daniela compartir el
