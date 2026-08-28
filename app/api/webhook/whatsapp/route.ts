@@ -447,6 +447,27 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
           details: { type: mtg.meeting_type, project: mtg.project_name, datetime: mtg.datetime_iso },
         })
         console.log(`[processMessage] Calendar event created: ${event.htmlLink}`)
+
+        // Una reunión agendada SIEMPRE avisa al equipo, sin importar qué
+        // agent_action haya elegido el modelo este turno — antes el evento
+        // se creaba en Calendar en silencio si el modelo no escalaba también.
+        try {
+          await sendInternalNotification({
+            leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
+            leadPhone: lead.phone,
+            action: {
+              type: 'escalate_ceo',
+              reason: `Reunión agendada (${mtg.meeting_type}) — ${mtg.datetime_iso}`,
+              urgency: 'high',
+              client_type: claudeResponse.agent_action?.client_type ?? 'individual',
+              follow_up_hint: null,
+            },
+            botReply: claudeResponse.reply,
+            dealSummary: claudeResponse.deal_summary?.summary ?? null,
+          })
+        } catch (err) {
+          console.error('[processMessage] Failed to notify team of scheduled meeting:', err instanceof Error ? err.message : err)
+        }
       } catch (err) {
         console.error('[processMessage] Failed to create calendar event:', err instanceof Error ? err.message : err)
       }

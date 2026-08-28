@@ -120,6 +120,7 @@ vi.mock('@/lib/agent-settings', () => ({
 
 import { POST } from '@/app/api/webhook/whatsapp/route'
 import { getAllProjects } from '@/services/projects/gt-api'
+import { createCalendarEvent } from '@/services/google/calendar'
 
 const SECRET = 'test_secret'
 process.env.WA_APP_SECRET = SECRET
@@ -491,5 +492,62 @@ describe('webhook con bot activo', () => {
     const linkSend = wa.sendText.mock.calls.find(c => String(c[1]).includes('earth.google.com'))
     expect(linkSend).toBeDefined()
     expect(String(linkSend![1])).toContain('Ubicación exacta 🌍')
+  })
+})
+
+describe('webhook agenda una reunión', () => {
+  it('notifica al equipo SIEMPRE que se agenda una reunión, aunque agent_action sea "sell"', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Sí, el viernes a las 3pm por videollamada', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    vi.mocked(createCalendarEvent).mockResolvedValueOnce({ eventId: 'evt1', htmlLink: 'https://calendar.google.com/evt1' })
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Perfecto, agendé tu videollamada para el viernes a las 3pm.', stage: 'hot', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      qualified: false,
+      schedule_meeting: { requested: true, datetime_iso: '2026-09-04T15:00:00-06:00', meeting_type: 'videollamada', project_name: 'Portacelli', notes: null },
+      opt_out: false,
+      agent_action: { type: 'sell', reason: null, urgency: 'normal', client_type: 'individual', follow_up_hint: null },
+      deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
+    })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(createCalendarEvent).toHaveBeenCalledTimes(1)
+    expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
+    const call = wa.sendInternalNotification.mock.calls[0][0]
+    expect(call.leadName).toBe('Carlos')
+    expect(call.action.type).toBe('escalate_ceo')
+    expect(call.action.reason).toContain('videollamada')
+  })
+
+  it('NO deja de notificar si sendInternalNotification falla — el evento de Calendar ya se creó', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'El viernes a las 3pm', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    vi.mocked(createCalendarEvent).mockResolvedValueOnce({ eventId: 'evt1', htmlLink: 'https://calendar.google.com/evt1' })
+    wa.sendInternalNotification.mockRejectedValueOnce(new Error('WA down'))
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Listo, agendado.', stage: 'hot', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      qualified: false,
+      schedule_meeting: { requested: true, datetime_iso: '2026-09-04T15:00:00-06:00', meeting_type: 'llamada', project_name: null, notes: null },
+      opt_out: false,
+      agent_action: { type: 'sell', reason: null, urgency: 'normal', client_type: 'individual', follow_up_hint: null },
+      deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
+    })
+
+    const res = await POST(buildRequest())
+    expect(res.status).toBe(200)
+    await flush()
+
+    // El reply al cliente se manda igual, la notificación fallida no lo bloquea
+    expect(wa.sendText).toHaveBeenCalledWith('50312345678', 'Listo, agendado.')
   })
 })
