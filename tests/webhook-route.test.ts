@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createHmac } from 'crypto'
 import type { ClaudeResponse } from '@/types'
 
@@ -84,6 +84,14 @@ vi.mock('@/lib/escalation-rules', () => ({
   matchKeywordRules: vi.fn(() => []),
   formatEscalationRulesForPrompt: vi.fn(() => ''),
 }))
+// Solo se simula la lectura de BD: isInternal/pickAlertRecipient corren de verdad
+const teamRouting = vi.hoisted(() => ({
+  getActiveTeamMembers: vi.fn(async (): Promise<{ id: string; wa_phone: string | null }[]> => []),
+}))
+vi.mock('@/lib/team-routing', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/team-routing')>()),
+  getActiveTeamMembers: teamRouting.getActiveTeamMembers,
+}))
 const media = vi.hoisted(() => ({
   getAllProjectMediaItems: vi.fn(async (): Promise<unknown[]> => []),
   mediaForProject: vi.fn((): unknown[] => []),
@@ -126,11 +134,11 @@ import { createCalendarEvent } from '@/services/google/calendar'
 const SECRET = 'test_secret'
 process.env.WA_APP_SECRET = SECRET
 
-function buildRequest(): Request {
+function buildRequest(from = '50312345678'): Request {
   const body = JSON.stringify({
     object: 'whatsapp_business_account',
     entry: [{ changes: [{ value: { messages: [{
-      id: 'wamid.in1', from: '50312345678', type: 'text',
+      id: 'wamid.in1', from, type: 'text',
       text: { body: 'Sigo interesado' }, timestamp: '1716556800',
     }] } }] }],
   })
@@ -155,6 +163,48 @@ const baseLead = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+})
+
+describe('webhook con número interno del equipo', () => {
+  const CEO_ENV = '+50362087916'
+  let previo: string | undefined
+
+  beforeEach(() => { previo = process.env.CEO_PHONE_NUMBER; process.env.CEO_PHONE_NUMBER = CEO_ENV })
+  afterEach(() => {
+    if (previo === undefined) delete process.env.CEO_PHONE_NUMBER
+    else process.env.CEO_PHONE_NUMBER = previo
+  })
+
+  it('si escribe el CEO no crea lead, no llama al modelo y no responde', async () => {
+    // El env trae "+" y Meta manda el from sin "+": deben reconocerse igual
+    const res = await POST(buildRequest('50362087916'))
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(db.upsertLead).not.toHaveBeenCalled()
+    expect(ai.callClaude).not.toHaveBeenCalled()
+    expect(wa.sendText).not.toHaveBeenCalled()
+  })
+
+  it('si escribe un asesor del equipo tampoco se le vende', async () => {
+    teamRouting.getActiveTeamMembers.mockResolvedValueOnce([{ id: 'tm-paola', wa_phone: '+503 7725 0355' }])
+    const res = await POST(buildRequest('50377250355'))
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(db.upsertLead).not.toHaveBeenCalled()
+    expect(ai.callClaude).not.toHaveBeenCalled()
+  })
+
+  it('un cliente normal SÍ entra aunque haya equipo configurado', async () => {
+    teamRouting.getActiveTeamMembers.mockResolvedValueOnce([{ id: 'tm-paola', wa_phone: '50377250355' }])
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: false })
+    const res = await POST(buildRequest('50312345678'))
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(db.upsertLead).toHaveBeenCalledWith('50312345678')
+  })
 })
 
 describe('webhook con bot pausado (takeover)', () => {
@@ -603,5 +653,78 @@ describe('webhook agenda una reunión', () => {
     expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
     const call = (wa.sendInternalNotification.mock.calls[0] as any[])[0]
     expect(call.action.reason).toContain('NO se pudo crear')
+  })
+})
+
+describe('ruteo de alertas: consultas al asesor, cierres al CEO', () => {
+  const CEO_ENV = '+50362087916'
+  const PAOLA = { id: 'tm-paola', wa_phone: '+503 7725 0355' }
+  let previo: string | undefined
+
+  beforeEach(() => { previo = process.env.CEO_PHONE_NUMBER; process.env.CEO_PHONE_NUMBER = CEO_ENV })
+  afterEach(() => {
+    if (previo === undefined) delete process.env.CEO_PHONE_NUMBER
+    else process.env.CEO_PHONE_NUMBER = previo
+  })
+
+  function armarLeadAsignado() {
+    const asignado = { ...baseLead, bot_active: true, assigned_to: PAOLA.id }
+    db.upsertLead.mockResolvedValue(asignado)
+    db.getLeadById.mockResolvedValue(asignado)
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Una consulta', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    teamRouting.getActiveTeamMembers.mockResolvedValueOnce([PAOLA])
+  }
+
+  function responderCon(tipo: 'consult_team' | 'escalate_ceo') {
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Déjame verificar con mi equipo.', stage: 'warm', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      qualified: false, schedule_meeting: null, opt_out: false,
+      agent_action: { type: tipo, reason: 'motivo de prueba', urgency: 'normal', client_type: 'individual', follow_up_hint: null },
+      deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
+    })
+  }
+
+  it('consult_team de un lead asignado le llega al asesor, no al CEO', async () => {
+    armarLeadAsignado()
+    responderCon('consult_team')
+
+    expect((await POST(buildRequest())).status).toBe(200)
+    await flush()
+
+    expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
+    const call = (wa.sendInternalNotification.mock.calls[0] as any[])[0]
+    expect(call.toPhone).toBe(PAOLA.wa_phone)
+  })
+
+  it('escalate_ceo siempre le llega al CEO, aunque el lead tenga asesor', async () => {
+    armarLeadAsignado()
+    responderCon('escalate_ceo')
+
+    expect((await POST(buildRequest())).status).toBe(200)
+    await flush()
+
+    expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
+    const call = (wa.sendInternalNotification.mock.calls[0] as any[])[0]
+    expect(call.toPhone).toBe(CEO_ENV)
+  })
+
+  it('consult_team de un lead SIN asesor cae al CEO', async () => {
+    const sinAsignar = { ...baseLead, bot_active: true, assigned_to: null }
+    db.upsertLead.mockResolvedValue(sinAsignar)
+    db.getLeadById.mockResolvedValue(sinAsignar)
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Una consulta', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    teamRouting.getActiveTeamMembers.mockResolvedValueOnce([PAOLA])
+    responderCon('consult_team')
+
+    expect((await POST(buildRequest())).status).toBe(200)
+    await flush()
+
+    const call = (wa.sendInternalNotification.mock.calls[0] as any[])[0]
+    expect(call.toPhone).toBe(CEO_ENV)
   })
 })

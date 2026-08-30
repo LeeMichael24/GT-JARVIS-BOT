@@ -27,6 +27,7 @@ import { saveLeadSource, getLeadSource, getActiveAdCampaigns, matchAdCampaign, f
 import { logActivity } from '@/lib/activity-log'
 import { autoTagProject, autoTagSource } from '@/lib/auto-tag'
 import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPrompt } from '@/lib/escalation-rules'
+import { getActiveTeamMembers, isInternal, pickAlertRecipient } from '@/lib/team-routing'
 import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, type ProjectMediaItem } from '@/lib/project-media'
 import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } from '@/lib/project-scripts'
 import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
@@ -114,6 +115,22 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // 2. Deduplicate: ignore already-processed messages
     if (await isMessageProcessed(parsed.messageId)) {
       console.log(`[processMessage] Duplicate message ${parsed.messageId}, skipping`)
+      return
+    }
+
+    // 2c. Cortocircuito de números internos: el CEO y los asesores NUNCA son
+    //     leads. Va antes de transcribir audio y antes de crear el lead, así un
+    //     mensaje interno no cuesta Whisper ni GPT, ni ensucia el CRM. Silencio
+    //     total: queda el registro en activity_log, pero Daniela no contesta.
+    const team = await getActiveTeamMembers()
+    if (isInternal(parsed.from, process.env.CEO_PHONE_NUMBER, team.map(m => m.wa_phone))) {
+      console.log(`[processMessage] Número interno (${parsed.from}) — sin lead, sin respuesta`)
+      await logActivity({
+        actorType: 'system',
+        action: 'internal_message_ignored',
+        entityType: 'team_member',
+        details: { from: parsed.from, wa_message_id: parsed.messageId },
+      }).catch(() => {})
       return
     }
 
@@ -504,16 +521,19 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
 
       if (!teamNotifiedForMeeting) {
         try {
+          // Consultas van al asesor asignado; los cierres siempre al CEO.
+          const destino = pickAlertRecipient(action.type, lead.assigned_to, process.env.CEO_PHONE_NUMBER, team)
           await sendInternalNotification({
             leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
             leadPhone: lead.phone,
             action,
             botReply: claudeResponse.reply,
             dealSummary: claudeResponse.deal_summary?.summary ?? null,
+            toPhone: destino,
           })
-          console.log(`[processMessage] CEO notified: ${action.type} for lead ${lead.id}`)
+          console.log(`[processMessage] Alerta enviada (${action.type}) del lead ${lead.id}`)
         } catch (err) {
-          console.error('[processMessage] Failed to send WA notification to CEO:', err instanceof Error ? err.message : err)
+          console.error('[processMessage] No se pudo enviar la alerta por WhatsApp:', err instanceof Error ? err.message : err)
         }
       }
     }

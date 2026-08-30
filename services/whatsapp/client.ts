@@ -106,6 +106,11 @@ export interface NotificationParams {
   action: AgentAction
   botReply: string
   dealSummary: string | null
+  /**
+   * A quién se manda la alerta. Lo decide quien llama (ver pickAlertRecipient).
+   * Si falta, cae al CEO — el comportamiento de siempre.
+   */
+  toPhone?: string
 }
 
 export function formatNotification(params: NotificationParams): string {
@@ -140,14 +145,15 @@ export function formatNotification(params: NotificationParams): string {
 }
 
 export async function sendInternalNotification(params: NotificationParams): Promise<void> {
-  const ceoPhone = process.env.CEO_PHONE_NUMBER
-  if (!ceoPhone) {
-    console.warn('[notification] CEO_PHONE_NUMBER not configured — skipping notification')
+  // Puede ser el CEO o un asesor: el destinatario lo elige quien llama.
+  const destino = params.toPhone ?? process.env.CEO_PHONE_NUMBER
+  if (!destino) {
+    console.warn('[notification] Sin destinatario (toPhone y CEO_PHONE_NUMBER vacíos) — alerta omitida')
     return
   }
   const message = formatNotification(params)
   try {
-    await sendText(ceoPhone, message, { typingDelay: false })
+    await sendText(destino, message, { typingDelay: false })
   } catch (err) {
     // El texto libre falla si el CEO no le ha escrito al bot en 24h (error 131047).
     // Fallback: plantilla HSM aprobada — llega SIEMPRE, con o sin ventana.
@@ -157,7 +163,7 @@ export async function sendInternalNotification(params: NotificationParams): Prom
       throw err
     }
     console.warn(`[notification] Free-form al CEO rechazado — reintentando con plantilla "${tpl}"`)
-    await sendTemplate(ceoPhone, tpl, 'es', [
+    await sendTemplate(destino, tpl, 'es', [
       params.leadName,
       `+${params.leadPhone}`,
       params.action.reason ?? (params.action.type === 'escalate_ceo' ? 'Cliente listo para cerrar' : 'Daniela necesita apoyo'),
