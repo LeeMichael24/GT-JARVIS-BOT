@@ -18,6 +18,7 @@ import { runNightlyReflection } from '@/lib/reflection'
 import { runDailyRadar, runRecontactRules } from '@/lib/proactive/engine'
 import { aggregateDailyMetrics } from '@/lib/agent-brain'
 import { syncProjectMediaFromEcosystem } from '@/lib/media-sync'
+import { normalizePhone } from '@/lib/team-routing'
 import { getAgentSettings } from '@/lib/agent-settings'
 import { recordCronRun, getRecentCronRuns } from '@/lib/cron-log'
 import type { ActivityLogEntry, AgentObjective, BrainEntry, CronRun, EscalationAction, EscalationRule, EscalationTriggerType, Lead, LeadStage, ObjectiveScope, TeamRole } from '@/types'
@@ -289,6 +290,31 @@ export async function setMemberActive(memberId: string, active: boolean): Promis
     const { error } = await service
       .from('team_members')
       .update({ active })
+      .eq('id', memberId)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/**
+ * Teléfono de WhatsApp del miembro: a dónde le llegan las alertas de Daniela
+ * cuando tiene un lead asignado, y qué número ella reconoce como interno para
+ * no tratarlo como cliente.
+ *
+ * Se guarda normalizado (solo dígitos) porque el campo `to` de la Graph API no
+ * acepta espacios ni guiones: un teléfono con formato haría fallar el envío en
+ * silencio. Vacío = null, para que el ruteo caiga limpio al CEO.
+ */
+export async function setMemberPhone(memberId: string, phone: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const normalizado = normalizePhone(phone)
+    const { error } = await getServiceClient()
+      .from('team_members')
+      .update({ wa_phone: normalizado || null })
       .eq('id', memberId)
     if (error) throw new Error(error.message)
     refresh()

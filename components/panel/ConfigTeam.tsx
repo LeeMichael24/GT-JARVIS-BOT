@@ -1,12 +1,43 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { inviteTeamMember, setMemberActive } from '@/app/panel/actions'
+import { inviteTeamMember, setMemberActive, setMemberPhone } from '@/app/panel/actions'
 import type { TeamMember, TeamRole } from '@/types'
 
 const MEMBER_ERROR: Record<string, string> = {
   LAST_ADMIN: 'No puedes desactivar al último admin activo.',
   CANT_DEACTIVATE_SELF: 'No puedes desactivarte a ti mismo.',
+}
+
+// El teléfono decide dos cosas: a dónde le llegan las alertas de sus leads
+// asignados, y que Daniela lo reconozca como del equipo y no le venda.
+function TelefonoMiembro({ member, disabled }: { member: TeamMember; disabled: boolean }) {
+  const [valor, setValor] = useState(member.wa_phone ?? '')
+  const [estado, setEstado] = useState<'idle' | 'guardando' | 'ok' | 'error'>('idle')
+
+  const guardar = async () => {
+    if (valor.trim() === (member.wa_phone ?? '')) return
+    setEstado('guardando')
+    const res = await setMemberPhone(member.id, valor)
+    setEstado(res.ok ? 'ok' : 'error')
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        value={valor}
+        onChange={e => { setValor(e.target.value); setEstado('idle') }}
+        onBlur={guardar}
+        disabled={disabled}
+        inputMode="tel"
+        placeholder="WhatsApp (50370000000)"
+        aria-label={`Teléfono de WhatsApp de ${member.name}`}
+        className="w-44 rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-white outline-none focus:border-emerald-600 disabled:opacity-40"
+      />
+      {estado === 'ok' && <span className="text-xs text-emerald-500">✓</span>}
+      {estado === 'error' && <span className="text-xs text-red-400">error</span>}
+    </div>
+  )
 }
 
 export function ConfigTeam({ team, selfId }: { team: TeamMember[]; selfId: string }) {
@@ -27,6 +58,8 @@ export function ConfigTeam({ team, selfId }: { team: TeamMember[]; selfId: strin
               <p className={m.active ? 'text-white' : 'text-zinc-600 line-through'}>{m.name}</p>
               <p className="text-xs text-zinc-500">{m.email} · {m.role === 'admin' ? 'Admin' : 'Asesor'}</p>
             </div>
+            <div className="flex items-center gap-2">
+            <TelefonoMiembro member={m} disabled={isPending} />
             {m.id !== selfId && (
               <button
                 disabled={isPending}
@@ -39,6 +72,7 @@ export function ConfigTeam({ team, selfId }: { team: TeamMember[]; selfId: strin
                 {m.active ? 'Desactivar' : 'Reactivar'}
               </button>
             )}
+            </div>
           </li>
         ))}
       </ul>

@@ -41,7 +41,7 @@ vi.mock('@/services/whatsapp/client', () => wa)
 
 vi.mock('next/cache', () => ({ refresh: vi.fn(), revalidatePath: vi.fn() }))
 
-import { sendHumanMessage, assignLead, setBotActive, addLeadTag, addNote, updateLeadStage, deleteTag, setMemberActive, createProjectScript, updateProjectScript, saveAgentSettings, createProjectMediaItem, createPlaybookEntry } from '@/app/panel/actions'
+import { sendHumanMessage, assignLead, setBotActive, addLeadTag, addNote, updateLeadStage, deleteTag, setMemberActive, setMemberPhone, createProjectScript, updateProjectScript, saveAgentSettings, createProjectMediaItem, createPlaybookEntry } from '@/app/panel/actions'
 
 const admin = { id: 'adm1', name: 'Michael', email: 'm@gt.com', role: 'admin' }
 const asesor = { id: 'ase1', name: 'Ana', email: 'a@gt.com', role: 'asesor' }
@@ -197,6 +197,30 @@ describe('autorización de acciones restantes', () => {
     const res = await setMemberActive('adm1', false)
     expect(res).toEqual({ ok: false, error: 'CANT_DEACTIVATE_SELF' })
     expect(serviceChain.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('teléfono de WhatsApp del equipo (wa_phone)', () => {
+  it('solo un admin puede cambiarlo', async () => {
+    state.member = asesor
+    const res = await setMemberPhone('ase1', '+503 7725 0355')
+    expect(res).toEqual({ ok: false, error: 'FORBIDDEN' })
+    expect(serviceChain.update).not.toHaveBeenCalled()
+  })
+
+  it('guarda el teléfono normalizado, no lo que se tecleó', async () => {
+    // Crudo con espacios la Graph API lo rechaza y la alerta se pierde en silencio
+    state.member = admin
+    const res = await setMemberPhone('ase1', '+503 7725-0355')
+    expect(res).toEqual({ ok: true })
+    expect(serviceChain.update).toHaveBeenCalledWith({ wa_phone: '50377250355' })
+  })
+
+  it('un valor vacío borra el teléfono en vez de guardar cadena vacía', async () => {
+    state.member = admin
+    const res = await setMemberPhone('ase1', '   ')
+    expect(res).toEqual({ ok: true })
+    expect(serviceChain.update).toHaveBeenCalledWith({ wa_phone: null })
   })
 })
 

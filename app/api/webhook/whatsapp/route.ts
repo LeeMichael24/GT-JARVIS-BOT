@@ -124,10 +124,16 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       return
     }
 
+    // 2a. Visto azul de inmediato. Va antes del cortocircuito a propósito: sin
+    //     esto un mensaje interno no deja ninguna señal y parece que el bot
+    //     está caído. Marcar como leído no es responder, así que no rompe el
+    //     silencio. Es fire-and-forget: sus errores se tragan adentro.
+    markAsRead(parsed.messageId)
+
     // 2c. Cortocircuito de números internos: el CEO y los asesores NUNCA son
     //     leads. Va antes de transcribir audio y antes de crear el lead, así un
-    //     mensaje interno no cuesta Whisper ni GPT, ni ensucia el CRM. Silencio
-    //     total: queda el registro en activity_log, pero Daniela no contesta.
+    //     mensaje interno no cuesta Whisper ni GPT, ni ensucia el CRM. Daniela
+    //     no contesta; queda solo el registro en activity_log.
     if (isInternal(parsed.from, process.env.CEO_PHONE_NUMBER, team.map(m => m.wa_phone))) {
       console.log(`[processMessage] Número interno (${parsed.from}) — sin lead, sin respuesta`)
       await logActivity({
@@ -153,9 +159,6 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     } else if (isImage) {
       messageBody = '[El cliente envió una imagen]'
     }
-
-    // 2a. Mark as read immediately (blue checkmarks in WhatsApp)
-    markAsRead(parsed.messageId)
 
     // 3. Upsert lead — create if new, update last_message_at if existing
     const lead = await upsertLead(parsed.from)

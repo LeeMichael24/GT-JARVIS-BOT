@@ -186,6 +186,15 @@ describe('webhook con número interno del equipo', () => {
     expect(wa.sendText).not.toHaveBeenCalled()
   })
 
+  it('sí le da visto azul: sin eso el mensaje interno parece que el bot murió', async () => {
+    const res = await POST(buildRequest('50362087916'))
+    expect(res.status).toBe(200)
+    await flush()
+
+    expect(wa.markAsRead).toHaveBeenCalledWith('wamid.in1')
+    expect(wa.sendText).not.toHaveBeenCalled()
+  })
+
   it('si escribe un asesor del equipo tampoco se le vende', async () => {
     teamRouting.getActiveTeamMembers.mockResolvedValueOnce([{ id: 'tm-paola', wa_phone: '+503 7725 0355' }])
     const res = await POST(buildRequest('50377250355'))
