@@ -65,7 +65,14 @@ describe('pickAlertRecipient — consultas al asesor, cierres al CEO', () => {
   })
 
   it('consult_team va al asesor asignado al lead', () => {
-    expect(pickAlertRecipient('consult_team', PAOLA.id, CEO, [PAOLA])).toBe(PAOLA.wa_phone)
+    expect(pickAlertRecipient('consult_team', PAOLA.id, CEO, [PAOLA])).toBe('50377250355')
+  })
+
+  it('devuelve el teléfono ya normalizado: la Graph API no acepta espacios en "to"', () => {
+    // wa_phone se teclea a mano en Supabase (no hay campo en el panel), así que
+    // llega con espacios y guiones. Mandarlo crudo hace fallar el envío en silencio.
+    const conFormato = { id: 'tm-x', wa_phone: '+503 7725-0355' }
+    expect(pickAlertRecipient('consult_team', 'tm-x', CEO, [conFormato])).toBe('50377250355')
   })
 
   it('consult_team cae al CEO si el lead no tiene asesor asignado', () => {

@@ -696,7 +696,8 @@ describe('ruteo de alertas: consultas al asesor, cierres al CEO', () => {
 
     expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
     const call = (wa.sendInternalNotification.mock.calls[0] as any[])[0]
-    expect(call.toPhone).toBe(PAOLA.wa_phone)
+    // Normalizado: la Graph API no acepta los espacios con que se teclea wa_phone
+    expect(call.toPhone).toBe('50377250355')
   })
 
   it('escalate_ceo siempre le llega al CEO, aunque el lead tenga asesor', async () => {

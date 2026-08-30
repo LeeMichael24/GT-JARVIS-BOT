@@ -112,8 +112,14 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       }
     }
 
-    // 2. Deduplicate: ignore already-processed messages
-    if (await isMessageProcessed(parsed.messageId)) {
+    // 2. Deduplicate + equipo en paralelo: ambas son lecturas independientes y
+    //    el equipo se necesita enseguida, así no se suma un viaje a la BD al
+    //    camino caliente de cada mensaje.
+    const [yaProcesado, team] = await Promise.all([
+      isMessageProcessed(parsed.messageId),
+      getActiveTeamMembers(),
+    ])
+    if (yaProcesado) {
       console.log(`[processMessage] Duplicate message ${parsed.messageId}, skipping`)
       return
     }
@@ -122,7 +128,6 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     //     leads. Va antes de transcribir audio y antes de crear el lead, así un
     //     mensaje interno no cuesta Whisper ni GPT, ni ensucia el CRM. Silencio
     //     total: queda el registro en activity_log, pero Daniela no contesta.
-    const team = await getActiveTeamMembers()
     if (isInternal(parsed.from, process.env.CEO_PHONE_NUMBER, team.map(m => m.wa_phone))) {
       console.log(`[processMessage] Número interno (${parsed.from}) — sin lead, sin respuesta`)
       await logActivity({
@@ -522,7 +527,9 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       if (!teamNotifiedForMeeting) {
         try {
           // Consultas van al asesor asignado; los cierres siempre al CEO.
-          const destino = pickAlertRecipient(action.type, lead.assigned_to, process.env.CEO_PHONE_NUMBER, team)
+          // Se lee de freshLead: pudieron asignar un asesor durante el debounce.
+          const asignado = freshLead?.assigned_to ?? lead.assigned_to
+          const destino = pickAlertRecipient(action.type, asignado, process.env.CEO_PHONE_NUMBER, team)
           await sendInternalNotification({
             leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
             leadPhone: lead.phone,

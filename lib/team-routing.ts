@@ -72,8 +72,11 @@ export function isInternal(
  *   escalate_ceo  → siempre el CEO (dinero, documentos legales, reuniones)
  *   consult_team  → el asesor asignado al lead; si no hay, cae al CEO
  *
- * Devuelve el teléfono TAL CUAL está guardado (no normalizado): la Cloud API
- * acepta ambos formatos y así no se altera el envío que ya funciona hoy.
+ * Devuelve el teléfono ya normalizado. wa_phone se teclea a mano en Supabase
+ * (el panel no tiene ese campo), así que llega con espacios y guiones, y el
+ * campo `to` de la Graph API no los acepta: el envío fallaría en silencio.
+ * Solo-dígitos es el formato que la propia Meta usa en el `from` del webhook.
+ *
  * `undefined` significa que no hay a quién avisar — quien llama decide qué
  * hacer, igual que hoy cuando falta CEO_PHONE_NUMBER.
  */
@@ -85,7 +88,8 @@ export function pickAlertRecipient(
 ): string | undefined {
   if (actionType === 'consult_team' && assignedTo) {
     const advisor = team.find(m => m.id === assignedTo)
-    if (advisor?.wa_phone && normalizePhone(advisor.wa_phone)) return advisor.wa_phone
+    const tel = advisor?.wa_phone ? normalizePhone(advisor.wa_phone) : ''
+    if (tel) return tel
   }
   return ceoPhone
 }

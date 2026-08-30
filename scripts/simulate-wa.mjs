@@ -30,7 +30,9 @@ function takeFlag(name, fallback) {
 }
 
 const baseUrl = takeFlag('url', 'http://localhost:3000').replace(/\/$/, '')
-const from = takeFlag('from', process.env.CEO_PHONE_NUMBER ?? '50370000000').replace(/\D/g, '')
+// OJO: no usar CEO_PHONE_NUMBER ni un wa_phone del equipo — el webhook los
+// cortocircuita como números internos y el mensaje se ignora en silencio.
+const from = takeFlag('from', '50370000000').replace(/\D/g, '')
 const text = args.join(' ').trim()
 
 if (!text) {

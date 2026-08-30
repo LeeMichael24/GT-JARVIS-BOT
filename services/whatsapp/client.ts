@@ -155,14 +155,14 @@ export async function sendInternalNotification(params: NotificationParams): Prom
   try {
     await sendText(destino, message, { typingDelay: false })
   } catch (err) {
-    // El texto libre falla si el CEO no le ha escrito al bot en 24h (error 131047).
-    // Fallback: plantilla HSM aprobada — llega SIEMPRE, con o sin ventana.
+    // El texto libre falla si el destinatario no le ha escrito al bot en 24h
+    // (error 131047). Fallback: plantilla HSM aprobada — llega SIEMPRE.
     const tpl = process.env.WA_TEMPLATE_CEO_ALERT
     if (!tpl) {
-      console.error('[notification] Free-form al CEO rechazado y WA_TEMPLATE_CEO_ALERT no está configurada — la alerta NO llegó:', err instanceof Error ? err.message : err)
+      console.error('[notification] Free-form rechazado y WA_TEMPLATE_CEO_ALERT no está configurada — la alerta NO llegó:', err instanceof Error ? err.message : err)
       throw err
     }
-    console.warn(`[notification] Free-form al CEO rechazado — reintentando con plantilla "${tpl}"`)
+    console.warn(`[notification] Free-form rechazado — reintentando con plantilla "${tpl}"`)
     await sendTemplate(destino, tpl, 'es', [
       params.leadName,
       `+${params.leadPhone}`,
