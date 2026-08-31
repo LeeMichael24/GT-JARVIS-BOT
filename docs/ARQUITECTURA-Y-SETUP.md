@@ -324,10 +324,48 @@ Prefiere siempre estos caminos: sobreviven a los `git pull` del repo plantilla.
 
 ### Lo que EXIGE editar código
 
-1. **Adaptador de catálogo** — reemplazar `services/projects/gt-api.ts` por el del inventario nuevo. Debe respetar la misma interfaz (`getAllProjects()` → lista con `name`/`price`/`description`) y los sinónimos de detección del rubro (`SYNONYMS`).
-2. **Identidad base del agente** — nombre de la agente y de la empresa en `services/claude/prompts.ts` y en los defaults de `lib/prompt-blocks.ts`.
-3. **Vocabulario del rubro** — los bloques de prompt asumen inmobiliaria (plusvalía, prima, escrituración). Para otro rubro hay que reescribirlos.
-4. **Locale** — zona horaria `America/El_Salvador`, moneda USD y código de idioma `es` están asumidos en varios puntos.
+> **Lee esto antes de prometer un plazo.** Clonar a **otra inmobiliaria** es cuestión de horas: cambias identidad, catálogo y contenido, y el resto sirve tal cual. Clonar a **otro rubro** (seguros, autos, educación, software) es un proyecto real: el modelo de datos y el clasificador de intención están escritos para bienes raíces.
+
+**Nivel 1 — Strings sueltos** *(~1 hora, mecánico)*
+
+| Archivo:línea | Qué es |
+|---|---|
+| `app/layout.tsx:16-17,34` | Título del panel + `lang="es"` |
+| `app/panel/login/page.tsx:32-33` | "GT Panel" / "Grupo Terranova" |
+| `app/api/webhook/whatsapp/route.ts:46` | `GT_URL_RE` — detecta links del sitio |
+| `lib/media-sync.ts:76` | `GT_MEDIA_PATH` default trae `/daniela/media` |
+| `services/openai/whisper.ts:17` | `language: 'es'` en la transcripción |
+| `services/whatsapp/client.ts:171`, `app/api/cron/sequences/route.ts:104` | `'es'` fijo al mandar plantillas HSM |
+| `lib/proactive/render.ts:5` | Fallback `'nuestras propiedades'` |
+
+**Nivel 2 — Disperso pero mecánico** *(~medio día)*
+
+| Dónde | Qué |
+|---|---|
+| ~30 archivos en `components/panel/*.tsx` | Textos de UI que dicen "Daniela" |
+| `services/whatsapp/client.ts:130,136,142,174` | Textos de las notificaciones internas |
+| `services/google/calendar.ts:3,47,53` | Título/descripción del evento + `TZ = 'America/El_Salvador'` |
+| `app/api/cron/weekly/route.ts:30`, `sequences/route.ts:100,142` | Encabezado del reporte y del seguimiento |
+| `lib/training.ts:34`, `lib/reflection.ts:44,57` | Prompts de entrenamiento y reflexión nocturna |
+| `lib/wa-parse.ts:16-28` | `BUSINESS_NAMES` — nombres del equipo, sin tabla de config |
+| `lib/sequences.ts:48` | `SV_OFFSET_HOURS = -6` — **fijo**, no sale de `agent_settings` |
+| `services/claude/prompts.ts:168-171` + 5 componentes | `'es-SV'` y `America/El_Salvador` |
+| `vercel.json:12-14` | Horarios de cron calibrados a El Salvador |
+
+**Nivel 3 — Estructural** *(solo si cambias de rubro)*
+
+| Archivo | Por qué duele |
+|---|---|
+| `types/index.ts:6-12,50-110` | `GTProject` (habitaciones, baños, parqueos, ROI), `QualificationData` (`vivienda_propia`/`inversion`), `MeetingRequest` (`visita_proyecto`) están modelados para inmuebles. Los consumen ~10 archivos |
+| `services/claude/prompts.ts:386-506` | `formatProjectFull`, `isRentalProperty`, `humanizeType` — la lógica de renta vs. compra vs. inversión vive en código, no en datos |
+| `services/claude/intent.ts:21-75` | Clasificador de intención con vocabulario inmobiliario en español **hardcodeado, sin tabla de configuración** |
+| `lib/prompt-blocks.ts` (22 bloques default) | Aunque la tabla los sobrescribe, un bot funcional "de fábrica" necesita estos defaults reescritos para el rubro nuevo |
+| `services/projects/gt-api.ts` | El contrato del API (`/listings`, forma de `GTProject`) está atado al backend de GT |
+| `migrations/002` y `007` | El seed no se edita: se reemplaza completo con contenido nuevo |
+
+### Fuera del repo
+
+Las **plantillas HSM viven en Meta**, no en git. Hay que recrearlas y volver a pedir aprobación para cada número nuevo (sección 11).
 
 ### Checklist de puesta en marcha
 
