@@ -146,7 +146,12 @@ export function formatNotification(params: NotificationParams): string {
 
 export async function sendInternalNotification(params: NotificationParams): Promise<void> {
   // Puede ser el CEO o un asesor: el destinatario lo elige quien llama.
-  const destino = params.toPhone ?? process.env.CEO_PHONE_NUMBER
+  //
+  // Se limpia a solo-dígitos porque los dos orígenes vienen tecleados a mano:
+  // CEO_PHONE_NUMBER trae "+" y team_members.wa_phone puede traer espacios.
+  // La Cloud API documenta "to": "50362087916" — con "+" responde 200 pero el
+  // mensaje NO llega, así que el fallo es invisible en los logs.
+  const destino = (params.toPhone ?? process.env.CEO_PHONE_NUMBER ?? '').replace(/\D/g, '')
   if (!destino) {
     console.warn('[notification] Sin destinatario (toPhone y CEO_PHONE_NUMBER vacíos) — alerta omitida')
     return

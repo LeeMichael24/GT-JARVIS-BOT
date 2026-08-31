@@ -94,6 +94,33 @@ describe('sendInternalNotification — fallback a plantilla fuera de ventana', (
     expect(texts).toEqual(['Carlos', '+50378901234', 'Listo para cerrar'])
   })
 
+  it('manda el teléfono en solo-dígitos aunque CEO_PHONE_NUMBER traiga "+" y espacios', async () => {
+    // La consola de Meta documenta "to": "50362087916" — sin "+". Con el "+"
+    // la API responde 200 pero el mensaje no llega: falla en silencio.
+    process.env.CEO_PHONE_NUMBER = '+503 6208-7916'
+    const enviados: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      enviados.push(JSON.parse(init.body) as Record<string, unknown>)
+      return { ok: true, json: async () => ({ messages: [{ id: 'wamid.ok' }] }), text: async () => '' }
+    }))
+
+    await sendInternalNotification(params)
+
+    expect(enviados[0]!.to).toBe('50362087916')
+  })
+
+  it('normaliza también el toPhone explícito de un asesor', async () => {
+    const enviados: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      enviados.push(JSON.parse(init.body) as Record<string, unknown>)
+      return { ok: true, json: async () => ({ messages: [{ id: 'wamid.ok' }] }), text: async () => '' }
+    }))
+
+    await sendInternalNotification({ ...params, toPhone: '+503 7725 0355' })
+
+    expect(enviados[0]!.to).toBe('50377250355')
+  })
+
   it('si el texto libre falla y NO hay plantilla, propaga el error (visible en logs)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: false, status: 400, json: async () => ({}), text: async () => '{"error":{"code":131047}}',
