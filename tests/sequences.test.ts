@@ -30,6 +30,7 @@ import {
   getNextFireAt,
   isWithinBusinessHours,
   cancelSequencesForLead,
+  ensureFollowUpsForSilentLeads,
 } from '@/lib/sequences'
 
 describe('sequence definitions', () => {
@@ -107,5 +108,54 @@ describe('cancelSequencesForLead', () => {
   it('si la escritura falla NO lanza (convención fail-safe)', async () => {
     db.resultados.sequences = { error: { message: 'boom' } }
     await expect(cancelSequencesForLead('lead-1')).resolves.toBeUndefined()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Red de seguridad: seguimiento aunque el modelo no lo pida
+// ─────────────────────────────────────────────────────────────
+
+describe('ensureFollowUpsForSilentLeads', () => {
+  beforeEach(() => {
+    db.llamadas.length = 0
+    for (const k of Object.keys(db.resultados)) delete db.resultados[k]
+  })
+
+  it('crea post_conversation para leads callados sin secuencia activa', async () => {
+    db.resultados.leads = {
+      data: [
+        { id: 'l1', stage: 'warm', sequences: [] },
+        { id: 'l2', stage: 'warm', sequences: [{ status: 'active' }] },
+      ],
+      error: null,
+    }
+    const creadas = await ensureFollowUpsForSilentLeads(new Date('2026-09-01T18:00:00Z'))
+    expect(creadas).toBe(1)
+    const upserts = db.llamadas.filter(c => c.tabla === 'sequences' && c.op === 'upsert')
+    expect(upserts).toHaveLength(1)
+    const fila = upserts[0].args[0] as { lead_id: string; sequence_type: string }
+    expect(fila.lead_id).toBe('l1')
+    expect(fila.sequence_type).toBe('post_conversation')
+  })
+
+  it('lead hot recibe hot_close en vez de post_conversation', async () => {
+    db.resultados.leads = { data: [{ id: 'l3', stage: 'hot', sequences: [] }], error: null }
+    await ensureFollowUpsForSilentLeads(new Date())
+    const upsert = db.llamadas.find(c => c.tabla === 'sequences' && c.op === 'upsert')
+    expect((upsert?.args[0] as { sequence_type: string }).sequence_type).toBe('hot_close')
+  })
+
+  it('secuencia cancelada o completada NO cuenta como activa', async () => {
+    db.resultados.leads = {
+      data: [{ id: 'l4', stage: 'warm', sequences: [{ status: 'cancelled' }, { status: 'completed' }] }],
+      error: null,
+    }
+    const creadas = await ensureFollowUpsForSilentLeads(new Date())
+    expect(creadas).toBe(1)
+  })
+
+  it('si la lectura falla devuelve 0 sin lanzar (convención fail-safe)', async () => {
+    db.resultados.leads = { error: { message: 'boom' } }
+    await expect(ensureFollowUpsForSilentLeads(new Date())).resolves.toBe(0)
   })
 })

@@ -52,6 +52,43 @@ export const SEQUENCE_DEFINITIONS: Record<SequenceType, SequenceDef> = {
   },
 }
 
+/**
+ * Red de seguridad: el modelo a veces no pide follow_up_needed y el lead
+ * silencioso queda sin seguimiento para siempre. El cron diario crea la
+ * secuencia base para todo lead activo callado >24h sin secuencia activa.
+ */
+export async function ensureFollowUpsForSilentLeads(now: Date): Promise<number> {
+  const supabase = getServiceClient()
+  const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+  const { data, error } = await supabase
+    .from('leads')
+    .select('id, stage, sequences(status)')
+    .eq('bot_active', true)
+    .eq('opted_out', false)
+    .in('stage', ['new', 'warm', 'hot'])
+    .not('phone', 'like', 'n_%')
+    .lt('last_message_at', cutoff)
+  if (error) {
+    console.warn('[sequences] ensureFollowUps no pudo leer leads:', error.message)
+    return 0
+  }
+  type Row = { id: string; stage: string; sequences: { status: string }[] | null }
+  const sinSecuencia = ((data ?? []) as Row[]).filter(
+    l => !(l.sequences ?? []).some(s => s.status === 'active'),
+  )
+  let creadas = 0
+  for (const l of sinSecuencia) {
+    try {
+      const tipo = l.stage === 'hot' ? ('hot_close' as const) : ('post_conversation' as const)
+      await createSequence(l.id, tipo, { origin: 'safety_net_daily' })
+      creadas++
+    } catch (err) {
+      console.warn('[sequences] ensureFollowUps falló para', l.id, err instanceof Error ? err.message : err)
+    }
+  }
+  return creadas
+}
+
 /** El "no" explícito apaga TODO el seguimiento pendiente del lead. */
 export async function cancelSequencesForLead(leadId: string): Promise<void> {
   const { error } = await getServiceClient()

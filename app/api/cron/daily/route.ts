@@ -4,6 +4,7 @@ import { getNeglectedALeads } from '@/lib/analytics'
 import { syncProjectMediaFromEcosystem } from '@/lib/media-sync'
 import { runNightlyReflection } from '@/lib/reflection'
 import { getAgentSettings } from '@/lib/agent-settings'
+import { ensureFollowUpsForSilentLeads } from '@/lib/sequences'
 import { recordCronRun } from '@/lib/cron-log'
 import { sendText } from '@/services/whatsapp/client'
 
@@ -68,12 +69,24 @@ export async function GET(request: Request): Promise<Response> {
     error: e instanceof Error ? e.message : 'media sync failed',
   }))
 
+  // Red de seguridad: leads callados >24h sin secuencia activa reciben la
+  // suya aunque el modelo no haya pedido follow_up_needed en su momento.
+  // Con pausa global no se agenda contacto nuevo.
+  let followUps: { created: number } | { skipped: string } | { error: string }
+  if (paused) {
+    followUps = { skipped: 'agent_paused' }
+  } else {
+    followUps = await ensureFollowUpsForSilentLeads(new Date())
+      .then(created => ({ created }))
+      .catch((e: unknown) => ({ error: e instanceof Error ? e.message : 'follow-up net failed' }))
+  }
+
   // Reflexión nocturna: Daniela aprende sola de las conversaciones del día
   const reflection = settingsEarly.reflection_enabled
     ? await runNightlyReflection()
     : { skipped: 'reflection_disabled' as const }
 
-  const summary = { radar, rules, metrics, dealWarnings, mediaSync, reflection }
+  const summary = { radar, rules, metrics, dealWarnings, mediaSync, followUps, reflection }
   console.log('[cron/daily]', JSON.stringify(summary))
   // Observabilidad: el panel (tab Estado) muestra esta corrida.
   // 'error' si CUALQUIER sub-paso falló — visible de un vistazo.
