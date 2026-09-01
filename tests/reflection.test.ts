@@ -95,3 +95,12 @@ describe('toBrainObservations — mapeo al cerebro', () => {
     expect(obs[0].category).toBe('pattern')
   })
 })
+
+describe('buildReflectionPrompt — convergencia de temas', () => {
+  it('pide CONFIRMAR temas existentes con el mismo topic (para que suba la confianza)', () => {
+    const prompt = buildReflectionPrompt([], ['objecion precio zona norte'])
+    expect(prompt).toContain('INCLÚYELO otra vez usando EXACTAMENTE el mismo topic')
+    expect(prompt).toContain('objecion precio zona norte')
+    expect(prompt).not.toContain('NO repitas estos temas')
+  })
+})

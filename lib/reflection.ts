@@ -65,8 +65,9 @@ QUÉ BUSCAR (en orden de valor):
 5. Patrones del mercado (qué proyectos piden, qué presupuestos mencionan)
 6. Tono y fraseo: frases que sonaron naturales y generaron buena reacción, y frases que sonaron forzadas, robóticas o incomodaron al cliente
 
-TEMAS QUE YA EXISTEN EN EL CEREBRO (NO repitas estos temas, solo aporta si tienes un ángulo NUEVO):
+TEMAS QUE YA EXISTEN EN EL CEREBRO:
 ${existingTopics.length ? existingTopics.map(t => `- ${t}`).join('\n') : '- (ninguno)'}
+Si las conversaciones de HOY vuelven a confirmar uno de estos temas, INCLÚYELO otra vez usando EXACTAMENTE el mismo topic — así el sistema cuenta la confirmación y sube su confianza. Para lo nuevo, no dupliques un tema existente bajo otro nombre.
 
 CONVERSACIONES DE HOY:
 ${groups.map((g, i) => `--- Conversación ${i + 1} ---\n${g.transcript}`).join('\n\n')}
