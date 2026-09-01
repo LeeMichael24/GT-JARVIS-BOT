@@ -58,7 +58,15 @@ export const SEQUENCE_DEFINITIONS: Record<SequenceType, SequenceDef> = {
  * secuencia base para todo lead activo callado >24h sin secuencia activa.
  */
 export async function ensureFollowUpsForSilentLeads(now: Date): Promise<number> {
-  const supabase = getServiceClient()
+  // Fail-safe integral: sin cliente de BD (env incompleto) la red degrada a 0
+  // creadas en vez de marcar en error todo el cron diario.
+  let supabase: ReturnType<typeof getServiceClient>
+  try {
+    supabase = getServiceClient()
+  } catch (err) {
+    console.warn('[sequences] ensureFollowUps sin cliente de BD:', err instanceof Error ? err.message : err)
+    return 0
+  }
   const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
   const { data, error } = await supabase
     .from('leads')
