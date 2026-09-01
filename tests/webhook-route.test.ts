@@ -82,7 +82,10 @@ vi.mock('@/lib/auto-tag', () => ({
   autoTagProject: vi.fn(async () => {}),
   autoTagSource: vi.fn(async () => {}),
 }))
-vi.mock('@/lib/escalation-rules', () => ({
+vi.mock('@/lib/escalation-rules', async importOriginal => ({
+  // formatConditionalRulesForPrompt es pura: corre la real sobre las reglas
+  // (vacías) que devuelve el mock de getActiveEscalationRules.
+  ...(await importOriginal<typeof import('@/lib/escalation-rules')>()),
   getActiveEscalationRules: vi.fn(async () => []),
   matchKeywordRules: vi.fn(() => []),
   formatEscalationRulesForPrompt: vi.fn(() => ''),
