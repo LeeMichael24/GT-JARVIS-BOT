@@ -85,8 +85,9 @@ describe('buildSystemPrompt — identity and format', () => {
     const prompt = buildSystemPrompt({ lead: mockLead, project: null })
     expect(prompt).toContain('"reply"')
     expect(prompt).toContain('"stage"')
-    expect(prompt).toContain('"qualified"')
     expect(prompt).toContain('"qualification_data"')
+    // el campo muerto "qualified" salió del contrato (nadie lo consumía)
+    expect(prompt).not.toContain('"qualified"')
   })
 })
 

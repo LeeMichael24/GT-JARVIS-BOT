@@ -141,7 +141,6 @@ export interface ClaudeResponse {
   stage: LeadStage | null
   name_captured: string | null
   qualification_data: QualificationData
-  qualified: boolean
   schedule_meeting: MeetingRequest | null
   opt_out: boolean
   agent_action: AgentAction | null

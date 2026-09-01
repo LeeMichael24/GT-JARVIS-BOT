@@ -68,7 +68,6 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     stage: parseStage(parsed.stage),
     name_captured: parsed.name_captured ?? null,
     qualification_data: parseQualificationData(parsed.qualification_data),
-    qualified: parsed.qualified ?? false,
     schedule_meeting: parseMeetingRequest(parsed.schedule_meeting),
     opt_out: parsed.opt_out ?? false,
     agent_action: parseAgentAction((parsed as Record<string, unknown>).agent_action),

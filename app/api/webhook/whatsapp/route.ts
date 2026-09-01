@@ -702,7 +702,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       }
     }
 
-    console.log(`[processMessage] Done — lead ${lead.id} | stage: ${effectiveStage} | qualified: ${claudeResponse.qualified}`)
+    console.log(`[processMessage] Done — lead ${lead.id} | stage: ${effectiveStage}`)
   } catch (error) {
     console.error('[processMessage] Unhandled error:', error instanceof Error ? error.message : error)
     if (error instanceof Error) console.error('[processMessage] Stack:', error.stack)

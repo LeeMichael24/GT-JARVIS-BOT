@@ -136,7 +136,6 @@ Estas son observaciones confirmadas por el equipo. Aplícalas:\n${brainLearnings
     "financing_needed": true | false | null,
     "decision_maker": true | false | null
   },
-  "qualified": false,
   "schedule_meeting": null,
   "opt_out": false,
   "agent_action": {

@@ -22,7 +22,6 @@ const validResponse = {
     financing_needed: null,
     decision_maker: null,
   },
-  qualified: false,
 }
 
 describe('parseClaudeResponse', () => {
@@ -31,7 +30,6 @@ describe('parseClaudeResponse', () => {
     expect(result.reply).toBe(validResponse.reply)
     expect(result.stage).toBe('warm')
     expect(result.name_captured).toBe('Carlos')
-    expect(result.qualified).toBe(false)
   })
 
   it('strips markdown code fences before parsing', () => {
@@ -52,7 +50,6 @@ describe('parseClaudeResponse', () => {
     // stage omitido → null: el orquestador conserva el stage anterior del lead
     expect(result.stage).toBeNull()
     expect(result.name_captured).toBeNull()
-    expect(result.qualified).toBe(false)
     expect(result.qualification_data.purpose).toBeNull()
   })
 
@@ -95,9 +92,8 @@ describe('parseClaudeResponse — validación de stage', () => {
   })
 
   it('stage inválido no rompe el resto del parseo (nunca lanza)', () => {
-    const result = parseClaudeResponse('{"reply":"ok","stage":"fría","qualified":true}')
+    const result = parseClaudeResponse('{"reply":"ok","stage":"fría"}')
     expect(result.reply).toBe('ok')
-    expect(result.qualified).toBe(true)
     expect(result.stage).toBeNull()
   })
 })
@@ -114,5 +110,12 @@ describe('callClaude — mensajes humanos en el contexto', () => {
     const call = (openaiSpy.create.mock.calls[0] as unknown as [{ messages: { role: string }[] }])[0]
     const roles = call.messages.map(m => m.role)
     expect(roles).toEqual(['system', 'user', 'assistant', 'assistant'])
+  })
+})
+
+describe('contrato sin campos muertos', () => {
+  it('la respuesta parseada ya NO incluye qualified (nadie lo consumía)', () => {
+    const parsed = parseClaudeResponse(JSON.stringify({ reply: 'Hola', stage: 'warm' }))
+    expect('qualified' in parsed).toBe(false)
   })
 })

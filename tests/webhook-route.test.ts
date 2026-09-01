@@ -31,7 +31,7 @@ const ai = vi.hoisted(() => ({
   parseClaudeResponse: vi.fn((): Partial<ClaudeResponse> => ({
     reply: '¡Hola!', stage: 'new', name_captured: null,
     qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-    qualified: false, schedule_meeting: null, opt_out: false,
+    schedule_meeting: null, opt_out: false,
     agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
   })),
 }))
@@ -303,7 +303,7 @@ describe('webhook con bot activo', () => {
     ai.parseClaudeResponse.mockReturnValueOnce({
       reply: 'Entendido, no te molesto más. ¡Éxitos!', stage: 'cold', name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-      qualified: false, schedule_meeting: null, opt_out: true,
+      schedule_meeting: null, opt_out: true,
       agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
     })
     const res = await POST(buildRequest())
@@ -416,7 +416,7 @@ describe('webhook con bot activo', () => {
     ai.parseClaudeResponse.mockReturnValueOnce({
       reply: 'Un gusto, Carlos! 🤝', stage: 'new', name_captured: 'Carlos',
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-      qualified: false, schedule_meeting: null, opt_out: false,
+      schedule_meeting: null, opt_out: false,
       agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
       extra_messages: ['Para enviarle la información correcta, cuénteme un poco:'],
     })
@@ -474,7 +474,7 @@ describe('webhook con bot activo', () => {
     ai.parseClaudeResponse.mockReturnValueOnce({
       reply: '¡Hola!', stage: null, name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-      qualified: false, schedule_meeting: null, opt_out: false,
+      schedule_meeting: null, opt_out: false,
       agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
     })
 
@@ -515,7 +515,7 @@ describe('webhook con bot activo', () => {
       reply: '¡Hola!', stage: 'hot', name_captured: null,
       // El modelo solo capturó timeline en este turno — el resto viene null
       qualification_data: { purpose: null, budget_ok: null, timeline: 'inmediato', financing_needed: null, decision_maker: null },
-      qualified: false, schedule_meeting: null, opt_out: false,
+      schedule_meeting: null, opt_out: false,
       agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
     })
 
@@ -545,7 +545,7 @@ describe('webhook con bot activo', () => {
     ai.parseClaudeResponse.mockReturnValueOnce({
       reply: 'Le comparto la ubicación exacta:', stage: 'warm', name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-      qualified: false, schedule_meeting: null, opt_out: false,
+      schedule_meeting: null, opt_out: false,
       agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
       send_media: { type: 'link', project: 'Portacelli', description: 'ubicación' },
       extra_messages: [],
@@ -572,7 +572,6 @@ describe('webhook agenda una reunión', () => {
     ai.parseClaudeResponse.mockReturnValueOnce({
       reply: 'Perfecto, agendé tu videollamada para el viernes a las 3pm.', stage: 'hot', name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-      qualified: false,
       schedule_meeting: { requested: true, datetime_iso: '2026-09-04T15:00:00-06:00', meeting_type: 'videollamada', project_name: 'Portacelli', notes: null },
       opt_out: false,
       agent_action: { type: 'sell', reason: null, urgency: 'normal', client_type: 'individual', follow_up_hint: null },
@@ -602,7 +601,6 @@ describe('webhook agenda una reunión', () => {
     ai.parseClaudeResponse.mockReturnValueOnce({
       reply: 'Listo, agendado.', stage: 'hot', name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-      qualified: false,
       schedule_meeting: { requested: true, datetime_iso: '2026-09-04T15:00:00-06:00', meeting_type: 'llamada', project_name: null, notes: null },
       opt_out: false,
       agent_action: { type: 'sell', reason: null, urgency: 'normal', client_type: 'individual', follow_up_hint: null },
@@ -627,7 +625,6 @@ describe('webhook agenda una reunión', () => {
     ai.parseClaudeResponse.mockReturnValueOnce({
       reply: 'Perfecto, agendado.', stage: 'hot', name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-      qualified: false,
       schedule_meeting: { requested: true, datetime_iso: '2026-09-04T15:00:00-06:00', meeting_type: 'videollamada', project_name: null, notes: null },
       opt_out: false,
       agent_action: { type: 'escalate_ceo', reason: 'Cliente corporativo', urgency: 'high', client_type: 'corporate', follow_up_hint: null },
@@ -654,7 +651,6 @@ describe('webhook agenda una reunión', () => {
     ai.parseClaudeResponse.mockReturnValueOnce({
       reply: 'Listo, agendado.', stage: 'hot', name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-      qualified: false,
       schedule_meeting: { requested: true, datetime_iso: '2026-09-04T15:00:00-06:00', meeting_type: 'llamada', project_name: null, notes: null },
       opt_out: false,
       agent_action: { type: 'sell', reason: null, urgency: 'normal', client_type: 'individual', follow_up_hint: null },
@@ -696,7 +692,7 @@ describe('ruteo de alertas: consultas al asesor, cierres al CEO', () => {
     ai.parseClaudeResponse.mockReturnValueOnce({
       reply: 'Déjame verificar con mi equipo.', stage: 'warm', name_captured: null,
       qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
-      qualified: false, schedule_meeting: null, opt_out: false,
+      schedule_meeting: null, opt_out: false,
       agent_action: { type: tipo, reason: 'motivo de prueba', urgency: 'normal', client_type: 'individual', follow_up_hint: null },
       deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
     })
