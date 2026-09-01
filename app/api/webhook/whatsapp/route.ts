@@ -6,7 +6,7 @@ import { buildSystemPrompt } from '@/services/claude/prompts'
 import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
 import { createCalendarEvent } from '@/services/google/calendar'
-import { getPlaybook, formatPlaybookForPrompt } from '@/lib/knowledge-base'
+import { getPlaybook, formatPlaybookForPrompt, filterPlaybookByProject } from '@/lib/knowledge-base'
 import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendVideo, sendInternalNotification, markAsRead, sendTypingIndicator } from '@/services/whatsapp/client'
 import { transcribeAudio } from '@/services/openai/whisper'
 import {
@@ -315,7 +315,6 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       projectScript = formatScriptForPrompt(matchedScript)
       console.log(`[processMessage] Guion activo: ${matchedScript.project_name}`)
     }
-    const salesPlaybook = formatPlaybookForPrompt(playbookEntries)
     const brainLearnings = formatLearningsForPrompt(brainEntries)
 
     try {
@@ -367,6 +366,12 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     }
 
     console.log(`[processMessage] Project: ${project?.name ?? 'none'} | Detected: ${detectedProject?.name ?? 'none'}`)
+
+    // El playbook se filtra AQUÍ (con el proyecto ya resuelto) y no en el fetch
+    // paralelo: entradas generales + las del proyecto en conversación, nada más.
+    const salesPlaybook = formatPlaybookForPrompt(
+      filterPlaybookByProject(playbookEntries, project?.slug ?? null),
+    )
 
     // 8b. Objetivos del negocio aplicables a este turno (general + proyecto + inversión)
     const objectivesBlock = formatObjectivesForPrompt(objectives, {

@@ -38,6 +38,18 @@ export async function getPlaybook(projectSlug?: string | null): Promise<KBEntry[
   return (data ?? []) as KBEntry[]
 }
 
+/**
+ * Aísla el playbook al proyecto en conversación: entradas generales (slug null)
+ * + las de ESE proyecto. Evita contaminar el prompt con datos de otros proyectos.
+ */
+export function filterPlaybookByProject(
+  entries: KBEntry[],
+  projectSlug: string | null | undefined,
+): KBEntry[] {
+  if (!projectSlug) return entries
+  return entries.filter(e => !e.project_slug || e.project_slug === projectSlug)
+}
+
 // Presupuesto del playbook en el prompt (sin tope pesaba ~11K chars/mensaje)
 const PLAYBOOK_PROMPT_BUDGET_CHARS = 6000
 

@@ -60,7 +60,10 @@ vi.mock('@/services/projects/gt-api', () => ({
 }))
 vi.mock('@/services/google/calendar', () => ({ createCalendarEvent: vi.fn() }))
 vi.mock('@/services/openai/whisper', () => ({ transcribeAudio: vi.fn(async () => 'transcribed text') }))
-vi.mock('@/lib/knowledge-base', () => ({
+vi.mock('@/lib/knowledge-base', async importOriginal => ({
+  // filterPlaybookByProject es pura: corre la real. Solo se mockean la lectura
+  // a DB y el formateo.
+  ...(await importOriginal<typeof import('@/lib/knowledge-base')>()),
   getPlaybook: vi.fn(async () => []),
   formatPlaybookForPrompt: vi.fn(() => null),
 }))
