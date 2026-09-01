@@ -71,3 +71,25 @@ Si la acción es "escalate_ceo", di: "Te voy a conectar con ${ceoName}, nuestro 
 Si la acción es "consult_team", di: "Déjame verificar con mi equipo y te confirmo durante el día."
 `
 }
+
+/**
+ * Las reglas topic/condition no se pueden detectar por substring: van al
+ * prompt para que el modelo las evalúe con contexto y fuerce el agent_action.
+ * (Antes el panel las creaba, la migración 006 las sembraba, y nadie las leía.)
+ */
+export function formatConditionalRulesForPrompt(rules: EscalationRule[]): string {
+  const conditional = rules.filter(
+    r => r.trigger_type === 'topic' || r.trigger_type === 'condition',
+  )
+  if (conditional.length === 0) return ''
+  const lines = conditional.map(r => {
+    const desc = r.description ?? r.trigger_value
+    return `- Si la conversación entra en "${r.trigger_value}" (${desc}) → agent_action type: "${r.action}"`
+  })
+  return `
+# REGLAS DE ESCALAMIENTO POR CONTEXTO
+Evalúa el mensaje Y el historial contra estas situaciones. Si UNA aplica, DEBES usar la acción indicada en tu agent_action:
+${lines.join('\n')}
+Si ninguna aplica, ignora esta sección.
+`
+}

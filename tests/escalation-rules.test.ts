@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchKeywordRules } from '@/lib/escalation-rules'
+import { matchKeywordRules, formatConditionalRulesForPrompt } from '@/lib/escalation-rules'
 import type { EscalationRule } from '@/types'
 
 function rule(trigger_value: string, overrides: Partial<EscalationRule> = {}): EscalationRule {
@@ -78,5 +78,36 @@ describe('matchKeywordRules — disparadores duros de traspaso', () => {
 
   it('NO dispara con una pregunta normal de depósito de alquiler', () => {
     expect(matchKeywordRules('¿cuánto es el depósito de esa casa en renta?', activeRules)).toEqual([])
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Reglas topic/condition: van al prompt para que el modelo las evalúe
+// ─────────────────────────────────────────────────────────────
+
+describe('formatConditionalRulesForPrompt', () => {
+  it('formatea reglas topic y condition para el prompt', () => {
+    const out = formatConditionalRulesForPrompt([
+      rule('negociacion', { trigger_type: 'topic', description: 'Cualquier negociación activa' }),
+      rule('legal', { trigger_type: 'topic', action: 'consult_team' }),
+      rule('precio final', {}), // keyword: NO va aquí, ya la cubre matchKeywordRules
+    ])
+    expect(out).toContain('negociacion')
+    expect(out).toContain('Cualquier negociación activa')
+    expect(out).toContain('consult_team')
+    expect(out).not.toContain('precio final')
+  })
+
+  it('incluye reglas condition', () => {
+    const out = formatConditionalRulesForPrompt([
+      rule('cliente corporativo con presupuesto >$200k', { trigger_type: 'condition' }),
+    ])
+    expect(out).toContain('cliente corporativo con presupuesto >$200k')
+    expect(out).toContain('escalate_ceo')
+  })
+
+  it('sin reglas contextuales devuelve cadena vacía', () => {
+    expect(formatConditionalRulesForPrompt([rule('precio final')])).toBe('')
+    expect(formatConditionalRulesForPrompt([])).toBe('')
   })
 })

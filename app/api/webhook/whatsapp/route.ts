@@ -26,7 +26,7 @@ import { saveBrainObservations, getHighConfidenceLearnings, formatLearningsForPr
 import { saveLeadSource, getLeadSource, getActiveAdCampaigns, matchAdCampaign, formatSourceContextForPrompt, formatActiveAdsForPrompt } from '@/lib/lead-sources'
 import { logActivity } from '@/lib/activity-log'
 import { autoTagProject, autoTagSource } from '@/lib/auto-tag'
-import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPrompt } from '@/lib/escalation-rules'
+import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPrompt, formatConditionalRulesForPrompt } from '@/lib/escalation-rules'
 import { getActiveTeamMembers, isInternal, pickAlertRecipient } from '@/lib/team-routing'
 import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, type ProjectMediaItem } from '@/lib/project-media'
 import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } from '@/lib/project-scripts'
@@ -335,6 +335,15 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     if (matchedRules.length > 0) {
       escalationOverride = formatEscalationRulesForPrompt(matchedRules, agentSettings.ceo_name)
       console.log(`[processMessage] Escalation rules matched: ${matchedRules.map(r => r.trigger_value).join(', ')}`)
+    }
+
+    // Las reglas topic/condition no matchean por substring: van SIEMPRE al
+    // prompt y el modelo decide con contexto si aplican.
+    const conditionalBlock = formatConditionalRulesForPrompt(escalationRules)
+    if (conditionalBlock) {
+      escalationOverride = escalationOverride
+        ? escalationOverride + '\n' + conditionalBlock
+        : conditionalBlock
     }
 
     console.log(`[processMessage] Intent: ${intent} | GT URL: ${gtUrlSection ?? 'none'} | History: ${history.length} msgs`)
