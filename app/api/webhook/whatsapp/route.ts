@@ -378,7 +378,9 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // 9. Build the Daniela system prompt with full catalog and call GPT-4o
     const systemPrompt = buildSystemPrompt({
       lead, project, projects, intent, lastBotMessage, gtUrlSection, salesPlaybook,
-      dealSummary: existingDeal ? { summary: existingDeal.summary, next_action: existingDeal.next_action } : null,
+      dealSummary: existingDeal
+        ? { summary: existingDeal.summary, next_action: existingDeal.next_action, signals: existingDeal.signals ?? null }
+        : null,
       brainLearnings: brainLearnings || null,
       adContext,
       escalationOverride,

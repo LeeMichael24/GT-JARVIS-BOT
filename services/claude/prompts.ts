@@ -1,4 +1,4 @@
-import type { Lead, GTProject, GTSubInvestment } from '@/types'
+import type { Lead, GTProject, GTSubInvestment, DealSignals } from '@/types'
 import type { MessageIntent } from './intent'
 import { DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
 import { DEFAULT_PROMPT_BLOCKS, renderPromptBlock } from '@/lib/prompt-blocks'
@@ -11,7 +11,7 @@ interface PromptContext {
   lastBotMessage?: string | null
   gtUrlSection?: string | null
   salesPlaybook?: string | null
-  dealSummary?: { summary: string; next_action: string | null } | null
+  dealSummary?: { summary: string; next_action: string | null; signals?: DealSignals | null } | null
   brainLearnings?: string | null
   adContext?: string | null
   escalationOverride?: string | null
@@ -54,11 +54,24 @@ export function buildSystemPrompt({
   const qualBlock = buildQualSection(lead)
   const playbookBlock = salesPlaybook ? `\n# BASE DE CONOCIMIENTO — PLAYBOOK DE VENTAS\nUsa esta información para responder con autoridad. Son datos reales del equipo de Grupo Terranova.\n\n${salesPlaybook}\n` : ''
 
+  // Las señales se capturan en CADA turno (deal_summaries.signals) y antes
+  // nunca volvían al prompt: Daniela recalculaba al cliente de cero.
+  const s = dealSummary?.signals ?? null
+  const signalLines = s
+    ? [
+        s.objections?.length ? `Objeciones que YA planteó (no las trates como nuevas; retómalas con un ángulo distinto): ${s.objections.join('; ')}` : '',
+        s.buying_signals?.length ? `Señales de compra ya detectadas: ${s.buying_signals.join('; ')}` : '',
+        s.budget_mentioned ? `Presupuesto mencionado: $${s.budget_mentioned.toLocaleString('en-US')}` : '',
+        s.preferred_zone ? `Zona de interés: ${s.preferred_zone}` : '',
+        s.engagement_level ? `Nivel de interés en la última charla: ${s.engagement_level}` : '',
+      ].filter(Boolean)
+    : []
+
   const dealBlock = dealSummary
     ? `\n# MEMORIA DEL DEAL — CONTEXTO DE CONVERSACIONES ANTERIORES
 Lo siguiente es un resumen de interacciones previas con este cliente. Úsalo para continuar donde quedaste:
 Resumen: ${dealSummary.summary}
-${dealSummary.next_action ? `Siguiente acción pendiente: ${dealSummary.next_action}` : ''}
+${dealSummary.next_action ? `Siguiente acción pendiente: ${dealSummary.next_action}` : ''}${signalLines.length ? '\n' + signalLines.join('\n') : ''}
 REGLA: No repitas lo que ya se dijo. Avanza la conversación desde este punto.\n`
     : ''
 

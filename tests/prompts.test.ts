@@ -363,3 +363,52 @@ describe('buildSystemPrompt — price type clarity', () => {
     expect(prompt).toContain('INCOMPARABLES')
   })
 })
+
+// ─────────────────────────────────────────────────────────────
+// Memoria del deal: señales reinyectadas al prompt (Tarea 1)
+// ─────────────────────────────────────────────────────────────
+
+describe('dealBlock con señales', () => {
+  it('inyecta objeciones y señales de compra previas al prompt', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: null,
+      dealSummary: {
+        summary: 'Cliente evaluando Portacelli',
+        next_action: 'Confirmar visita',
+        signals: {
+          objections: ['precio alto', 'lejos del trabajo'],
+          buying_signals: ['preguntó por financiamiento'],
+          budget_mentioned: 85000,
+          preferred_zone: 'Santa Tecla',
+          engagement_level: 'high',
+        },
+      },
+    })
+    expect(prompt).toContain('precio alto')
+    expect(prompt).toContain('preguntó por financiamiento')
+    expect(prompt).toContain('85,000')
+    expect(prompt).toContain('Santa Tecla')
+    expect(prompt).toContain('high')
+  })
+
+  it('sin señales, el dealBlock queda igual que antes', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: null,
+      dealSummary: { summary: 'Resumen previo', next_action: null },
+    })
+    expect(prompt).toContain('Resumen previo')
+    expect(prompt).not.toContain('Objeciones que YA planteó')
+  })
+
+  it('señales vacías no agregan líneas de ruido', () => {
+    const prompt = buildSystemPrompt({
+      lead: mockLead,
+      project: null,
+      dealSummary: { summary: 'Resumen', next_action: null, signals: { objections: [], buying_signals: [] } },
+    })
+    expect(prompt).not.toContain('Objeciones que YA planteó')
+    expect(prompt).not.toContain('Señales de compra ya detectadas')
+  })
+})
