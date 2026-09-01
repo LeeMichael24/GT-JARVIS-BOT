@@ -12,12 +12,16 @@ export interface SequenceDef {
 }
 
 export const SEQUENCE_DEFINITIONS: Record<SequenceType, SequenceDef> = {
+  // Cadencia "hasta el no": se insiste más toques y más lejos; el ciclo lo
+  // corta un opt-out explícito (cancelSequencesForLead) o agotar los pasos.
   post_conversation: {
     description: 'Follow up after conversation with no response',
     steps: [
       { delay_hours: 24, purpose: 'gentle_reminder' },
       { delay_hours: 72, purpose: 'add_value' },
       { delay_hours: 168, purpose: 'last_chance' },
+      { delay_hours: 336, purpose: 'new_angle' },
+      { delay_hours: 720, purpose: 'final_goodbye' },
     ],
   },
   nurture: {
@@ -26,6 +30,7 @@ export const SEQUENCE_DEFINITIONS: Record<SequenceType, SequenceDef> = {
       { delay_hours: 48, purpose: 'share_details' },
       { delay_hours: 120, purpose: 'social_proof' },
       { delay_hours: 240, purpose: 'check_in' },
+      { delay_hours: 480, purpose: 'market_update' },
     ],
   },
   hot_close: {
@@ -34,6 +39,7 @@ export const SEQUENCE_DEFINITIONS: Record<SequenceType, SequenceDef> = {
       { delay_hours: 4, purpose: 'send_details' },
       { delay_hours: 24, purpose: 'create_urgency' },
       { delay_hours: 48, purpose: 'offer_meeting' },
+      { delay_hours: 96, purpose: 'last_push' },
     ],
   },
   cold_reactivation: {
@@ -41,8 +47,19 @@ export const SEQUENCE_DEFINITIONS: Record<SequenceType, SequenceDef> = {
     steps: [
       { delay_hours: 720, purpose: 'new_offer' },
       { delay_hours: 1440, purpose: 'market_update' },
+      { delay_hours: 2160, purpose: 'final_check' },
     ],
   },
+}
+
+/** El "no" explícito apaga TODO el seguimiento pendiente del lead. */
+export async function cancelSequencesForLead(leadId: string): Promise<void> {
+  const { error } = await getServiceClient()
+    .from('sequences')
+    .update({ status: 'cancelled' })
+    .eq('lead_id', leadId)
+    .eq('status', 'active')
+  if (error) console.warn('[sequences] No se pudieron cancelar:', error.message)
 }
 
 const SV_OFFSET_HOURS = -6

@@ -21,7 +21,7 @@ import {
   upsertDealSummary,
 } from '@/lib/supabase'
 import { calculateAdaptiveDebounce, computeBurstPattern } from '@/lib/debounce'
-import { createSequence, pauseLeadSequences } from '@/lib/sequences'
+import { createSequence, pauseLeadSequences, cancelSequencesForLead } from '@/lib/sequences'
 import { saveBrainObservations, getHighConfidenceLearnings, formatLearningsForPrompt } from '@/lib/agent-brain'
 import { saveLeadSource, getLeadSource, getActiveAdCampaigns, matchAdCampaign, formatSourceContextForPrompt, formatActiveAdsForPrompt } from '@/lib/lead-sources'
 import { logActivity } from '@/lib/activity-log'
@@ -614,7 +614,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // 11b. Opt-out: el cliente pidió no ser contactado — fuera de campañas para siempre
     if (claudeResponse.opt_out) {
       await updateLead(lead.id, { opted_out: true })
-      console.log(`[processMessage] Lead ${lead.id} opted out de mensajes proactivos`)
+      await cancelSequencesForLead(lead.id)
+      console.log(`[processMessage] Lead ${lead.id} opted out — seguimientos cancelados`)
     }
 
     // 12. Send the reply — use interactive buttons if GPT-4o provided them
