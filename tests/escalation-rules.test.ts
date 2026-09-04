@@ -126,3 +126,15 @@ describe('tono profesional en los prompts de escalamiento', () => {
     expect(out).toContain('sin signos de exclamación')
   })
 })
+
+describe('expectativa de respuesta en los prompts de escalamiento', () => {
+  it('formatEscalationRulesForPrompt pide avisar que el CEO responde en minutos', () => {
+    const out = formatEscalationRulesForPrompt([rule('contrato')])
+    expect(out).toContain('responde en los próximos minutos')
+  })
+
+  it('formatConditionalRulesForPrompt pide la misma expectativa', () => {
+    const out = formatConditionalRulesForPrompt([rule('negociacion', { trigger_type: 'topic' })])
+    expect(out).toContain('responde en los próximos minutos')
+  })
+})

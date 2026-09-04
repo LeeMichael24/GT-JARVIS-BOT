@@ -199,3 +199,11 @@ describe('decision_framework — tono al escalar', () => {
     expect(bloque).not.toContain('PRIMERO reacciona al contexto específico del cliente')
   })
 })
+
+describe('decision_framework — expectativa de respuesta al escalar', () => {
+  it('ordena cerrar el reply diciendo que el CEO responde en los próximos minutos', () => {
+    const bloque = DEFAULT_PROMPT_BLOCKS.decision_framework
+    expect(bloque).toContain('responde en los próximos minutos')
+    expect(bloque).toContain('CIERRE CON EXPECTATIVA')
+  })
+})

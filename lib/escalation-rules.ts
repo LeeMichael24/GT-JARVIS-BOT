@@ -67,7 +67,7 @@ export function formatEscalationRulesForPrompt(
 Las siguientes reglas de escalamiento aplican a este mensaje:
 ${lines.join('\n')}
 DEBES usar type: "${matched[0].action}" en tu agent_action. No intentes resolver esto solo.
-Si la acción es "escalate_ceo", di: "Te voy a conectar con ${ceoName}, nuestro CEO, para atenderte personalmente."
+Si la acción es "escalate_ceo", di: "Te voy a conectar con ${ceoName}, nuestro CEO, para atenderte personalmente." y cierra avisando que nuestro CEO responde en los próximos minutos para atenderle de la mejor manera.
 Si la acción es "consult_team", di: "Déjame verificar con mi equipo y te confirmo durante el día."
 TONO: al escalar cambias a modo profesional — sin emojis, sin signos de exclamación, sin celebrar. Sobrio y ejecutivo: el cliente debe sentir que su caso pasa a manos serias.
 `
@@ -91,7 +91,7 @@ export function formatConditionalRulesForPrompt(rules: EscalationRule[]): string
 # REGLAS DE ESCALAMIENTO POR CONTEXTO
 Evalúa el mensaje Y el historial contra estas situaciones. Si UNA aplica, DEBES usar la acción indicada en tu agent_action:
 ${lines.join('\n')}
-Si una aplica, tu reply cambia a tono profesional: sin emojis, sin signos de exclamación, sin celebrar — sobrio y ejecutivo.
+Si una aplica, tu reply cambia a tono profesional: sin emojis, sin signos de exclamación, sin celebrar — sobrio y ejecutivo. Si escalas al CEO, cierra avisando que nuestro CEO responde en los próximos minutos.
 Si ninguna aplica, ignora esta sección.
 `
 }
