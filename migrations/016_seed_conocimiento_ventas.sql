@@ -28,7 +28,7 @@ WHERE category = 'project_pitch';
 
 -- Idempotente: si esta migración (o una versión previa) ya corrió, se limpia
 -- y re-siembra. Los pitches quemados de la versión previa desaparecen aquí.
-DELETE FROM knowledge_base WHERE topic IN ('principio_reciprocidad', 'principio_compromiso', 'metodo_spin', 'escucha_70_30', 'aversion_perdida', 'anclaje_precio', 'rapport_carnegie', 'negociacion_harvard', 'cliente_exterior', 'confianza_sv', 'cierre_visita', 'cierre_resumen', 'cierre_condicional', 'cierre_etapa_precio', 'cierre_silencio', 'impuesto_transferencia', 'financiamiento_fsv', 'financiamiento_banca', 'proceso_compra', 'costos_cierre', 'inversion_roi', 'promesa_venta', 'registro_cnr', 'ley_condominio', 'sismo_resistencia', 'metros_utiles', 'etapas_construccion', 'acabados_preguntas', 'obj_muy_caro', 'obj_desconfianza_preventa', 'obj_mejor_espero',
+DELETE FROM knowledge_base WHERE topic IN ('venta_no_transaccional', 'mejor_conversacion_corta', 'conviccion_implicita', 'principio_reciprocidad', 'principio_compromiso', 'metodo_spin', 'escucha_70_30', 'aversion_perdida', 'anclaje_precio', 'rapport_carnegie', 'negociacion_harvard', 'cliente_exterior', 'confianza_sv', 'cierre_visita', 'cierre_resumen', 'cierre_condicional', 'cierre_etapa_precio', 'cierre_silencio', 'impuesto_transferencia', 'financiamiento_fsv', 'financiamiento_banca', 'proceso_compra', 'costos_cierre', 'inversion_roi', 'promesa_venta', 'registro_cnr', 'ley_condominio', 'sismo_resistencia', 'metros_utiles', 'etapas_construccion', 'acabados_preguntas', 'obj_muy_caro', 'obj_desconfianza_preventa', 'obj_mejor_espero',
   'portacelli_ecosistema_v2', 'pitch_portacelli_raices', 'pitch_portacelli_alba',
   'pitch_portacelli_alta', 'pitch_foresta');
 
@@ -63,6 +63,15 @@ INSERT INTO knowledge_base (category, topic, title, content, project_slug, prior
 
 ('sales_playbook', 'confianza_sv', 'Contra la desconfianza: pruebas verificables',
 'El comprador salvadoreño ha visto estafas de bienes raíces y desconfía con razón. No pidas confianza: da pruebas que él mismo pueda verificar — proyecto inscrito, desarrollador con obras entregadas, sitio oficial, visita presencial cuando quiera, y NUNCA pedir dinero por chat (los pagos se coordinan con el equipo, con documentos). La transparencia es tu mejor argumento de venta.', null, 6),
+
+('sales_playbook', 'venta_no_transaccional', 'Esto no es transaccional: la decisión toma tiempo',
+'Un inmueble no se decide de la noche a la mañana: toma semanas y varias conversaciones. El objetivo de CADA chat NO es cerrar hoy — es ser la mejor conversación que ese lead tuvo en el día: claridad, un dato que no sabía y un siguiente paso pequeño. Si alguien cierra en el chat es porque YA venía convencido: facilítalo. Con el resto, siembra convicción y confía en el seguimiento — la venta se cocina entre toques.', null, 7),
+
+('sales_playbook', 'mejor_conversacion_corta', 'El lead "solo viendo opciones" es el lead normal',
+'La mayoría escribe explorando, no comprando. No lo trates como comprador caliente ni lo sueltes como curioso: en poco tiempo dale (1) el porqué ESTE proyecto encaja con lo que dijo buscar, (2) una prueba concreta (dato, comparación, material) y (3) un paso siguiente sin fricción. Corto, útil y memorable gana a largo y completo. Que se vaya pensando "esta fue la mejor atención que recibí hoy".', null, 7),
+
+('sales_playbook', 'conviccion_implicita', 'Convencer mostrando, no declarando',
+'Nunca digas "somos los mejores": demuéstralo emparejando el MOTIVO del cliente con el diferenciador exacto del proyecto que pidió — busca vista → maximizada para la vista; busca renta → perfil y retorno objetivo; busca familia → espacio y entorno. La convicción implícita ("esto es justo lo que ando buscando") vende más que cualquier autoelogio, y deja al cliente sintiendo que la conclusión fue suya.', null, 7),
 
 -- ── D. TÉCNICAS DE CIERRE (Ziglar y clásicos, adaptados) ───────────────────
 ('closing_technique', 'cierre_visita', 'El cierre de la visita (puppy dog)',
