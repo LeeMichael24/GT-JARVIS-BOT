@@ -50,8 +50,11 @@ export function filterPlaybookByProject(
   return entries.filter(e => !e.project_slug || e.project_slug === projectSlug)
 }
 
-// Presupuesto del playbook en el prompt (sin tope pesaba ~11K chars/mensaje)
-const PLAYBOOK_PROMPT_BUDGET_CHARS = 6000
+// Presupuesto del playbook en el prompt. Subió de 6K a 12K (~3K tokens) al
+// sembrar la base de conocimiento de ventas/legal/financiera (migración 016):
+// la competencia de Daniela ES el producto; el costo extra por mensaje es
+// de centavos. El tope sigue existiendo para que la DB no infle el prompt.
+const PLAYBOOK_PROMPT_BUDGET_CHARS = 12000
 
 export function formatPlaybookForPrompt(entries: KBEntry[]): string {
   if (!entries.length) return ''
