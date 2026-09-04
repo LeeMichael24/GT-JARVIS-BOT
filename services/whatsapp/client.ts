@@ -157,23 +157,35 @@ export async function sendInternalNotification(params: NotificationParams): Prom
     return
   }
   const message = formatNotification(params)
-  try {
-    await sendText(destino, message, { typingDelay: false })
-  } catch (err) {
-    // El texto libre falla si el destinatario no le ha escrito al bot en 24h
-    // (error 131047). Fallback: plantilla HSM aprobada — llega SIEMPRE.
-    const tpl = process.env.WA_TEMPLATE_CEO_ALERT
-    if (!tpl) {
-      console.error('[notification] Free-form rechazado y WA_TEMPLATE_CEO_ALERT no está configurada — la alerta NO llegó:', err instanceof Error ? err.message : err)
-      throw err
+
+  // PLANTILLA PRIMERO. Fuera de la ventana de 24h Meta acepta el texto libre
+  // (200 + wamid) pero RETIENE la entrega hasta que el destinatario le escribe
+  // al bot — la alerta queda "congelada" y ningún error avisa. La Utility HSM
+  // entrega SIEMPRE, con o sin ventana. El texto libre queda como complemento:
+  // agrega el detalle (deal, reply de Daniela) cuando la ventana está abierta.
+  const tpl = process.env.WA_TEMPLATE_CEO_ALERT
+  if (tpl) {
+    try {
+      await sendTemplate(destino, tpl, 'es', [
+        params.leadName,
+        `+${params.leadPhone}`,
+        params.action.reason ?? (params.action.type === 'escalate_ceo' ? 'Cliente listo para cerrar' : 'Daniela necesita apoyo'),
+      ])
+      // Detalle enriquecido: mejor esfuerzo, la plantilla ya garantizó el aviso
+      try {
+        await sendText(destino, message, { typingDelay: false })
+      } catch {
+        // Ventana cerrada: normal, el detalle vive en el panel
+      }
+      return
+    } catch (err) {
+      // Plantilla no disponible en este WABA (p.ej. número de prueba): al texto
+      console.warn(`[notification] Plantilla "${tpl}" rechazada — intento texto libre:`, err instanceof Error ? err.message : err)
     }
-    console.warn(`[notification] Free-form rechazado — reintentando con plantilla "${tpl}"`)
-    await sendTemplate(destino, tpl, 'es', [
-      params.leadName,
-      `+${params.leadPhone}`,
-      params.action.reason ?? (params.action.type === 'escalate_ceo' ? 'Cliente listo para cerrar' : 'Daniela necesita apoyo'),
-    ])
+  } else {
+    console.warn('[notification] WA_TEMPLATE_CEO_ALERT no configurada — la alerta depende de la ventana de 24h')
   }
+  await sendText(destino, message, { typingDelay: false })
 }
 
 export async function sendDocument(

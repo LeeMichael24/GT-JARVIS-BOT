@@ -46,7 +46,7 @@ describe('formatNotification', () => {
   })
 })
 
-describe('sendInternalNotification — fallback a plantilla fuera de ventana', () => {
+describe('sendInternalNotification — plantilla primero (la ventana de 24h retiene el texto libre)', () => {
   const params = {
     leadName: 'Carlos',
     leadPhone: '50378901234',
@@ -70,29 +70,71 @@ describe('sendInternalNotification — fallback a plantilla fuera de ventana', (
     delete process.env.WA_TEMPLATE_CEO_ALERT
   })
 
-  it('si el texto libre falla y HAY plantilla configurada, envía la plantilla', async () => {
+  it('con plantilla configurada, la alerta sale PRIMERO como plantilla (entrega garantizada)', async () => {
+    // Meta responde 200 al texto libre fuera de ventana y RETIENE la entrega
+    // hasta que el destinatario escribe ("alerta congelada"). La Utility HSM
+    // entrega siempre, así que va primero.
     process.env.WA_TEMPLATE_CEO_ALERT = 'alerta_lead_hot'
     const bodies: Record<string, unknown>[] = []
-    let call = 0
     vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
-      call++
       const body = JSON.parse(init.body) as Record<string, unknown>
       bodies.push(body)
-      // Texto libre (3 intentos con retry) rechazado; plantilla OK
-      if (body.type === 'text') {
-        return { ok: false, status: 400, json: async () => ({}), text: async () => '{"error":{"code":131047}}' }
-      }
-      return { ok: true, json: async () => ({ messages: [{ id: 'wamid.tpl' }] }), text: async () => '' }
+      return { ok: true, json: async () => ({ messages: [{ id: 'wamid.x' }] }), text: async () => '' }
     }))
 
     await sendInternalNotification(params)
 
-    const tplCall = bodies.find(b => b.type === 'template') as { template: { name: string, components: { parameters: { text: string }[] }[] } }
-    expect(tplCall).toBeDefined()
+    expect(bodies[0]!.type).toBe('template')
+    const tplCall = bodies[0] as { template: { name: string, components: { parameters: { text: string }[] }[] } }
     expect(tplCall.template.name).toBe('alerta_lead_hot')
     const texts = tplCall.template.components[0].parameters.map(p => p.text)
     expect(texts).toEqual(['Carlos', '+50378901234', 'Listo para cerrar'])
   })
+
+  it('tras la plantilla intenta el texto libre con el detalle (mejor esfuerzo)', async () => {
+    process.env.WA_TEMPLATE_CEO_ALERT = 'alerta_lead_hot'
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      bodies.push(JSON.parse(init.body) as Record<string, unknown>)
+      return { ok: true, json: async () => ({ messages: [{ id: 'wamid.x' }] }), text: async () => '' }
+    }))
+
+    await sendInternalNotification(params)
+
+    expect(bodies.map(b => b.type)).toEqual(['template', 'text'])
+    expect((bodies[1] as { text: { body: string } }).text.body).toContain('LEAD HOT')
+  })
+
+  it('si el texto de detalle falla NO lanza: la plantilla ya entregó', async () => {
+    process.env.WA_TEMPLATE_CEO_ALERT = 'alerta_lead_hot'
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body) as Record<string, unknown>
+      if (body.type === 'text') {
+        return { ok: false, status: 400, json: async (): Promise<object> => ({}), text: async (): Promise<string> => '{"error":{"code":131047}}' }
+      }
+      return { ok: true, json: async (): Promise<object> => ({ messages: [{ id: 'wamid.tpl' }] }), text: async (): Promise<string> => '' }
+    }))
+
+    await expect(sendInternalNotification(params)).resolves.toBeUndefined()
+  })
+
+  it('si la plantilla es rechazada (no existe en el WABA), cae al texto libre', async () => {
+    // Caso actual con el número de prueba: alerta_lead_hot vive en otro WABA.
+    process.env.WA_TEMPLATE_CEO_ALERT = 'alerta_lead_hot'
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body) as Record<string, unknown>
+      bodies.push(body)
+      if (body.type === 'template') {
+        return { ok: false, status: 404, json: async (): Promise<object> => ({}), text: async (): Promise<string> => '{"error":{"code":132001}}' }
+      }
+      return { ok: true, json: async (): Promise<object> => ({ messages: [{ id: 'wamid.txt' }] }), text: async (): Promise<string> => '' }
+    }))
+
+    await sendInternalNotification(params)
+
+    expect(bodies.some(b => b.type === 'text')).toBe(true)
+  }, 15000)
 
   it('manda el teléfono en solo-dígitos aunque CEO_PHONE_NUMBER traiga "+" y espacios', async () => {
     // La consola de Meta documenta "to": "50362087916" — sin "+". Con el "+"
