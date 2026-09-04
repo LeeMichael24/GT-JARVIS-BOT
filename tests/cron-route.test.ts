@@ -86,6 +86,7 @@ describe('cron daily', () => {
       metrics: undefined,
       dealWarnings: { alerted: 0 },
       mediaSync: { synced: 0 },
+      knowledgeSync: { skipped: 'no_gt_api_url' },
       followUps: { created: 0 },
       reflection: { learned: 0, conversations: 0 },
     })

@@ -254,6 +254,36 @@ CRITERIOS DE ACEPTACIÓN (pruebas)
 
 ---
 
+## Parte 6b — Endpoint hermano: GET /daniela/knowledge (conocimiento de venta)
+
+Mismo patrón que `/daniela/media`, para los ÁNGULOS DE VENTA curados por proyecto (pitch, diferenciadores, objeciones específicas). Regla del producto: Daniela solo trae de fábrica experticia universal de ventas; TODO lo que describe proyectos vive en Terranova — proyecto nuevo en el admin = Daniela ya lo vende.
+
+```
+GET  {BASE}/daniela/knowledge
+Header:  x-api-secret: <el mismo de /listings>
+```
+
+Respuesta (`knowledge` o array pelado; el bot tolera ambos):
+
+```jsonc
+{
+  "knowledge": [
+    {
+      "category": "project_pitch",      // project_pitch | sales_playbook | objection | faq | closing_technique
+      "topic": "pitch_alba",            // identificador corto único
+      "title": "Pitch Portacelli Alba",
+      "content": "Ni casa ni apartamento: townhomes loft escalonados con terrazas gigantes...",  // máx 450 chars
+      "project_slug": "portacelli-alba-fase-1...",  // opcional: el slug de /listings → el bot lo aísla a ese proyecto
+      "priority": 9                     // mayor = más arriba en el prompt
+    }
+  ]
+}
+```
+
+Notas: solo contenido apto para prospectos (mismo candado `daniela_visible` si reutilizas la tabla); los datos duros (precios, modelos, disponibilidad, entrega) NO van aquí — ya viajan vivos en `/listings`; aquí va el ÁNGULO de venta. El bot sincroniza diario (variable `GT_KNOWLEDGE_PATH` si el path difiere) y administra solo sus filas (`source='ecosystem'`).
+
+---
+
 ## Parte 7 — Activación end-to-end (checklist)
 
 1. **Bot (ya hecho):** correr en Supabase la migración `008_media_source.sql` (agrega `source`/`project_slug` a `project_media`). *Pendiente de correr — igual que la 007.*

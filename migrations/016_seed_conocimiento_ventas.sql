@@ -1,4 +1,7 @@
--- 016 — Base de conocimiento de ventas para Daniela (4-sep-2026)
+-- 016 — Base de conocimiento UNIVERSAL de ventas para Daniela (4-sep-2026)
+-- CERO datos de proyectos (precios/unidades/entregas): eso llega VIVO del API
+-- de Terranova. Aquí solo lo que no caduca: método de venta, cierres,
+-- psicología, y el pack de sector inmobiliario SV (swappable al clonar).
 -- Ejecutar en Supabase SQL Editor. Requiere el deploy con presupuesto de
 -- playbook en 12K chars (lib/knowledge-base.ts) para que todo quepa al prompt.
 --
@@ -13,31 +16,24 @@
 --    (tramites.gob.sv, proceso de compraventa e inscripción CNR).
 --  · Datos de proyectos: grupoterranovasv.com (páginas oficiales, 4-sep-2026).
 
--- ── A. CORRECCIONES: datos viejos que contradicen al sitio oficial ─────────
--- (El sitio dice 180 manzanas y entregas 2027-2028; el seed viejo decía 300
---  manzanas y 2028. Se apagan y se reemplazan. Reactivables desde el panel.)
+-- ── A. FUERA LOS DATOS QUEMADOS DE PROYECTOS ──────────────────────────────
+-- El conocimiento de proyectos NO vive aquí: llega VIVO desde Terranova en
+-- cada mensaje (GET /listings → modelos, precios, disponibilidad, amenidades,
+-- entrega, descripción) y, para ángulos curados, vía GET /daniela/knowledge
+-- (sync diario). Así: proyecto nuevo en Terranova = Daniela ya lo vende, y
+-- Daniela queda clonable a cualquier vertical (carros, cintas, lo que sea).
 UPDATE knowledge_base SET active = false, updated_at = now()
-WHERE category = 'project_pitch' AND topic IN ('portacelli_ecosistema', 'avance_obra');
+WHERE category = 'project_pitch';
 
--- ── B. PITCH POR PROYECTO (datos oficiales del sitio) ──────────────────────
+
+-- Idempotente: si esta migración (o una versión previa) ya corrió, se limpia
+-- y re-siembra. Los pitches quemados de la versión previa desaparecen aquí.
+DELETE FROM knowledge_base WHERE topic IN ('principio_reciprocidad', 'principio_compromiso', 'metodo_spin', 'escucha_70_30', 'aversion_perdida', 'anclaje_precio', 'rapport_carnegie', 'negociacion_harvard', 'cliente_exterior', 'confianza_sv', 'cierre_visita', 'cierre_resumen', 'cierre_condicional', 'cierre_etapa_precio', 'cierre_silencio', 'impuesto_transferencia', 'financiamiento_fsv', 'financiamiento_banca', 'proceso_compra', 'costos_cierre', 'inversion_roi', 'promesa_venta', 'registro_cnr', 'ley_condominio', 'sismo_resistencia', 'metros_utiles', 'etapas_construccion', 'acabados_preguntas', 'obj_muy_caro', 'obj_desconfianza_preventa', 'obj_mejor_espero',
+  'portacelli_ecosistema_v2', 'pitch_portacelli_raices', 'pitch_portacelli_alba',
+  'pitch_portacelli_alta', 'pitch_foresta');
+
+-- ── C. PSICOLOGÍA Y MÉTODO DE VENTA (universal — sobrevive a cualquier producto) ──
 INSERT INTO knowledge_base (category, topic, title, content, project_slug, priority) VALUES
-
-('project_pitch', 'portacelli_ecosistema_v2', 'Pitch Portacelli (ecosistema)',
-'Portacelli: santuario urbanístico de 180 manzanas en Nuevo Cuscatlán, a 12 min de San Benito. Más del 50% del terreno queda como bosque privado. Ciudad integrada con senderos naturales, fitness centers, piscinas infinity, coworking y zonas deportivas. Desarrolla Grupo Fidelis S.A. de C.V. Tres colecciones según perfil: ALTA (apartamentos), ALBA (townhomes loft) y RAICES (casas de lujo).', null, 10),
-
-('project_pitch', 'pitch_portacelli_raices', 'Pitch Portacelli Raices (casas de lujo)',
-'RAICES: la joya residencial de Portacelli. Casas de lujo de 4 habitaciones, 6 baños, 2 parqueos y jardines espaciosos. Modelos: Tipo C $516,240 (282 m²), Tipo B $565,896 (309 m²), Tipo A $620,379 (341 m²). Entrega Q4 2027 — la colección que se entrega PRIMERO en Portacelli. Perfil: familias que buscan espacio, privacidad y acabados premium. Está en planificación: precio de etapa temprana, el mejor momento de entrada.', null, 9),
-
-('project_pitch', 'pitch_portacelli_alba', 'Pitch Portacelli Alba (townhomes loft)',
-'ALBA: ni casa ni apartamento — lo mejor de ambos. Townhomes escalonados estilo loft industrial con terrazas gigantescas, fire pits privados y coworking exterior. 4 habitaciones, 4 baños, 2 parqueos. Modelos: Townhome B $378,000 (180 m²) y Townhome A $396,900 (189 m²). Entrega Q2 2028. Perfil: comprador dinámico, joven, conectado con la montaña, que quiere diseño diferente sin irse a casa tradicional.', null, 9),
-
-('project_pitch', 'pitch_portacelli_alta', 'Pitch Portacelli Alta (apartamentos)',
-'ALTA: apartamentos diseñados para maximizar la vista al valle. Infinity Pool, Sky Lounge y Fitness Center de clase mundial. Modelos: Tipo A $252,500 (2 hab/2 baños, 101 m²) y Tipo B $265,000 (3 hab/2 baños, 106 m²), ambos con 2 parqueos. Entrega Q4 2028. Es la puerta de entrada a Portacelli: el ticket más accesible del ecosistema. Perfil: inversionistas (renta ejecutiva) y profesionales que quieren vida moderna.', null, 9),
-
-('project_pitch', 'pitch_foresta', 'Pitch Foresta Townhomes (Club El Encanto)',
-'FORESTA: townhomes de lujo personalizables DENTRO del Club El Encanto (San José Villanueva, Zaragoza): golf profesional, casa club, restaurante gourmet, piscinas, gimnasio, tenis y senderos privados. Modelos: B1 y B7 $576,200 (~321 m², 4 hab/4 baños, un cuarto convertible en estudio) y B8 Especial $704,000 (386 m², 5/5). YA EN CONSTRUCCIÓN, entrega Q2 2027 — la entrega más próxima del portafolio. Reserva desde $5,000.', null, 9),
-
--- ── C. PSICOLOGÍA Y MÉTODO DE VENTA ────────────────────────────────────────
 ('sales_playbook', 'principio_reciprocidad', 'Reciprocidad: da valor primero (Cialdini)',
 'Antes de pedir (datos, cita), da algo útil: un dato de plusvalía de la zona, una comparación de precio por m², un consejo honesto. La gente corresponde a quien le aporta. Un cliente que recibió valor gratis responde mejor a "¿te agendo la visita?" que uno interrogado desde el saludo.', null, 6),
 
