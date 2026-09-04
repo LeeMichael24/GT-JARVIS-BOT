@@ -82,7 +82,32 @@ Probablemente ya tienes una entidad de media asociada a proyectos (la del portal
 | **`daniela_visible`** | bool | **El candado de privacidad.** true = Daniela puede enviarlo a prospectos. Default **false**. |
 | `active` | bool | Encendido/apagado |
 
-**Storage:** los archivos deben quedar en un bucket/CDN público (o tu dominio `grupoterranovasv.com/media/...`). Al subir, valida los límites de WhatsApp (Parte 1) y rechaza lo que exceda.
+**Storage:** Cloudinary — la nube `grupoterranova` YA existe (el sitio sirve sus imágenes desde `res.cloudinary.com/grupoterranova`). Ver Parte 3b. Al subir, valida los límites de WhatsApp (Parte 1) y rechaza lo que exceda.
+
+---
+
+## Parte 3b — Cloudinary: la nube oficial del material
+
+**No se crea cuenta nueva**: el sitio ya sube a la nube `grupoterranova` (carpetas `projects/` y `models/`). Se reutilizan esas credenciales (Dashboard → Settings → API Keys). Solo si NADIE tiene acceso a esa cuenta se crea una nueva en cloudinary.com (plan free alcanza: 25 créditos/mes) y se cambia el cloud name en las URLs.
+
+**Ajuste de seguridad obligatorio para los PDF** (una sola vez): Cloudinary bloquea la entrega de PDF por defecto en cuentas nuevas. En **Settings → Security → "Allow delivery of PDF and ZIP files"** → habilitar. Sin esto, los brochures devuelven 401 y WhatsApp no los puede descargar.
+
+**Convención de carpetas** (todo lo de Daniela junto y auditable):
+```
+daniela/<project_key con guiones>/brochure.pdf
+daniela/<project_key con guiones>/foto-01.jpg
+daniela/<project_key con guiones>/video-recorrido.mp4
+```
+
+**El endpoint devuelve las URLs YA transformadas** (aptas para WhatsApp) — nunca el original:
+
+| Tipo | URL de entrega (patrón) | Garantiza |
+|------|------------------------|-----------|
+| image | `https://res.cloudinary.com/grupoterranova/image/upload/w_1200,q_80,f_jpg/<public_id>.jpg` | JPG ≤ 5 MB |
+| video | `https://res.cloudinary.com/grupoterranova/video/upload/w_1280,q_auto:eco,vc_h264,ac_aac/<public_id>.mp4` | MP4 H.264+AAC |
+| brochure (PDF) | `https://res.cloudinary.com/grupoterranova/image/upload/<public_id>.pdf` | application/pdf |
+
+**Validación de peso al marcar `daniela_visible`** (los transforms no garantizan el tope de video): el admin hace un `HEAD` a la URL transformada y verifica `Content-Length` ≤ 5 MB (imagen), ≤ 16 MB (video), ≤ 100 MB (PDF). Videos: mantener clips de ≤ 60–90 segundos. Si excede, rechazar con mensaje claro.
 
 ---
 
@@ -184,8 +209,16 @@ TAREA
    - PDF application/pdf ≤ 100 MB
    - imagen JPG/PNG ≤ 5 MB
    - video MP4 (H.264 + AAC) ≤ 16 MB
-   Los archivos deben quedar en un bucket/CDN PÚBLICO (sin auth, sin URL firmada
-   con expiración).
+   Los archivos viven en Cloudinary, nube "grupoterranova" (la misma del sitio;
+   pedir las API keys al que administra el sitio — Dashboard → Settings → API
+   Keys). Carpeta: daniela/<project-key>/... . Habilitar UNA VEZ en Settings →
+   Security → "Allow delivery of PDF and ZIP files" (sin esto los PDF dan 401).
+   El endpoint devuelve URLs YA transformadas, nunca el original:
+   - imagen:  .../image/upload/w_1200,q_80,f_jpg/<id>.jpg        (JPG ≤5MB)
+   - video:   .../video/upload/w_1280,q_auto:eco,vc_h264,ac_aac/<id>.mp4
+   - PDF:     .../image/upload/<id>.pdf                          (application/pdf)
+   Al marcar daniela_visible, hacer HEAD a la URL transformada y validar
+   Content-Length contra los topes de WhatsApp; rechazar si excede.
 
 3. ENDPOINT: crea  GET /daniela/media
    - Auth: header x-api-secret (mismo secreto que /listings). Sin él → 401.
