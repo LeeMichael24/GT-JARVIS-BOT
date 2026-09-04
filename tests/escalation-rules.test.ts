@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchKeywordRules, formatConditionalRulesForPrompt } from '@/lib/escalation-rules'
+import { matchKeywordRules, formatConditionalRulesForPrompt, formatEscalationRulesForPrompt } from '@/lib/escalation-rules'
 import type { EscalationRule } from '@/types'
 
 function rule(trigger_value: string, overrides: Partial<EscalationRule> = {}): EscalationRule {
@@ -109,5 +109,20 @@ describe('formatConditionalRulesForPrompt', () => {
   it('sin reglas contextuales devuelve cadena vacía', () => {
     expect(formatConditionalRulesForPrompt([rule('precio final')])).toBe('')
     expect(formatConditionalRulesForPrompt([])).toBe('')
+  })
+})
+
+describe('tono profesional en los prompts de escalamiento', () => {
+  it('formatEscalationRulesForPrompt exige tono sobrio (sin emojis ni exclamaciones)', () => {
+    const out = formatEscalationRulesForPrompt([rule('cuenta bancaria')])
+    expect(out).toContain('TONO')
+    expect(out).toContain('sin emojis')
+    expect(out).toContain('sin signos de exclamación')
+  })
+
+  it('formatConditionalRulesForPrompt exige el mismo tono sobrio', () => {
+    const out = formatConditionalRulesForPrompt([rule('negociacion', { trigger_type: 'topic' })])
+    expect(out).toContain('sin emojis')
+    expect(out).toContain('sin signos de exclamación')
   })
 })

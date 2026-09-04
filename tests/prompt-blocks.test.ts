@@ -113,7 +113,7 @@ describe('buildSystemPrompt con bloques', () => {
     expect(prompt).toContain('$500,000')
     expect(prompt).toContain('5+ unidades')
     expect(prompt).toContain('Ana López')
-    expect(prompt).toContain('directamente con Ana, nuestro CEO')
+    expect(prompt).toContain('directamente Ana, nuestro CEO')
     expect(prompt).toContain('Máximo 350 caracteres en el reply')
     expect(prompt).not.toContain('Michael Narváez')
   })
@@ -174,5 +174,28 @@ describe('buildSystemPrompt con bloques', () => {
     const prompt = buildSystemPrompt({ lead, project: null })
     expect(prompt).toContain('SOLO cuando el catálogo o playbook trae la cifra para ESE proyecto específico')
     expect(prompt).toContain('Déjame confirmar ese descuento con el equipo')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Tono al escalar: serio y profesional, sin celebración
+// ─────────────────────────────────────────────────────────────
+
+describe('decision_framework — tono al escalar', () => {
+  const bloque = DEFAULT_PROMPT_BLOCKS.decision_framework
+
+  it('ordena el cambio de marcha: cero emojis y cero exclamaciones al escalar', () => {
+    expect(bloque).toContain('TONO AL ESCALAR')
+    expect(bloque).toContain('CERO emojis')
+    expect(bloque).toContain('CERO signos de exclamación')
+  })
+
+  it('la regla le gana a "REACCIONA PRIMERO" y aplica también a consult_team', () => {
+    expect(bloque).toContain('le gana a "REACCIONA PRIMERO"')
+    expect(bloque).toContain('aplica igual cuando consultas al equipo')
+  })
+
+  it('ya no pide reaccionar con emoción antes de conectar con el CEO', () => {
+    expect(bloque).not.toContain('PRIMERO reacciona al contexto específico del cliente')
   })
 })
