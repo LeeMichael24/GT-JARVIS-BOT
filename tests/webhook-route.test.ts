@@ -740,3 +740,49 @@ describe('ruteo de alertas: consultas al asesor, cierres al CEO', () => {
     expect(call.toPhone).toBe(CEO_ENV)
   })
 })
+
+describe('cooldown de alertas: no inundar al CEO', () => {
+  const escalada = {
+    reply: 'Te conecto con nuestro CEO.', stage: 'hot' as const, name_captured: null,
+    qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+    schedule_meeting: null, opt_out: false,
+    agent_action: { type: 'escalate_ceo' as const, reason: 'Inversión grande', urgency: 'high' as const, client_type: 'individual' as const, follow_up_hint: null },
+    deal_summary: null, brain_observations: [], interactive_buttons: [], send_media: null,
+  }
+
+  it('la primera alerta se envía y se registra last_alert_at en el lead', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true, last_alert_at: null })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true, last_alert_at: null })
+    ai.parseClaudeResponse.mockReturnValueOnce(escalada)
+
+    await POST(buildRequest())
+    await flush()
+
+    expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
+    expect(db.updateLead).toHaveBeenCalledWith('lead-1', expect.objectContaining({ last_alert_at: expect.any(String) }))
+  })
+
+  it('si el lead fue alertado hace <8h, la alerta se SUPRIME (pero la decisión queda en el log)', async () => {
+    const hace2h = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true, last_alert_at: hace2h })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true, last_alert_at: hace2h })
+    ai.parseClaudeResponse.mockReturnValueOnce(escalada)
+
+    await POST(buildRequest())
+    await flush()
+
+    expect(wa.sendInternalNotification).not.toHaveBeenCalled()
+  })
+
+  it('pasadas las 8h vuelve a alertar', async () => {
+    const hace9h = new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString()
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true, last_alert_at: hace9h })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true, last_alert_at: hace9h })
+    ai.parseClaudeResponse.mockReturnValueOnce(escalada)
+
+    await POST(buildRequest())
+    await flush()
+
+    expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
+  })
+})

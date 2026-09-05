@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizePhone, isInternal, pickAlertRecipient } from '@/lib/team-routing'
+import { normalizePhone, isInternal, pickAlertRecipient, shouldSuppressAlert } from '@/lib/team-routing'
 
 describe('normalizePhone — formato único de teléfono', () => {
   it('quita el "+" inicial que trae CEO_PHONE_NUMBER', () => {
@@ -89,5 +89,30 @@ describe('pickAlertRecipient — consultas al asesor, cierres al CEO', () => {
 
   it('sin CEO ni asesor con teléfono no inventa destinatario', () => {
     expect(pickAlertRecipient('consult_team', null, undefined, [])).toBeUndefined()
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
+// Cooldown de alertas: la primera escala avisa, las repetidas no
+// ─────────────────────────────────────────────────────────────
+
+describe('shouldSuppressAlert', () => {
+  const ahora = new Date('2026-09-05T12:00:00Z')
+
+  it('sin alerta previa no suprime', () => {
+    expect(shouldSuppressAlert(null, ahora)).toBe(false)
+    expect(shouldSuppressAlert(undefined, ahora)).toBe(false)
+  })
+
+  it('alerta hace 2h → suprime (cooldown de 8h)', () => {
+    expect(shouldSuppressAlert('2026-09-05T10:00:00Z', ahora)).toBe(true)
+  })
+
+  it('alerta hace 9h → ya no suprime', () => {
+    expect(shouldSuppressAlert('2026-09-05T03:00:00Z', ahora)).toBe(false)
+  })
+
+  it('timestamp corrupto no suprime (mejor alertar de más que perder una)', () => {
+    expect(shouldSuppressAlert('no-es-fecha', ahora)).toBe(false)
   })
 })

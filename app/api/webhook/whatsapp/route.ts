@@ -27,7 +27,7 @@ import { saveLeadSource, getLeadSource, getActiveAdCampaigns, matchAdCampaign, f
 import { logActivity } from '@/lib/activity-log'
 import { autoTagProject, autoTagSource } from '@/lib/auto-tag'
 import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPrompt, formatConditionalRulesForPrompt } from '@/lib/escalation-rules'
-import { getActiveTeamMembers, isInternal, pickAlertRecipient } from '@/lib/team-routing'
+import { getActiveTeamMembers, isInternal, pickAlertRecipient, shouldSuppressAlert } from '@/lib/team-routing'
 import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, type ProjectMediaItem } from '@/lib/project-media'
 import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } from '@/lib/project-scripts'
 import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
@@ -526,6 +526,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
           dealSummary: claudeResponse.deal_summary?.summary ?? null,
         })
         teamNotifiedForMeeting = true
+        await updateLead(lead.id, { last_alert_at: new Date().toISOString() }).catch(() => {})
       } catch (err) {
         console.error('[processMessage] Failed to notify team of scheduled meeting:', err instanceof Error ? err.message : err)
       }
@@ -543,7 +544,13 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
         details: { reason: action.reason, urgency: action.urgency, client_type: action.client_type },
       }).catch(err => console.error('[processMessage] logActivity failed:', err instanceof Error ? err.message : err))
 
-      if (!teamNotifiedForMeeting) {
+      // Cooldown anti-inundación: un lead en zona de escalamiento re-dispara
+      // el trigger en cada mensaje. La primera alerta avisa (y queda su
+      // timestamp); las repetidas en 8h solo se registran en activity_log.
+      const lastAlertAt = freshLead?.last_alert_at ?? lead.last_alert_at
+      if (!teamNotifiedForMeeting && shouldSuppressAlert(lastAlertAt, new Date())) {
+        console.log(`[processMessage] Alerta (${action.type}) suprimida por cooldown — lead ${lead.id} ya alertado hace <8h`)
+      } else if (!teamNotifiedForMeeting) {
         try {
           // Consultas van al asesor asignado; los cierres siempre al CEO.
           // Se lee de freshLead: pudieron asignar un asesor durante el debounce.
@@ -557,6 +564,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
             dealSummary: claudeResponse.deal_summary?.summary ?? null,
             toPhone: destino,
           })
+          await updateLead(lead.id, { last_alert_at: new Date().toISOString() }).catch(() => {})
           console.log(`[processMessage] Alerta enviada (${action.type}) del lead ${lead.id}`)
         } catch (err) {
           console.error('[processMessage] No se pudo enviar la alerta por WhatsApp:', err instanceof Error ? err.message : err)

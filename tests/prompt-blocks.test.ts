@@ -207,3 +207,11 @@ describe('decision_framework — expectativa de respuesta al escalar', () => {
     expect(bloque).toContain('CIERRE CON EXPECTATIVA')
   })
 })
+
+describe('decision_framework — no re-escalar en cada turno', () => {
+  it('ordena no re-anunciar la conexión con el CEO si ya se anunció', () => {
+    const bloque = DEFAULT_PROMPT_BLOCKS.decision_framework
+    expect(bloque).toContain('NO RE-ESCALES')
+    expect(bloque).toContain('sigue en curso')
+  })
+})

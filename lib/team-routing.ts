@@ -93,3 +93,20 @@ export function pickAlertRecipient(
   }
   return ceoPhone
 }
+
+// Cooldown de alertas internas. Un lead en "zona de escalamiento" dispara el
+// trigger en CADA mensaje; sin freno, cada respuesta suya = un WhatsApp al CEO
+// (y una conversación de Meta cobrada). La primera alerta avisa; las repetidas
+// dentro de la ventana se suprimen — el caso ya está en manos humanas.
+export const ALERT_COOLDOWN_HOURS = 8
+
+export function shouldSuppressAlert(
+  lastAlertAt: string | null | undefined,
+  now: Date,
+  cooldownHours = ALERT_COOLDOWN_HOURS,
+): boolean {
+  if (!lastAlertAt) return false
+  const last = Date.parse(lastAlertAt)
+  if (Number.isNaN(last)) return false // timestamp corrupto: mejor alertar de más
+  return now.getTime() - last < cooldownHours * 60 * 60 * 1000
+}

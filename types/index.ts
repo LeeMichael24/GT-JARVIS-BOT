@@ -22,6 +22,7 @@ export interface Lead {
   assigned_to: string | null
   opted_out: boolean
   last_proactive_at: string | null
+  last_alert_at?: string | null
   first_message_at: string
   last_message_at: string
   created_at: string
