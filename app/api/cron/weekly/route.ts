@@ -1,4 +1,4 @@
-import { getFunnelStats, getTopObjections, getDanielaStats } from '@/lib/analytics'
+import { getFunnelStats, getTopObjections, getDanielaStats, getLeadDigest, formatLeadDigest } from '@/lib/analytics'
 import { sendText } from '@/services/whatsapp/client'
 import { recordCronRun } from '@/lib/cron-log'
 
@@ -20,10 +20,15 @@ export async function GET(request: Request): Promise<Response> {
     return Response.json({ skipped: 'no_ceo_phone' })
   }
 
-  const [funnel, objections, daniela] = await Promise.all([
+  const [funnel, objections, daniela, digest] = await Promise.all([
     getFunnelStats(7),
     getTopObjections(3),
     getDanielaStats(7),
+    // Fail-safe: si el detalle por lead falla, el reporte agregado igual sale.
+    getLeadDigest(7).catch(err => {
+      console.warn('[cron/weekly] getLeadDigest falló:', err instanceof Error ? err.message : err)
+      return []
+    }),
   ])
 
   const lines = [
@@ -52,14 +57,19 @@ export async function GET(request: Request): Promise<Response> {
     lines.push('', `Proyectos más pedidos: ${top}.`)
   }
 
+  // El detalle por lead va al final: lo agregado se lee de un vistazo,
+  // y quien quiera actuar sigue bajando.
+  const porLead = formatLeadDigest(digest)
+  if (porLead) lines.push('', porLead)
+
   lines.push('', 'Detalle completo en el panel: /panel/dashboard')
   const report = lines.join('\n')
 
   try {
     await sendText(ceoPhone, report, { typingDelay: false })
     console.log('[cron/weekly] Reporte semanal enviado al CEO')
-    await recordCronRun('weekly', startedAt, 'ok', { sent: true, leads: funnel.total })
-    return Response.json({ sent: true, leads: funnel.total })
+    await recordCronRun('weekly', startedAt, 'ok', { sent: true, leads: funnel.total, detallados: digest.length })
+    return Response.json({ sent: true, leads: funnel.total, detallados: digest.length })
   } catch (err) {
     // Fuera de ventana de 24h sin plantilla dedicada: queda en logs, no es crítico
     console.error('[cron/weekly] No se pudo enviar el reporte:', err instanceof Error ? err.message : err)

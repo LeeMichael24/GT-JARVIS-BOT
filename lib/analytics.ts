@@ -321,3 +321,101 @@ export async function getSourceBreakdown(): Promise<SourceBreakdown[]> {
     .map(([source, count]) => ({ source, count }))
     .sort((a, b) => b.count - a.count)
 }
+
+// ── Resumen POR LEAD para el reporte semanal ──────────────────
+// El reporte era 100% agregado ("atendí 12 leads"), que no le sirve al CEO
+// para actuar el lunes. Esto baja al cliente: quién es, dónde quedó y qué
+// sigue. El resumen y la próxima acción los escribe Daniela en cada
+// conversación (tabla deal_summaries), así que no hay costo extra de modelo.
+
+export interface LeadDigestRow {
+  id: string
+  name: string | null
+  phone: string
+  stage: 'new' | 'warm' | 'hot' | 'cold'
+  score: 'A' | 'B' | 'C'
+  project: string | null
+  summary: string | null
+  nextAction: string | null
+  botActive: boolean
+  daysIdle: number
+}
+
+const PESO_STAGE: Record<string, number> = { hot: 0, warm: 1, new: 2, cold: 3 }
+const PESO_SCORE: Record<string, number> = { A: 0, B: 1, C: 2 }
+
+export async function getLeadDigest(days = 7, limit = 10): Promise<LeadDigestRow[]> {
+  const { scoreLead } = await import('@/lib/lead-scoring')
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data, error } = await getServiceClient()
+    .from('leads')
+    .select('id, name, phone, stage, qualification_data, project_interest, last_message_at, bot_active, opted_out, deal_summaries(summary, next_action)')
+    .not('phone', 'like', 'n_%')
+    .eq('opted_out', false)
+    .gte('last_message_at', cutoff)
+  if (error) throw new Error(`getLeadDigest: ${error.message}`)
+
+  interface Row {
+    id: string
+    name: string | null
+    phone: string
+    stage: 'new' | 'warm' | 'hot' | 'cold'
+    qualification_data: Parameters<typeof scoreLead>[0]['qualification_data']
+    project_interest: string | null
+    last_message_at: string
+    bot_active: boolean
+    // PostgREST devuelve el embed como objeto (1-1) o arreglo según la relación
+    deal_summaries: { summary: string | null; next_action: string | null } | { summary: string | null; next_action: string | null }[] | null
+  }
+
+  const now = Date.now()
+  return ((data ?? []) as Row[])
+    .map(l => {
+      const d = Array.isArray(l.deal_summaries) ? l.deal_summaries[0] : l.deal_summaries
+      return {
+        id: l.id,
+        name: l.name,
+        phone: l.phone,
+        stage: l.stage,
+        score: scoreLead(l).score,
+        project: l.project_interest,
+        summary: d?.summary ?? null,
+        nextAction: d?.next_action ?? null,
+        botActive: l.bot_active,
+        daysIdle: Math.floor((now - Date.parse(l.last_message_at)) / (24 * 60 * 60 * 1000)),
+      }
+    })
+    .sort((a, b) =>
+      (PESO_STAGE[a.stage] ?? 9) - (PESO_STAGE[b.stage] ?? 9) ||
+      (PESO_SCORE[a.score] ?? 9) - (PESO_SCORE[b.score] ?? 9) ||
+      a.daysIdle - b.daysIdle
+    )
+    .slice(0, limit)
+}
+
+const STAGE_ES: Record<string, string> = { hot: 'caliente', warm: 'tibio', new: 'nuevo', cold: 'frío' }
+
+/** Bloque de texto plano para WhatsApp. Vacío si no hay leads en la ventana. */
+export function formatLeadDigest(rows: LeadDigestRow[], maxChars = 2400): string {
+  if (!rows.length) return ''
+  const lines: string[] = ['Cliente por cliente:', '']
+  for (const r of rows) {
+    const quien = r.name ?? r.phone
+    const marca = [STAGE_ES[r.stage] ?? r.stage, r.score]
+    if (!r.botActive) marca.push('lo lleva un humano')
+    if (r.daysIdle >= 3) marca.push(`${r.daysIdle} días sin escribir`)
+
+    const bloque = [`· ${quien}${r.project ? ` — ${r.project}` : ''} (${marca.join(', ')})`]
+    if (r.summary) bloque.push(`  ${r.summary}`)
+    if (r.nextAction) bloque.push(`  Siguiente: ${r.nextAction}`)
+
+    const tentativo = [...lines, ...bloque, ''].join('\n')
+    if (tentativo.length > maxChars) {
+      lines.push(`· … y ${rows.length - (lines.filter(l => l.startsWith('· ')).length)} más en el panel.`)
+      break
+    }
+    lines.push(...bloque, '')
+  }
+  return lines.join('\n').trimEnd()
+}
