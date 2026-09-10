@@ -133,6 +133,26 @@ export function ChatView({ bundle, member }: { bundle: LeadBundle; member: Sessi
               <p className="truncate text-xs text-zinc-500">{bundle.lead.phone}</p>
             </div>
           </div>
+          <div className="flex shrink-0 items-center gap-2">
+          {/* Traspaso silencioso: tomar el lead SIN escribirle al cliente.
+              Antes la única forma de pausar a Daniela era mandarle un mensaje,
+              así que no había manera de quedarse leyendo antes de contestar. */}
+          {botActive && (
+            <button
+              onClick={() => startTransition(async () => {
+                const res = await setBotActive(bundle.lead.id, false)
+                if (res.ok) setBotActiveState(false)
+              })}
+              disabled={isPending}
+              title="Daniela deja de responderle a este cliente hasta que la reactives"
+              className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs font-medium text-zinc-400 transition-colors hover:border-amber-800 hover:text-amber-300 disabled:opacity-50"
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                <path d="M6 4v8M10 4v8" />
+              </svg>
+              Lo tomo yo
+            </button>
+          )}
           <button
             onClick={() => setShowSheet(s => !s)}
             className="flex h-8 items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-2.5 text-xs text-zinc-400 transition-colors hover:text-white lg:hidden"
@@ -143,6 +163,7 @@ export function ChatView({ bundle, member }: { bundle: LeadBundle; member: Sessi
             </svg>
             Ficha
           </button>
+          </div>
         </div>
 
         {/* Bot paused bar */}
