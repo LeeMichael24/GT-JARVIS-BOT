@@ -25,6 +25,10 @@ interface PromptContext {
   blocks?: Record<string, string>
   /** Sección de objetivos del negocio (tabla agent_objectives), ya formateada */
   objectivesBlock?: string | null
+  /** Avisos operativos vigentes (tabla agent_notices), ya formateados */
+  noticesBlock?: string | null
+  /** Dónde se está recibiendo inversión hoy (tabla projects), ya formateado */
+  investableBlock?: string | null
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -48,6 +52,8 @@ export function buildSystemPrompt({
   settings = DEFAULT_SETTINGS,
   blocks = DEFAULT_PROMPT_BLOCKS,
   objectivesBlock = null,
+  noticesBlock = null,
+  investableBlock = null,
 }: PromptContext): string {
   const intentBlock = buildIntentInstruction(intent, lastBotMessage, gtUrlSection)
   const catalogBlock = buildCatalogSection(projects, project, intent, settings.rental_threshold_usd)
@@ -211,7 +217,7 @@ ${hasMedia
   const schedulingBlock = r('scheduling')
 
   return `${header}
-${projectScript ? '\n' + projectScript + '\n' : ''}${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${objectivesSection}${decisionSection}
+${noticesBlock ?? ''}${projectScript ? '\n' + projectScript + '\n' : ''}${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${investableBlock ?? ''}${objectivesSection}${decisionSection}
 ${settings.custom_instructions ? '# INSTRUCCIONES DEL EQUIPO (configuración viva — prioridad alta)\n' + settings.custom_instructions + '\n\n' : ''}# PERFIL DEL CLIENTE
 Fecha actual (zona horaria El Salvador): ${today}
 Nombre: ${lead.name ?? 'desconocido'}

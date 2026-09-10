@@ -85,6 +85,9 @@ describe('cron daily', () => {
       rules: { campaignsCreated: 2 },
       metrics: undefined,
       dealWarnings: { alerted: 0 },
+      // Sin GT_API_URL en tests el sync del registro falla y se REPORTA en el
+      // resumen en vez de tumbar el cron entero — igual que los otros syncs.
+      projectsSync: { error: 'Failed to parse URL from undefined/listings' },
       mediaSync: { synced: 0 },
       knowledgeSync: { skipped: 'no_gt_api_url' },
       followUps: { created: 0 },
@@ -122,5 +125,16 @@ describe('cron daily', () => {
     const res = await GET(req('Bearer sec123'))
     expect((await res.json()).dealWarnings).toEqual({ alerted: 0 })
     expect(wa.sendText).not.toHaveBeenCalled()
+  })
+})
+
+describe('cron daily — el registro de proyectos', () => {
+  it('un fallo del sync de proyectos no impide que corra el resto', async () => {
+    const res = await GET(req('Bearer sec123'))
+    const body = await res.json()
+    expect(body.projectsSync).toHaveProperty('error')
+    // los pasos que vienen después igual se ejecutaron
+    expect(body.mediaSync).toEqual({ synced: 0 })
+    expect(body.followUps).toEqual({ created: 0 })
   })
 })

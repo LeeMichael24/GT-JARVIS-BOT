@@ -3,6 +3,7 @@ import { getSessionMember } from '@/lib/auth'
 import {
   getBrainEntries, getEscalationRules, getProjectScripts, getAgentSettingsPanel,
   getProjectMediaAll, getPlaybookEntries, getSupervisionData, getPromptBlocksPanel, getObjectives,
+  getProjectsRegistry, getNotices, getFichasTodas,
 } from '@/app/panel/actions'
 import { getAllProjects } from '@/services/projects/gt-api'
 import { BrainEditor } from '@/components/panel/BrainEditor'
@@ -15,6 +16,8 @@ import { StatusPanel } from '@/components/panel/StatusPanel'
 import { PersonaEditor } from '@/components/panel/PersonaEditor'
 import { ObjectivesEditor } from '@/components/panel/ObjectivesEditor'
 import { TrainingStudio } from '@/components/panel/TrainingStudio'
+import { ProjectsEditor } from '@/components/panel/ProjectsEditor'
+import { NoticesEditor } from '@/components/panel/NoticesEditor'
 import { DanielaTabs } from './tabs'
 
 // El análisis de entrenamiento (server action de esta página) llama al
@@ -28,7 +31,7 @@ export default async function DanielaPage() {
   if (!member) redirect('/panel/login')
   if (member.role !== 'admin') redirect('/panel')
 
-  const [entries, rules, projectScripts, settingsPanel, mediaItems, playbook, supervision, promptBlocks, objectives, projects] = await Promise.all([
+  const [entries, rules, projectScripts, settingsPanel, mediaItems, playbook, supervision, promptBlocks, objectives, projects, registry, notices, fichas] = await Promise.all([
     getBrainEntries(),
     getEscalationRules(),
     getProjectScripts(),
@@ -39,6 +42,9 @@ export default async function DanielaPage() {
     getPromptBlocksPanel(),
     getObjectives(),
     getAllProjects().catch(() => []),
+    getProjectsRegistry(),
+    getNotices(),
+    getFichasTodas(),
   ])
 
   // Bandeja de entrenamiento: lo que Daniela aprendió sola y aún no entra al prompt
@@ -55,11 +61,13 @@ export default async function DanielaPage() {
       </div>
       <DanielaTabs
         statusPanel={<StatusPanel data={supervision} />}
+        projectsEditor={<ProjectsEditor rows={registry.rows} tableReady={registry.tableReady} fichas={fichas} />}
+        noticesEditor={<NoticesEditor rows={notices.rows} tableReady={notices.tableReady} projects={registry.rows} />}
+        playbookEditor={<PlaybookEditor entries={playbook} />}
+        brainEditor={<BrainEditor entries={entries} />}
+        trainingStudio={<TrainingStudio candidates={candidates} />}
         personaEditor={<PersonaEditor rows={promptBlocks.rows} tableReady={promptBlocks.tableReady} />}
         objectivesEditor={<ObjectivesEditor objectives={objectives} projectNames={projectNames} />}
-        trainingStudio={<TrainingStudio candidates={candidates} />}
-        brainEditor={<BrainEditor entries={entries} />}
-        playbookEditor={<PlaybookEditor entries={playbook} />}
         scriptsEditor={<ScriptsEditor scripts={projectScripts} />}
         escalationRules={<EscalationRules rules={rules} />}
         projectMedia={<MediaEditor items={mediaItems} />}

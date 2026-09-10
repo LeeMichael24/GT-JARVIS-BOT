@@ -2,6 +2,7 @@
 
 import { refresh } from 'next/cache'
 import { requireAdmin, requireMember, type SessionMember } from '@/lib/auth'
+import { FICHA_KEYS, campoPorKey } from '@/lib/project-profile'
 import {
   getLatestUserMessageAt,
   getLeadById,
@@ -1185,3 +1186,233 @@ export async function getSupervisionData(): Promise<SupervisionData> {
   return { agentEnabled, settingsTableReady, cronRuns, activity, pendingLearnings: pending }
 }
 
+
+// ─────────────────────────────────────────────────────────────
+// PROYECTOS — el registro local del catálogo (migración 020)
+//
+// `projects` no duplica el catálogo: guarda su identidad (slug, nombre,
+// familia) más lo único que el API no puede saber — si HOY recibe inversión
+// de verdad. Precios, metrajes y disponibilidad siguen llegando vivos.
+// ─────────────────────────────────────────────────────────────
+
+export interface ProjectRow {
+  slug: string
+  name: string
+  project_key: string | null
+  entity_type: string | null
+  type: string | null
+  investable: boolean
+  active: boolean
+  notes: string | null
+}
+
+export async function getProjectsRegistry(): Promise<{ rows: ProjectRow[]; tableReady: boolean }> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('projects')
+    .select('slug, name, project_key, entity_type, type, investable, active, notes')
+    .order('name')
+  // Igual que el resto del panel: sin migración mostramos aviso ámbar, no un error
+  if (error) return { rows: [], tableReady: false }
+  return { rows: (data ?? []) as ProjectRow[], tableReady: true }
+}
+
+export async function updateProject(
+  slug: string,
+  updates: { investable?: boolean; active?: boolean; project_key?: string | null; notes?: string | null },
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (updates.investable !== undefined) patch.investable = updates.investable
+    if (updates.active !== undefined) patch.active = updates.active
+    if (updates.project_key !== undefined) patch.project_key = updates.project_key?.trim() || null
+    if (updates.notes !== undefined) patch.notes = updates.notes?.trim() || null
+    const { error } = await getServiceClient().from('projects').update(patch).eq('slug', slug)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// FICHA DE PROYECTO — los 10 campos estandarizados
+//
+// Se guardan en knowledge_base con project_slug y el key del campo como
+// topic. Un solo camino del conocimiento al prompt; la ficha es la forma
+// guiada de llenarlo, no un almacén paralelo.
+// ─────────────────────────────────────────────────────────────
+
+export interface FichaValor { topic: string; content: string; active: boolean }
+
+export async function getProjectFicha(slug: string): Promise<FichaValor[]> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('knowledge_base')
+    .select('topic, content, active')
+    .eq('project_slug', slug)
+    .in('topic', FICHA_KEYS)
+  if (error) return []
+  return (data ?? []) as FichaValor[]
+}
+
+/** Guarda un campo. Vacío = se borra la fila, así la ficha no acumula basura. */
+export async function saveFichaCampo(slug: string, key: string, content: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const campo = campoPorKey(key)
+    if (!campo) return { ok: false, error: 'CAMPO_DESCONOCIDO' }
+
+    const supabase = getServiceClient()
+    const texto = content.trim()
+
+    if (!texto) {
+      const { error } = await supabase
+        .from('knowledge_base').delete().eq('project_slug', slug).eq('topic', key)
+      if (error) throw new Error(error.message)
+      refresh()
+      return { ok: true }
+    }
+
+    // El formatter del prompt trunca a 450 chars por entrada — avisamos acá
+    // en vez de dejar que el texto se corte en silencio delante del cliente.
+    if (texto.length > 450) return { ok: false, error: 'MUY_LARGO' }
+
+    const { data: existente } = await supabase
+      .from('knowledge_base').select('id')
+      .eq('project_slug', slug).eq('topic', key).maybeSingle()
+
+    const fila = {
+      category: campo.categoria,
+      topic: key,
+      title: campo.label,
+      content: texto,
+      project_slug: slug,
+      priority: campo.priority,
+      active: true,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { error } = existente
+      ? await supabase.from('knowledge_base').update(fila).eq('id', (existente as { id: string }).id)
+      : await supabase.from('knowledge_base').insert(fila)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// AVISOS — contexto en vivo que no viene ni del cliente ni del Ecosistema
+// ─────────────────────────────────────────────────────────────
+
+export interface NoticeRow {
+  id: string
+  scope: 'global' | 'project'
+  project_slug: string | null
+  body: string
+  priority: number
+  starts_at: string
+  ends_at: string | null
+  active: boolean
+}
+
+export async function getNotices(): Promise<{ rows: NoticeRow[]; tableReady: boolean }> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('agent_notices')
+    .select('id, scope, project_slug, body, priority, starts_at, ends_at, active')
+    .order('active', { ascending: false })
+    .order('priority', { ascending: true })
+    .limit(200)
+  if (error) return { rows: [], tableReady: false }
+  return { rows: (data ?? []) as NoticeRow[], tableReady: true }
+}
+
+export async function createNotice(input: {
+  scope: 'global' | 'project'
+  projectSlug: string | null
+  body: string
+  endsAt: string | null
+  priority?: number
+}): Promise<ActionResult> {
+  try {
+    const admin = await requireAdmin()
+    const texto = input.body.trim()
+    if (!texto) return { ok: false, error: 'EMPTY' }
+    if (texto.length > 400) return { ok: false, error: 'MUY_LARGO' }
+    if (input.scope === 'project' && !input.projectSlug) return { ok: false, error: 'PROYECTO_REQUERIDO' }
+
+    const { error } = await getServiceClient().from('agent_notices').insert({
+      scope: input.scope,
+      project_slug: input.scope === 'global' ? null : input.projectSlug,
+      body: texto,
+      ends_at: input.endsAt || null,
+      priority: Number.isFinite(input.priority) ? input.priority : 100,
+      active: true,
+      created_by: admin.id,
+    })
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function updateNotice(
+  id: string,
+  updates: { body?: string; endsAt?: string | null; active?: boolean; priority?: number },
+): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    if (updates.body !== undefined) {
+      const t = updates.body.trim()
+      if (!t) return { ok: false, error: 'EMPTY' }
+      if (t.length > 400) return { ok: false, error: 'MUY_LARGO' }
+      patch.body = t
+    }
+    if (updates.endsAt !== undefined) patch.ends_at = updates.endsAt || null
+    if (updates.active !== undefined) patch.active = updates.active
+    if (updates.priority !== undefined) patch.priority = updates.priority
+    const { error } = await getServiceClient().from('agent_notices').update(patch).eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+export async function deleteNotice(id: string): Promise<ActionResult> {
+  try {
+    await requireAdmin()
+    const { error } = await getServiceClient().from('agent_notices').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    refresh()
+    return { ok: true }
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/** Todas las fichas de una vez, por slug — el tab de Proyectos las precarga. */
+export async function getFichasTodas(): Promise<Record<string, Record<string, string>>> {
+  await requireAdmin()
+  const { data, error } = await getServiceClient()
+    .from('knowledge_base')
+    .select('project_slug, topic, content')
+    .not('project_slug', 'is', null)
+    .in('topic', FICHA_KEYS)
+  if (error) return {}
+  const out: Record<string, Record<string, string>> = {}
+  for (const r of (data ?? []) as { project_slug: string; topic: string; content: string }[]) {
+    ;(out[r.project_slug] ??= {})[r.topic] = r.content
+  }
+  return out
+}

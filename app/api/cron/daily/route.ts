@@ -1,6 +1,8 @@
 import { runDailyRadar, runRecontactRules } from '@/lib/proactive/engine'
 import { aggregateDailyMetrics } from '@/lib/agent-brain'
 import { getNeglectedALeads } from '@/lib/analytics'
+import { getAllProjects } from '@/services/projects/gt-api'
+import { syncProjectsRegistry } from '@/lib/projects-registry'
 import { syncProjectMediaFromEcosystem } from '@/lib/media-sync'
 import { syncKnowledgeFromEcosystem } from '@/lib/knowledge-sync'
 import { runNightlyReflection } from '@/lib/reflection'
@@ -64,6 +66,14 @@ export async function GET(request: Request): Promise<Response> {
     dealWarnings = { error: e instanceof Error ? e.message : 'deal warnings failed' }
   }
 
+  // Registro de proyectos al día: crea los listings nuevos y marca inactivos
+  // los que salieron del catálogo. Nunca borra ni toca `investable`, que lo
+  // decide el equipo desde el panel. Va ANTES de los otros syncs porque es el
+  // destino de sus llaves foráneas.
+  const projectsSync = await getAllProjects()
+    .then(syncProjectsRegistry)
+    .catch((e: unknown) => ({ error: e instanceof Error ? e.message : 'projects sync failed' }))
+
   // Sync de media del Ecosistema Terranova → project_media (no-op si el
   // endpoint aún no existe; ver docs/BRIEF-ECOSISTEMA-MEDIA.md)
   const mediaSync = await syncProjectMediaFromEcosystem().catch((e: unknown) => ({
@@ -93,7 +103,7 @@ export async function GET(request: Request): Promise<Response> {
     ? await runNightlyReflection()
     : { skipped: 'reflection_disabled' as const }
 
-  const summary = { radar, rules, metrics, dealWarnings, mediaSync, knowledgeSync, followUps, reflection }
+  const summary = { radar, rules, metrics, dealWarnings, projectsSync, mediaSync, knowledgeSync, followUps, reflection }
   console.log('[cron/daily]', JSON.stringify(summary))
   // Observabilidad: el panel (tab Estado) muestra esta corrida.
   // 'error' si CUALQUIER sub-paso falló — visible de un vistazo.

@@ -7,6 +7,8 @@ import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
 import { createCalendarEvent } from '@/services/google/calendar'
 import { getPlaybook, formatPlaybookForPrompt, filterPlaybookByProject } from '@/lib/knowledge-base'
+import { getActiveNotices, noticesForProject, formatNoticesForPrompt } from '@/lib/notices'
+import { getInvestableProjects, formatInvestableForPrompt } from '@/lib/projects-registry'
 import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendVideo, sendInternalNotification, markAsRead, sendTypingIndicator } from '@/services/whatsapp/client'
 import { transcribeAudio } from '@/services/openai/whisper'
 import {
@@ -284,7 +286,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     let projectScript: string | null = null
     const existingDeal = existingDealForDebounce
 
-    const [projectsR, playbookR, brainR, leadSourceR, activeAdsR, escalationR, scriptsR, mediaR, blocksR, objectivesR] = await Promise.allSettled([
+    const [projectsR, playbookR, brainR, leadSourceR, activeAdsR, escalationR, scriptsR, mediaR, blocksR, objectivesR, noticesR, investablesR] = await Promise.allSettled([
       getAllProjects(),
       getPlaybook(),
       getHighConfidenceLearnings(agentSettings.brain_min_confidence),
@@ -295,6 +297,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       getAllProjectMediaItems(),
       getEffectivePromptBlocks(),
       getActiveObjectives(),
+      getActiveNotices(),
+      getInvestableProjects(),
     ])
 
     const projects = settle(projectsR, [], 'catálogo GT')
@@ -307,6 +311,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     const mediaItems: ProjectMediaItem[] = settle(mediaR, [], 'media')
     const promptBlocks = settle(blocksR, DEFAULT_PROMPT_BLOCKS, 'bloques del prompt')
     const objectives = settle(objectivesR, [], 'objetivos')
+    const notices = settle(noticesR, [], 'avisos del equipo')
+    const investables = settle(investablesR, [], 'proyectos invertibles')
 
     // Guion oficial: activo si el mensaje menciona el proyecto O si el lead
     // ya venía en ese guion (project_interest) — el guion persiste toda la conversación
@@ -389,6 +395,15 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       isInvestmentTopic: intent === 'investment_query' || project?.entityType === 'investment',
     }) || null
 
+    // 8c. Avisos operativos del equipo. Van arriba del prompt y mandan sobre
+    // el catálogo: son lo único que sabe que se liberó una unidad hoy.
+    const noticesBlock = formatNoticesForPrompt(noticesForProject(notices, project?.slug ?? null)) || null
+
+    // 8d. Dónde se recibe inversión HOY. El API marca las 26 propiedades como
+    // 'active', así que sin esto Daniela no puede distinguir vitrina de
+    // inversión real y termina listando el catálogo entero.
+    const investableBlock = formatInvestableForPrompt(investables) || null
+
     // 9. Build the Daniela system prompt with full catalog and call GPT-4o
     const systemPrompt = buildSystemPrompt({
       lead, project, projects, intent, lastBotMessage, gtUrlSection, salesPlaybook,
@@ -403,6 +418,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       settings: agentSettings,
       blocks: promptBlocks,
       objectivesBlock,
+      noticesBlock,
+      investableBlock,
     })
     let claudeResponse: ReturnType<typeof parseClaudeResponse>
     try {
