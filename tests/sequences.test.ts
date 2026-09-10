@@ -159,3 +159,25 @@ describe('ensureFollowUpsForSilentLeads', () => {
     await expect(ensureFollowUpsForSilentLeads(new Date())).resolves.toBe(0)
   })
 })
+
+describe('red de seguridad — los leads fríos también se recontactan', () => {
+  beforeEach(() => {
+    db.llamadas.length = 0
+    for (const k of Object.keys(db.resultados)) delete db.resultados[k]
+  })
+
+  it('un lead cold recibe cold_reactivation en vez de quedar mudo', async () => {
+    db.resultados.leads = { data: [{ id: 'lc', stage: 'cold', sequences: [] }], error: null }
+    const creadas = await ensureFollowUpsForSilentLeads(new Date())
+    expect(creadas).toBe(1)
+    const upsert = db.llamadas.find(c => c.tabla === 'sequences' && c.op === 'upsert')
+    expect((upsert?.args[0] as { sequence_type: string }).sequence_type).toBe('cold_reactivation')
+  })
+
+  it('la consulta ya no excluye el stage cold', async () => {
+    db.resultados.leads = { data: [], error: null }
+    await ensureFollowUpsForSilentLeads(new Date())
+    const consulta = db.llamadas.find(c => c.tabla === 'leads' && c.op === 'in')
+    expect(consulta?.args[1]).toContain('cold')
+  })
+})

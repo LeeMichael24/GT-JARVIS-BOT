@@ -56,6 +56,11 @@ export const SEQUENCE_DEFINITIONS: Record<SequenceType, SequenceDef> = {
  * Red de seguridad: el modelo a veces no pide follow_up_needed y el lead
  * silencioso queda sin seguimiento para siempre. El cron diario crea la
  * secuencia base para todo lead activo callado >24h sin secuencia activa.
+ *
+ * Incluye a los leads `cold` a propósito: la regla es no parar hasta un "no"
+ * explícito, y un lead que se enfría y agota su reactivación quedaba mudo
+ * para siempre. Recibe `cold_reactivation`, cuyo primer toque cae a 30 días,
+ * así que reactivar no significa insistir mañana.
  */
 export async function ensureFollowUpsForSilentLeads(now: Date): Promise<number> {
   // Fail-safe integral: sin cliente de BD (env incompleto) la red degrada a 0
@@ -73,7 +78,7 @@ export async function ensureFollowUpsForSilentLeads(now: Date): Promise<number> 
     .select('id, stage, sequences(status)')
     .eq('bot_active', true)
     .eq('opted_out', false)
-    .in('stage', ['new', 'warm', 'hot'])
+    .in('stage', ['new', 'warm', 'hot', 'cold'])
     .not('phone', 'like', 'n_%')
     .lt('last_message_at', cutoff)
   if (error) {
@@ -87,7 +92,10 @@ export async function ensureFollowUpsForSilentLeads(now: Date): Promise<number> 
   let creadas = 0
   for (const l of sinSecuencia) {
     try {
-      const tipo = l.stage === 'hot' ? ('hot_close' as const) : ('post_conversation' as const)
+      const tipo =
+        l.stage === 'hot' ? ('hot_close' as const)
+        : l.stage === 'cold' ? ('cold_reactivation' as const)
+        : ('post_conversation' as const)
       await createSequence(l.id, tipo, { origin: 'safety_net_daily' })
       creadas++
     } catch (err) {
