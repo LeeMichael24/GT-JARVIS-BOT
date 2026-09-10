@@ -19,6 +19,12 @@ export interface ProjectMediaItem {
   caption: string | null
   sort_order: number
   active: boolean
+  /**
+   * Slug canónico del listing al que pertenece la pieza. Lo llena el sync del
+   * Ecosistema (migración 008); las filas cargadas a mano lo dejan en null y
+   * eso las vuelve material COMÚN de todo el project_key.
+   */
+  project_slug?: string | null
 }
 
 /** Todos los items activos — se carga una vez por mensaje (tabla pequeña). */
@@ -36,10 +42,36 @@ export async function getAllProjectMediaItems(): Promise<ProjectMediaItem[]> {
   return (data as ProjectMediaItem[]) ?? []
 }
 
-/** Items cuyo project_key aparece en el nombre del proyecto (match laxo). */
-export function mediaForProject(items: ProjectMediaItem[], projectName: string): ProjectMediaItem[] {
+/**
+ * Material que corresponde al proyecto en conversación.
+ *
+ * El match por `project_key` solo (ej: 'portacelli') no alcanza cuando un
+ * mismo key agrupa varios listings: el brochure de Portacelli ALTA terminaba
+ * saliendo en una conversación de ALBA porque ambos nombres contienen la
+ * palabra. Por eso, cuando conocemos el slug del listing, mandamos lo suyo y
+ * descartamos lo que pertenece a otro.
+ *
+ * Las filas sin `project_slug` (cargadas a mano en el panel) son material
+ * COMÚN del key — la ubicación en Google Earth de Portacelli vale igual para
+ * Alta, Alba y Raíces — así que siempre entran.
+ */
+export function mediaForProject(
+  items: ProjectMediaItem[],
+  projectName: string,
+  projectSlug?: string | null,
+): ProjectMediaItem[] {
   const name = projectName.toLowerCase()
-  return items.filter(i => name.includes(i.project_key.toLowerCase()))
+  const delKey = items.filter(i => name.includes(i.project_key.toLowerCase()))
+
+  if (!projectSlug) return delKey
+
+  // Lo específico de ESTE listing + lo común del key. Lo que lleva el slug de
+  // otro listing queda fuera.
+  const propio = delKey.filter(i => i.project_slug === projectSlug || !i.project_slug)
+
+  // Si el listing no tiene material propio ni común, no inventamos: mejor
+  // nada que el material del proyecto vecino.
+  return propio
 }
 
 /** Nombres de proyecto (keys) que tienen algún media — para avisarle al prompt. */

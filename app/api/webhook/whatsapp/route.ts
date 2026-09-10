@@ -379,7 +379,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // El playbook se filtra AQUÍ (con el proyecto ya resuelto) y no en el fetch
     // paralelo: entradas generales + las del proyecto en conversación, nada más.
     const salesPlaybook = formatPlaybookForPrompt(
-      filterPlaybookByProject(playbookEntries, project?.slug ?? null),
+      filterPlaybookByProject(playbookEntries, project?.slug ?? null, project?.name ?? lead.project_interest),
     )
 
     // 8b. Objetivos del negocio aplicables a este turno (general + proyecto + inversión)
@@ -667,7 +667,12 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
 
     // 14. Send media attachment if GPT-4o requested it (from project_media DB)
     if (claudeResponse.send_media) {
-      const projectItems = mediaForProject(mediaItems, claudeResponse.send_media.project)
+      // El slug ancla el material al listing exacto: sin él, "portacelli" a
+      // secas hace que el brochure de Alta salga en una conversación de Alba.
+      // Resolvemos por el nombre que pidió el modelo y, si no cae en ninguno,
+      // usamos el proyecto de la conversación.
+      const pedido = detectProjectFromMessage(claudeResponse.send_media.project, projects) ?? project
+      const projectItems = mediaForProject(mediaItems, claudeResponse.send_media.project, pedido?.slug ?? null)
       const toSend = pickMediaToSend(projectItems, claudeResponse.send_media.type)
       try {
         if (claudeResponse.send_media.type === 'image') {

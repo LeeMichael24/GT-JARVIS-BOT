@@ -5,7 +5,14 @@ export interface KBEntry {
   topic: string
   title: string
   content: string
+  /** Ancla la entrada a UN listing del catálogo. */
   project_slug: string | null
+  /**
+   * Ancla la entrada a una FAMILIA de proyecto ('portacelli' cubre Alta, Alba
+   * y Raíces). Misma convención que project_media. Sin key y sin slug, la
+   * entrada es conocimiento universal de venta y entra en toda conversación.
+   */
+  project_key?: string | null
 }
 
 function getSupabase() {
@@ -15,39 +22,63 @@ function getSupabase() {
   )
 }
 
+/**
+ * Trae TODO el conocimiento activo. El alcance por proyecto se decide después,
+ * en filterPlaybookByProject: hacerlo en SQL no alcanzaba porque una entrada
+ * puede estar anclada a una familia (project_key) y no a un listing.
+ * La tabla es chica (decenas de filas), así que traerla entera sale gratis.
+ */
 export async function getPlaybook(projectSlug?: string | null): Promise<KBEntry[]> {
   const supabase = getSupabase()
 
-  let query = supabase
-    .from('knowledge_base')
-    .select('category, topic, title, content, project_slug')
-    .eq('active', true)
-    .order('priority', { ascending: false })
+  const traer = (columnas: string) =>
+    supabase
+      .from('knowledge_base')
+      .select(columnas)
+      .eq('active', true)
+      .order('priority', { ascending: false })
 
-  if (projectSlug) {
-    query = query.or(`project_slug.is.null,project_slug.eq.${projectSlug}`)
+  let { data, error } = await traer('category, topic, title, content, project_slug, project_key')
+
+  // Fallback-safe: entre el deploy y la migración 019 la columna project_key
+  // no existe todavía. Sin esto la consulta falla entera y Daniela se queda
+  // SIN playbook — mucho peor que perder el alcance por familia.
+  if (error && /project_key/.test(error.message)) {
+    console.warn('[knowledge-base] project_key aún no existe (falta migración 019) — sigo sin alcance por familia')
+    ;({ data, error } = await traer('category, topic, title, content, project_slug'))
   }
-
-  const { data, error } = await query
 
   if (error) {
     console.warn('[knowledge-base] Failed to fetch:', error.message)
     return []
   }
 
-  return (data ?? []) as KBEntry[]
+  return (data ?? []) as unknown as KBEntry[]
 }
 
 /**
- * Aísla el playbook al proyecto en conversación: entradas generales (slug null)
- * + las de ESE proyecto. Evita contaminar el prompt con datos de otros proyectos.
+ * Aísla el playbook al proyecto en conversación.
+ *
+ * Tres alcances posibles por entrada:
+ *  · sin slug ni key  → universal: técnicas de venta, ITBR, CNR, FSV. Siempre entra.
+ *  · project_slug     → un listing exacto.
+ *  · project_key      → una familia ('portacelli' = Alta + Alba + Raíces).
+ *
+ * Una entrada con alcance NO entra si no sabemos de qué proyecto se habla:
+ * decirle a alguien que pregunta por un alquiler en Escalón que "incluye 2
+ * parqueos techados" es inventar. Antes sí entraba, y esa era la fuga.
  */
 export function filterPlaybookByProject(
   entries: KBEntry[],
   projectSlug: string | null | undefined,
+  projectName?: string | null,
 ): KBEntry[] {
-  if (!projectSlug) return entries
-  return entries.filter(e => !e.project_slug || e.project_slug === projectSlug)
+  const nombre = (projectName ?? '').toLowerCase()
+  return entries.filter(e => {
+    if (!e.project_slug && !e.project_key) return true
+    if (e.project_slug) return !!projectSlug && e.project_slug === projectSlug
+    return !!nombre && nombre.includes(e.project_key!.toLowerCase())
+  })
 }
 
 // Presupuesto del playbook en el prompt. Subió de 6K a 12K (~3K tokens) al
