@@ -580,6 +580,7 @@ const SETTINGS_WHITELIST: Record<string, (v: string) => boolean> = {
   formality_default: v => ['tu', 'usted'].includes(v),
   custom_instructions: v => v.length <= 3000,
   reflection_enabled: v => ['true', 'false'].includes(v),
+  sales_critic_enabled: v => ['true', 'false'].includes(v),
   agent_enabled: v => ['true', 'false'].includes(v),
   ceo_name: v => v.length > 0 && v.length <= 80,
   escalation_budget_usd: inRange(1_000, 100_000_000),

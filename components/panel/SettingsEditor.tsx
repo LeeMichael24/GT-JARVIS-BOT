@@ -30,6 +30,10 @@ const OPTION_LABELS: Record<string, { value: string; label: string; hint: string
     { value: 'true', label: 'Encendida', hint: 'Observaciones repetidas entran solas al prompt' },
     { value: 'false', label: 'Apagada', hint: 'Todo aprendizaje requiere promoción manual' },
   ],
+  sales_critic_enabled: [
+    { value: 'true', label: 'Encendida', hint: 'Un juez revisa cada respuesta antes de enviarla y reescribe las que salen vagas o literales. Suma unos segundos.' },
+    { value: 'false', label: 'Apagada', hint: 'Responde sin revisión: más rápido, pero sin el control de calidad de venta' },
+  ],
 }
 
 const SETTING_TITLES: Record<string, string> = {
@@ -51,6 +55,7 @@ const SETTING_TITLES: Record<string, string> = {
   brain_min_confidence: 'Confianza mínima del cerebro (0-1)',
   auto_promote_enabled: 'Auto-promoción de aprendizajes',
   auto_promote_threshold: 'Repeticiones para auto-promover',
+  sales_critic_enabled: 'Revisión automática de venta',
 }
 
 // Secciones — agent_enabled se maneja en el tab Estado, no aquí
@@ -58,7 +63,7 @@ const SECTIONS: { title: string; hint: string; keys: string[] }[] = [
   {
     title: 'Voz y comportamiento',
     hint: 'Cómo habla Daniela. La personalidad completa se edita en el tab Personalidad.',
-    keys: ['custom_instructions', 'emoji_policy', 'formality_default', 'reply_max_chars'],
+    keys: ['custom_instructions', 'sales_critic_enabled', 'emoji_policy', 'formality_default', 'reply_max_chars'],
   },
   {
     title: 'Reglas de negocio',

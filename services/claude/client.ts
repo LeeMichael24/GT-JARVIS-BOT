@@ -2,7 +2,7 @@ import OpenAI from 'openai'
 import type {
   ClaudeResponse, Conversation, LeadStage, MeetingRequest, QualificationData,
   AgentAction, AgentActionType, DealSummary, DealSignals,
-  BrainObservation, InteractiveButton, SendMedia,
+  BrainObservation, InteractiveButton, SendMedia, TurnMoment, TurnPlan,
 } from '@/types'
 
 const MODEL = 'gpt-4o'
@@ -13,6 +13,10 @@ export interface CallClaudeOptions {
    *  Respuestas: llm_temperature (default 0.85). Reflexión/entrenamiento:
    *  reflection_temperature (default 0.3 — extracción sin inventar). */
   temperature?: number
+  /** Modelo distinto al de las respuestas — el juez de la revisión usa uno rápido */
+  model?: string
+  /** Tiempo máximo de la llamada; default 30 s */
+  timeoutMs?: number
 }
 
 export async function callClaude(
@@ -22,7 +26,7 @@ export async function callClaude(
 ): Promise<string> {
   // timeout 30s: sin esto una llamada colgada consume los 60s de maxDuration
   // y el cliente queda sin respuesta. 1 retry automático del SDK.
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30_000, maxRetries: 1 })
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: opts.timeoutMs ?? 30_000, maxRetries: 1 })
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
     ...history.map(msg => ({
@@ -34,7 +38,7 @@ export async function callClaude(
   ]
 
   const response = await openai.chat.completions.create({
-    model: MODEL,
+    model: opts.model ?? MODEL,
     max_tokens: MAX_TOKENS,
     temperature: opts.temperature ?? 0.85,
     messages,
@@ -64,6 +68,7 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
   }
 
   return {
+    plan: parsePlan((parsed as Record<string, unknown>).plan),
     reply: parsed.reply,
     stage: parseStage(parsed.stage),
     name_captured: parsed.name_captured ?? null,
@@ -77,6 +82,21 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     send_media: parseSendMedia((parsed as Record<string, unknown>).send_media),
     extra_messages: parseExtraMessages((parsed as Record<string, unknown>).extra_messages),
     lazo_abierto: parseLazo((parsed as Record<string, unknown>).lazo_abierto),
+  }
+}
+
+const MOMENTOS: TurnMoment[] = ['descubrimiento', 'presentar_valor', 'objecion', 'compromiso', 'pidio_tiempo', 'tramite']
+
+function parsePlan(raw: unknown): TurnPlan | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const p = raw as Record<string, unknown>
+  const texto = (k: string) => (typeof p[k] === 'string' ? (p[k] as string).trim().slice(0, 300) : '')
+  return {
+    cliente: texto('cliente'),
+    momento: MOMENTOS.includes(p.momento as TurnMoment) ? (p.momento as TurnMoment) : null,
+    objetivo_del_turno: texto('objetivo_del_turno'),
+    angulo: texto('angulo'),
+    siguiente_paso: texto('siguiente_paso'),
   }
 }
 

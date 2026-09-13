@@ -135,7 +135,20 @@ export interface LeadNote {
   created_at: string
 }
 
+// Plan del turno: se escribe ANTES del reply. El modelo genera en orden; con
+// "reply" primero respondía literal y razonaba después.
+export type TurnMoment = 'descubrimiento' | 'presentar_valor' | 'objecion' | 'compromiso' | 'pidio_tiempo' | 'tramite'
+
+export interface TurnPlan {
+  cliente: string
+  momento: TurnMoment | null
+  objetivo_del_turno: string
+  angulo: string
+  siguiente_paso: string
+}
+
 export interface ClaudeResponse {
+  plan?: TurnPlan | null
   reply: string
   // null = el modelo devolvió un stage inválido o lo omitió; el orquestador
   // conserva el stage anterior del lead en vez de persistir un valor alucinado

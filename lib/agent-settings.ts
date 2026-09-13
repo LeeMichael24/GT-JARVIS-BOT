@@ -46,6 +46,8 @@ export interface AgentSettings {
   auto_promote_enabled: boolean
   /** Repeticiones del mismo tema para auto-promover */
   auto_promote_threshold: number
+  /** Revisión automática de venta: un juez rápido revisa cada respuesta y, si falla, se reescribe */
+  sales_critic_enabled: boolean
 }
 
 export const DEFAULT_SETTINGS: AgentSettings = {
@@ -68,6 +70,7 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   brain_min_confidence: 0.7,
   auto_promote_enabled: true,
   auto_promote_threshold: 3,
+  sales_critic_enabled: true,
 }
 
 // Parseo numérico defensivo: valor inválido o fuera de rango → default.
@@ -148,6 +151,9 @@ export async function getAgentSettings(): Promise<AgentSettings> {
             break
           case 'auto_promote_enabled':
             settings.auto_promote_enabled = v !== 'false'
+            break
+          case 'sales_critic_enabled':
+            settings.sales_critic_enabled = v !== 'false'
             break
           case 'auto_promote_threshold':
             settings.auto_promote_threshold = Math.round(num(v, 2, 50, d.auto_promote_threshold))

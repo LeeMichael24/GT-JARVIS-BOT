@@ -1,7 +1,7 @@
 import { waitUntil } from '@vercel/functions'
 import { parseWebhookMessages, verifySignature } from '@/services/whatsapp/webhook'
 import type { ParsedWebhook } from '@/types'
-import { callClaude, parseClaudeResponse } from '@/services/claude/client'
+import { parseClaudeResponse } from '@/services/claude/client'
 import { buildSystemPrompt } from '@/services/claude/prompts'
 import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
 import { getAllProjects, resolveProject } from '@/services/projects/gt-api'
@@ -35,7 +35,7 @@ import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } fr
 import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
 import { getEffectivePromptBlocks, DEFAULT_PROMPT_BLOCKS } from '@/lib/prompt-blocks'
 import { getActiveObjectives, formatObjectivesForPrompt } from '@/lib/objectives'
-import { limpiarFrasesProhibidas } from '@/lib/reply-guard'
+import { generarRespuesta } from '@/lib/generar-respuesta'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -434,20 +434,18 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     })
     let claudeResponse: ReturnType<typeof parseClaudeResponse>
     try {
-      let rawResponse: string
-      try {
-        rawResponse = await callClaude(systemPrompt, history, { temperature: agentSettings.llm_temperature })
-        console.log('[processMessage] Raw GPT-4o response:', rawResponse.slice(0, 300))
-        claudeResponse = parseClaudeResponse(rawResponse)
-      } catch (firstErr) {
-        // GPT-4o a veces devuelve {} u JSON inválido con prompts grandes.
-        // Reintentamos UNA vez con corrección explícita antes de rendirnos.
-        console.warn('[processMessage] Respuesta inválida de GPT-4o — reintentando:', firstErr instanceof Error ? firstErr.message : firstErr)
-        const nudgedPrompt = systemPrompt + '\n\n# ATENCIÓN — REINTENTO\nTu respuesta anterior fue un JSON vacío o inválido. Responde AHORA con el JSON COMPLETO del formato especificado arriba. El campo "reply" es OBLIGATORIO: contiene tu mensaje de WhatsApp para el cliente, con tu personalidad de siempre.'
-        rawResponse = await callClaude(nudgedPrompt, history, { temperature: agentSettings.llm_temperature })
-        console.log('[processMessage] Raw GPT-4o response (retry):', rawResponse.slice(0, 300))
-        claudeResponse = parseClaudeResponse(rawResponse)
-      }
+      // Misma función que usa la batería de evaluación: reintento si el JSON
+      // viene inválido, revisión del director comercial y filtro de frases.
+      const { respuesta, revision } = await generarRespuesta({
+        systemPrompt,
+        history,
+        settings: agentSettings,
+        mensajeCliente: combinedBody,
+        inicioMs: parsed.timestamp * 1000,
+      })
+      claudeResponse = respuesta
+      console.log('[processMessage] Plan del turno:', JSON.stringify(respuesta.plan ?? null))
+      console.log('[processMessage] Revisión de venta:', JSON.stringify(revision))
     } catch (err) {
       // Dos intentos fallidos — NUNCA dejar al cliente en visto. Puente humano
       // variado (no repetir siempre la misma línea) y salimos; el mensaje del
@@ -653,11 +651,6 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       await cancelSequencesForLead(lead.id)
       console.log(`[processMessage] Lead ${lead.id} opted out — seguimientos cancelados`)
     }
-
-    // 11-bis. Frases de call center: el prompt las prohíbe pero se colaban igual
-    // (prueba real 13-sep). Se quitan antes de enviar y de guardar.
-    claudeResponse.reply = limpiarFrasesProhibidas(claudeResponse.reply)
-    claudeResponse.extra_messages = (claudeResponse.extra_messages ?? []).map(limpiarFrasesProhibidas)
 
     // 12. Send the reply — use interactive buttons if GPT-4o provided them
     let waMessageId: string | null = null

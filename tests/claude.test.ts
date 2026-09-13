@@ -132,3 +132,24 @@ describe('parseClaudeResponse — lazo_abierto', () => {
     expect(parseClaudeResponse(JSON.stringify({ reply: 'ok' })).lazo_abierto).toBeNull()
   })
 })
+
+// Fase 1: el plan del turno se escribe ANTES del reply. El modelo genera en
+// orden: con "reply" primero respondía literal y razonaba después.
+describe('parseClaudeResponse — plan del turno', () => {
+  const plan = { cliente: 'primer contacto, vino por el anuncio', momento: 'descubrimiento', objetivo_del_turno: 'que se imagine ahí', angulo: 'bosque privado a 12 minutos de San Benito', siguiente_paso: 'video de avance' }
+
+  it('lee el plan completo', () => {
+    expect(parseClaudeResponse(JSON.stringify({ plan, reply: 'ok' })).plan).toEqual(plan)
+  })
+
+  it('momento fuera de la lista → null, el resto del plan se conserva', () => {
+    const r = parseClaudeResponse(JSON.stringify({ plan: { ...plan, momento: 'saludo' }, reply: 'ok' }))
+    expect(r.plan?.momento).toBeNull()
+    expect(r.plan?.angulo).toBe(plan.angulo)
+  })
+
+  it('sin plan o plan que no es objeto → null', () => {
+    expect(parseClaudeResponse(JSON.stringify({ reply: 'ok' })).plan).toBeNull()
+    expect(parseClaudeResponse(JSON.stringify({ plan: 'pensar', reply: 'ok' })).plan).toBeNull()
+  })
+})

@@ -42,6 +42,17 @@ interface PromptContext {
 // Entry point
 // ─────────────────────────────────────────────────────────────
 
+// El plan del turno va PRIMERO en el JSON: el modelo genera en orden, y con
+// "reply" primero respondía literal y razonaba después. No es editable a
+// propósito: el formato de respuesta tampoco lo es.
+const PIENSA_ANTES_DE_ESCRIBIR = `# PIENSA ANTES DE ESCRIBIR — EL PLAN VA PRIMERO
+Antes del reply llenas "plan". El reply se escribe DESPUÉS y ejecuta ese plan.
+- cliente: lo que sabes de él por el historial — motivo, para quién es, qué le entusiasmó, qué le preocupa. Nada inventado.
+- momento: descubrimiento (todavía no sabes qué busca) · presentar_valor (ya sabes qué busca: muéstrale por qué ESTE proyecto) · objecion (duda o freno) · compromiso (señal de avance: visita, reserva) · pidio_tiempo · tramite (confirmar cita, escalar, un gracias).
+- objetivo_del_turno: lo que tiene que sentir o querer al leerte, no lo que tú vas a informar. "Que se imagine viviendo ahí" es un objetivo; "darle la ubicación" no lo es.
+- angulo: el dato concreto, la historia o el material de tu catálogo, ficha, conocimiento o inventario que logra ese objetivo. Si te sale genérico ("zona con plusvalía"), busca mejor: ese es justo el error que convierte a una vendedora en un buscador.
+- siguiente_paso: el lazo abierto con el que cierras (ver VENTA GUIADA), o "ninguno" si pidió tiempo.`
+
 // Lo último que lee antes de responder. En un prompt de ~15K tokens lo del
 // final pesa más, y antes lo último era "un vendedor de verdad responde y se
 // calla" — así respondía. No es editable a propósito: es el control de calidad
@@ -154,6 +165,13 @@ Estas son observaciones confirmadas por el equipo. Aplícalas:\n${brainLearnings
   const responseFormat = `
 # RESPUESTA — JSON VÁLIDO PURO, SIN NADA FUERA DEL JSON
 {
+  "plan": {
+    "cliente": "quién es y qué busca, en una línea, con lo que ya sabes de él",
+    "momento": "descubrimiento | presentar_valor | objecion | compromiso | pidio_tiempo | tramite",
+    "objetivo_del_turno": "lo que tiene que sentir o querer el cliente al leerte",
+    "angulo": "el dato, la historia o el material concreto de ESTE proyecto que lo logra",
+    "siguiente_paso": "el lazo abierto con el que cierras, o ninguno si pidió tiempo"
+  },
   "reply": "texto plano para WhatsApp",
   "stage": "new | warm | hot | cold",
   "name_captured": "nombre si lo mencionó, null si no",
@@ -258,6 +276,8 @@ ${dealBlock}
 ${missionBlock}
 
 ${schedulingBlock}
+
+${PIENSA_ANTES_DE_ESCRIBIR}
 
 ${CHEQUEO_ANTES_DE_ENVIAR}
 

@@ -1,0 +1,39 @@
+#!/bin/sh
+# ────────────────────────────────────────────────────────────────────
+# Candado de calidad de Daniela.
+#
+# Push a main = deploy a producción (Vercel). Si el push toca cómo Daniela
+# piensa o habla, antes de subir corre la batería de venta con el modelo real
+# (npm run eval:ventas). Si no llega al umbral del juez o aparece una frase
+# prohibida, el push se cancela.
+#
+# Tarda unos minutos y cuesta centavos. Emergencia real: git push --no-verify
+# Instalación (una vez por máquina): npm run hooks:install
+# ────────────────────────────────────────────────────────────────────
+zero=0000000000000000000000000000000000000000
+cambios=""
+while read local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue
+  if [ "$remote_sha" = "$zero" ]; then
+    rango="$local_sha"
+  else
+    rango="$remote_sha..$local_sha"
+  fi
+  cambios="$cambios
+$(git diff --name-only "$rango" 2>/dev/null)"
+done
+
+cerebro='^(services/claude/|lib/(prompt-blocks|knowledge-base|sales-critic|generar-respuesta|reply-guard|project-scripts|project-media|notices|projects-registry)\.ts|app/api/webhook/whatsapp/route\.ts|tests/eval/)'
+
+if printf '%s\n' "$cambios" | grep -qE "$cerebro"; then
+  echo "▶ Este push cambia el cerebro de Daniela — corriendo la batería de venta (unos minutos)…"
+  if ! npm run --silent eval:ventas; then
+    echo ""
+    echo "✖ La batería de venta no pasó. No se sube a producción."
+    echo "  Revisa .eval/ para ver qué respuestas reprobó el juez."
+    echo "  Emergencia real: git push --no-verify"
+    exit 1
+  fi
+  echo "✔ Batería de venta aprobada."
+fi
+exit 0

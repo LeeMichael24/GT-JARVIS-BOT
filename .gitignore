@@ -45,3 +45,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# resultados de la batería de venta (npm run eval:ventas)
+.eval/

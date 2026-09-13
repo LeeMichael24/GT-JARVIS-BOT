@@ -541,3 +541,18 @@ describe('prompt — segunda iteración de venta guiada', () => {
     expect(p()).toContain('no puede ser una pregunta')
   })
 })
+
+describe('prompt — piensa antes de escribir', () => {
+  const p = () => buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
+
+  it('en el formato de respuesta, "plan" va antes que "reply"', () => {
+    const t = p()
+    const formato = t.slice(t.indexOf('# RESPUESTA — JSON'))
+    expect(formato.indexOf('"plan"')).toBeGreaterThan(-1)
+    expect(formato.indexOf('"plan"')).toBeLessThan(formato.indexOf('"reply"'))
+  })
+
+  it('explica que el reply ejecuta el plan', () => {
+    expect(p()).toContain('PIENSA ANTES DE ESCRIBIR')
+  })
+})
