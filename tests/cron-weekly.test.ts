@@ -72,7 +72,7 @@ describe('cron weekly — reporte semanal al CEO', () => {
     const body = await res.json()
     expect(body.sent).toBe(true)
     expect(body.detallados).toBe(0)
-    const [, msg] = wa.sendText.mock.calls[0] as [string, string, unknown]
+    const [, msg] = wa.sendText.mock.calls[0] as unknown as [string, string, unknown]
     expect(msg).toContain('47 leads')
   })
 

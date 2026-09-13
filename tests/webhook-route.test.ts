@@ -54,10 +54,12 @@ vi.mock('@/services/claude/intent', () => ({
   classifyIntent: vi.fn(() => 'general'),
   extractLastBotMessage: vi.fn(() => null),
 }))
-vi.mock('@/services/projects/gt-api', () => ({
-  getAllProjects: vi.fn(async () => []),
-  detectProjectFromMessage: vi.fn(() => null),
+const gtApi = vi.hoisted(() => ({
+  getAllProjects: vi.fn(async (): Promise<unknown[]> => []),
+  detectProjectFromMessage: vi.fn((): unknown => null),
+  resolveProject: vi.fn((): { project: unknown; ambiguous: boolean } => ({ project: null, ambiguous: false })),
 }))
+vi.mock('@/services/projects/gt-api', () => gtApi)
 vi.mock('@/services/google/calendar', () => ({ createCalendarEvent: vi.fn() }))
 vi.mock('@/services/openai/whisper', () => ({ transcribeAudio: vi.fn(async () => 'transcribed text') }))
 vi.mock('@/lib/knowledge-base', async importOriginal => ({
@@ -103,6 +105,7 @@ const media = vi.hoisted(() => ({
   mediaForProject: vi.fn((): unknown[] => []),
   mediaProjectKeys: vi.fn((): string[] => []),
   pickMediaToSend: vi.fn((): unknown[] => []),
+  inventarioDeMaterial: vi.fn((): string[] => []),
 }))
 vi.mock('@/lib/project-media', () => media)
 
@@ -784,5 +787,91 @@ describe('cooldown de alertas: no inundar al CEO', () => {
     await flush()
 
     expect(wa.sendInternalNotification).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ─── Regresión 13-sep-2026: el brochure prometido tres veces y nunca enviado ───
+describe('webhook — el material prometido se entrega o se dice la verdad', () => {
+  const ALTA = { slug: 'portacelli-alta-fase-1-x', name: 'Portacelli Alta - Fase 1 Habitacional', entityType: 'project', type: 'Apartamentos' }
+  const ALBA = { slug: 'portacelli-alba-fase-1-y', name: 'Portacelli Alba - Fase 1 Habitacional', entityType: 'project', type: 'Townhouses' }
+
+  function respuestaConMedia(send_media: ClaudeResponse['send_media']): Partial<ClaudeResponse> {
+    return {
+      reply: 'Te envío el brochure de Portacelli.', stage: 'warm', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      schedule_meeting: null, opt_out: false,
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
+      send_media, extra_messages: [],
+    }
+  }
+
+  // vi.fn sin parámetros tipa mock.calls como tuplas vacías: se leen como unknown
+  const textosEnviados = () => (wa.sendText.mock.calls as unknown as unknown[][]).map(c => String(c[1]))
+  const notasGuardadas = () => (db.saveConversation.mock.calls as unknown as [{ content: string }][]).map(c => c[0].content)
+
+  beforeEach(() => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Y el pdf o broshure?', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+  })
+
+  it('si NO hay material para lo pedido, se lo dice al cliente en vez de quedarse callada', async () => {
+    media.mediaForProject.mockReturnValueOnce([])
+    media.pickMediaToSend.mockReturnValueOnce([])
+    ai.parseClaudeResponse.mockReturnValueOnce(respuestaConMedia({ type: 'document', project: 'Portacelli', description: 'brochure' }))
+
+    await POST(buildRequest()); await flush()
+
+    expect(wa.sendDocument).not.toHaveBeenCalled()
+    expect(textosEnviados().some(t => t.includes('no lo tengo disponible'))).toBe(true)
+  })
+
+  it('y deja constancia en el historial para no volver a prometerlo en el siguiente turno', async () => {
+    media.mediaForProject.mockReturnValueOnce([])
+    media.pickMediaToSend.mockReturnValueOnce([])
+    ai.parseClaudeResponse.mockReturnValueOnce(respuestaConMedia({ type: 'document', project: 'Portacelli', description: 'brochure' }))
+
+    await POST(buildRequest()); await flush()
+
+    expect(notasGuardadas().some(n => n.startsWith('[Material NO enviado'))).toBe(true)
+  })
+
+  it('cuando SÍ se envía, también queda registrado — así no lo vuelve a ofrecer', async () => {
+    const pdf = { id: 'm2', project_key: 'portacelli', media_type: 'brochure', url: 'https://x/alta.pdf', caption: 'Broshure apartamentos alta', sort_order: 0, active: true, project_slug: ALTA.slug }
+    media.mediaForProject.mockReturnValueOnce([pdf])
+    media.pickMediaToSend.mockReturnValueOnce([pdf])
+    ai.parseClaudeResponse.mockReturnValueOnce(respuestaConMedia({ type: 'document', project: 'Portacelli Alta', description: 'brochure' }))
+
+    await POST(buildRequest()); await flush()
+
+    expect(wa.sendDocument).toHaveBeenCalledTimes(1)
+    const nota = notasGuardadas().find(n => n.startsWith('[Material enviado'))
+    expect(nota).toContain('Broshure apartamentos alta')
+  })
+
+  it('el material se busca en el proyecto de la conversación cuando el modelo pide la familia ("Portacelli")', async () => {
+    gtApi.getAllProjects.mockResolvedValueOnce([ALBA, ALTA])
+    gtApi.resolveProject
+      .mockReturnValueOnce({ project: ALTA, ambiguous: false })   // el mensaje del cliente
+      .mockReturnValueOnce({ project: ALBA, ambiguous: true })    // send_media.project = "Portacelli"
+    ai.parseClaudeResponse.mockReturnValueOnce(respuestaConMedia({ type: 'document', project: 'Portacelli', description: 'brochure' }))
+
+    await POST(buildRequest()); await flush()
+
+    const llamada = media.mediaForProject.mock.calls.at(-1) as unknown[]
+    expect(llamada[2]).toBe(ALTA.slug)
+  })
+
+  it('una detección ambigua de la familia NO pisa el proyecto que el lead ya tenía', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true, project_interest: ALTA.name })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true, project_interest: ALTA.name })
+    gtApi.getAllProjects.mockResolvedValueOnce([ALBA, ALTA])
+    gtApi.resolveProject.mockReturnValueOnce({ project: ALBA, ambiguous: true })
+
+    await POST(buildRequest()); await flush()
+
+    expect(db.updateLead).not.toHaveBeenCalledWith('lead-1', expect.objectContaining({ project_interest: ALBA.name }))
   })
 })

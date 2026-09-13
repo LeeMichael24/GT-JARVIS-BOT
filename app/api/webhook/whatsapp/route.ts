@@ -4,11 +4,11 @@ import type { ParsedWebhook } from '@/types'
 import { callClaude, parseClaudeResponse } from '@/services/claude/client'
 import { buildSystemPrompt } from '@/services/claude/prompts'
 import { classifyIntent, extractLastBotMessage } from '@/services/claude/intent'
-import { getAllProjects, detectProjectFromMessage } from '@/services/projects/gt-api'
+import { getAllProjects, resolveProject } from '@/services/projects/gt-api'
 import { createCalendarEvent } from '@/services/google/calendar'
 import { getPlaybook, formatPlaybookForPrompt, filterPlaybookByProject } from '@/lib/knowledge-base'
 import { getActiveNotices, noticesForProject, formatNoticesForPrompt } from '@/lib/notices'
-import { getInvestableProjects, formatInvestableForPrompt } from '@/lib/projects-registry'
+import { getInvestableProjects, formatInvestableForPrompt, familiaDeSlug } from '@/lib/projects-registry'
 import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendVideo, sendInternalNotification, markAsRead, sendTypingIndicator } from '@/services/whatsapp/client'
 import { transcribeAudio } from '@/services/openai/whisper'
 import {
@@ -30,7 +30,7 @@ import { logActivity } from '@/lib/activity-log'
 import { autoTagProject, autoTagSource } from '@/lib/auto-tag'
 import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPrompt, formatConditionalRulesForPrompt } from '@/lib/escalation-rules'
 import { getActiveTeamMembers, isInternal, pickAlertRecipient, shouldSuppressAlert } from '@/lib/team-routing'
-import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, type ProjectMediaItem } from '@/lib/project-media'
+import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, inventarioDeMaterial, type ProjectMediaItem } from '@/lib/project-media'
 import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } from '@/lib/project-scripts'
 import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
 import { getEffectivePromptBlocks, DEFAULT_PROMPT_BLOCKS } from '@/lib/prompt-blocks'
@@ -51,6 +51,10 @@ function detectGTUrlSection(text: string): 'inversiones' | 'propiedades' | null 
   const m = text.match(GT_URL_RE)
   if (!m) return null
   return m[1].toLowerCase() as 'inversiones' | 'propiedades'
+}
+
+function mismaFamilia(a: { slug: string }, b: { slug: string }): boolean {
+  return familiaDeSlug(a.slug) === familiaDeSlug(b.slug)
 }
 
 // Desempaqueta un resultado de Promise.allSettled con fallback seguro.
@@ -355,14 +359,19 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     console.log(`[processMessage] Intent: ${intent} | GT URL: ${gtUrlSection ?? 'none'} | History: ${history.length} msgs`)
 
     // 8. Detect which project the lead is asking about in this burst of messages
-    const detectedProject = detectProjectFromMessage(combinedBody, projects)
+    const resolucion = resolveProject(combinedBody, projects)
+    const detectedProject = resolucion.project
+    const interesPrevio = lead.project_interest
+      ? (projects.find(p => p.name === lead.project_interest) ?? null)
+      : null
+
+    // Una mención ambigua de la familia ("portacelli" a secas) NO pisa el
+    // listing concreto que el lead ya traía dentro de esa misma familia.
+    const pisaInteres = !!detectedProject &&
+      !(resolucion.ambiguous && interesPrevio && mismaFamilia(detectedProject, interesPrevio))
 
     // Fallback: if nothing detected in this message but lead has a prior interest, restore it
-    let project =
-      detectedProject ??
-      (lead.project_interest
-        ? (projects.find(p => p.name === lead.project_interest) ?? null)
-        : null)
+    let project = (pisaInteres ? detectedProject : null) ?? interesPrevio
 
     // When client is asking about investments, don't lock onto a non-investment property
     // (e.g. residential "Foresta Townhomes" must not steal focus from investment entities)
@@ -372,7 +381,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
 
     // Update project interest when a new project is explicitly detected
     // Skip if the detected project is residential but the current topic is investments
-    if (detectedProject && detectedProject.name !== lead.project_interest) {
+    if (detectedProject && pisaInteres && detectedProject.name !== lead.project_interest) {
       const skipUpdate = intent === 'investment_query' && detectedProject.entityType !== 'investment'
       if (!skipUpdate) {
         await updateLead(lead.id, { project_interest: detectedProject.name })
@@ -415,6 +424,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       escalationOverride,
       projectScript,
       mediaProjects: mediaProjectKeys(mediaItems),
+      mediaInventory: inventarioDeMaterial(mediaItems, projects),
       settings: agentSettings,
       blocks: promptBlocks,
       objectivesBlock,
@@ -684,18 +694,25 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
 
     // 14. Send media attachment if GPT-4o requested it (from project_media DB)
     if (claudeResponse.send_media) {
-      // El slug ancla el material al listing exacto: sin él, "portacelli" a
-      // secas hace que el brochure de Alta salga en una conversación de Alba.
-      // Resolvemos por el nombre que pidió el modelo y, si no cae en ninguno,
-      // usamos el proyecto de la conversación.
-      const pedido = detectProjectFromMessage(claudeResponse.send_media.project, projects) ?? project
-      const projectItems = mediaForProject(mediaItems, claudeResponse.send_media.project, pedido?.slug ?? null)
-      const toSend = pickMediaToSend(projectItems, claudeResponse.send_media.type)
+      const { type, project: nombrePedido } = claudeResponse.send_media
+      // El modelo casi siempre pide la familia ("Portacelli"). Si lo pedido cae
+      // en la misma familia que el proyecto de la conversación —o no resuelve a
+      // nada— el listing correcto es el de la conversación, que tiene contexto.
+      // Antes "Portacelli" resolvía al PRIMER Portacelli del catálogo (Alba) y
+      // el brochure de Alta quedaba filtrado: nunca salía (13-sep-2026).
+      const pedidoRes = resolveProject(nombrePedido, projects)
+      const pedido = project && (!pedidoRes.project || mismaFamilia(pedidoRes.project, project))
+        ? project
+        : pedidoRes.project
+      const projectItems = mediaForProject(mediaItems, nombrePedido, pedido?.slug ?? null)
+      const toSend = pickMediaToSend(projectItems, type)
+      const entregados: ProjectMediaItem[] = []
       try {
-        if (claudeResponse.send_media.type === 'image') {
+        if (type === 'image') {
           // Galería: hasta 3 imágenes en ráfaga
           for (const img of toSend.slice(0, 3)) {
             await sendImage(parsed.from, img.url, img.caption ?? undefined)
+            entregados.push(img)
           }
         } else if (toSend[0]) {
           const item = toSend[0]
@@ -704,14 +721,39 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
           } else if (item.media_type === 'link') {
             await sendText(parsed.from, `${item.caption ? item.caption + '\n' : ''}${item.url}`, { typingDelay: false })
           } else {
-            await sendDocument(parsed.from, item.url, `${claudeResponse.send_media.project}.pdf`, item.caption ?? undefined)
+            await sendDocument(parsed.from, item.url, `${pedido?.name ?? nombrePedido}.pdf`, item.caption ?? undefined)
           }
-        }
-        if (toSend.length > 0) {
-          console.log(`[processMessage] Sent ${claudeResponse.send_media.type} (${toSend.length} item/s) for "${claudeResponse.send_media.project}"`)
+          entregados.push(item)
         }
       } catch (err) {
         console.error('[processMessage] Failed to send media:', err instanceof Error ? err.message : err)
+      }
+
+      // El historial solo guardaba el TEXTO del reply ("te envío el brochure"),
+      // nunca si el archivo llegó. Sin eso el modelo no distingue una promesa
+      // cumplida de una rota y la repite turno tras turno. Lo que de verdad pasó
+      // queda escrito y el prompt le enseña a leerlo.
+      if (entregados.length > 0) {
+        const detalle = entregados.map(i => `${i.media_type}${i.caption ? ` — ${i.caption}` : ''}`).join('; ')
+        console.log(`[processMessage] Sent ${type} (${entregados.length} item/s) for "${pedido?.name ?? nombrePedido}"`)
+        await saveConversation({ leadId: lead.id, role: 'assistant', content: `[Material enviado al cliente: ${detalle}]` })
+          .catch(() => {})
+      } else {
+        console.warn(`[processMessage] send_media SIN ENTREGA — no hay ${type} para "${pedido?.name ?? nombrePedido}" (slug ${pedido?.slug ?? 'ninguno'})`)
+        // El reply ya prometió el envío: quedarse callada deja al cliente
+        // esperando un archivo que no va a llegar.
+        const honesto = 'Disculpa, ese material no lo tengo disponible en este momento.'
+        try {
+          const waId = await sendText(parsed.from, honesto, { typingDelay: false })
+          await saveConversation({ leadId: lead.id, role: 'assistant', content: honesto, waMessageId: waId ?? undefined })
+        } catch (err) {
+          console.error('[processMessage] No se pudo avisar la falta de material:', err instanceof Error ? err.message : err)
+        }
+        await saveConversation({
+          leadId: lead.id,
+          role: 'assistant',
+          content: `[Material NO enviado: no hay ${type} cargado para ${pedido?.name ?? nombrePedido}. Ya se le avisó al cliente.]`,
+        }).catch(() => {})
       }
     }
 

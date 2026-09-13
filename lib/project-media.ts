@@ -89,3 +89,29 @@ export function pickMediaToSend(
   }
   return items.filter(i => i.media_type === type)
 }
+
+const TIPO_ES: Record<string, string> = {
+  brochure: 'brochure', image: 'imagen', video: 'video', link: 'link',
+  price_list: 'lista de precios', floor_plan: 'planos',
+}
+
+/**
+ * Inventario para el prompt: qué material existe, de qué listing y cómo se
+ * llama. Con solo la lista de keys ("portacelli") el modelo prometía un
+ * brochure para cualquier Portacelli aunque solo Alta lo tuviera.
+ * Las filas sin slug son material común de toda la familia.
+ */
+export function inventarioDeMaterial(
+  items: ProjectMediaItem[],
+  projects: { slug: string; name: string }[],
+): string[] {
+  const grupos = new Map<string, string[]>()
+  for (const i of items) {
+    const listing = i.project_slug ? projects.find(p => p.slug === i.project_slug) : null
+    const key = i.project_key.charAt(0).toUpperCase() + i.project_key.slice(1)
+    const destino = listing?.name ?? (i.project_slug ? i.project_slug : `${key} (común a todos sus listings)`)
+    const pieza = `${TIPO_ES[i.media_type] ?? i.media_type}${i.caption ? ` ("${i.caption}")` : ''}`
+    grupos.set(destino, [...(grupos.get(destino) ?? []), pieza])
+  }
+  return Array.from(grupos, ([destino, piezas]) => `${destino}: ${piezas.join(', ')}`)
+}

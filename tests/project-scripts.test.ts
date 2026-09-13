@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { matchProjectScript, formatScriptForPrompt, type ProjectScript } from '@/lib/project-scripts'
-import { mediaForProject, pickMediaToSend, mediaProjectKeys, type ProjectMediaItem } from '@/lib/project-media'
+import { mediaForProject, pickMediaToSend, mediaProjectKeys, inventarioDeMaterial, type ProjectMediaItem } from '@/lib/project-media'
 
 const portacelli: ProjectScript = {
   id: 's1', project_name: 'Portacelli', trigger_keywords: ['portacelli'],
@@ -98,5 +98,13 @@ describe('mediaForProject — aislamiento por listing (fuga Alta → Alba)', () 
   it('el material de otro project_key sigue afuera', () => {
     const m = mediaForProject(itemsConSlug, 'Foresta Townhomes', 'foresta-townhomes-xyz')
     expect(m).toHaveLength(0)
+  })
+})
+
+describe('inventarioDeMaterial — lo que el prompt sabe que existe', () => {
+  it('agrupa por listing con su nombre real y marca lo común de la familia', () => {
+    const inv = inventarioDeMaterial(itemsConSlug, [{ slug: ALTA, name: 'Portacelli Alta - Fase 1 Habitacional' }])
+    expect(inv).toContain('Portacelli Alta - Fase 1 Habitacional: brochure ("Broshure apartamentos alta"), video, imagen')
+    expect(inv).toContain('Portacelli (común a todos sus listings): link ("Ubicación 🌍")')
   })
 })

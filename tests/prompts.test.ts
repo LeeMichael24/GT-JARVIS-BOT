@@ -413,3 +413,42 @@ describe('dealBlock con señales', () => {
     expect(prompt).not.toContain('Señales de compra ya detectadas')
   })
 })
+
+// ─── Regresión 13-sep-2026: "te envío el brochure con planos y precios" ×3, nunca llegó ───
+describe('prompt — material: solo lo que existe, dicho con su nombre real', () => {
+  const inventario = [
+    'Portacelli Alta - Fase 1 Habitacional: brochure ("Broshure apartamentos alta"), imagen, video',
+    'Portacelli (Alta, Alba y Raíces): ubicación ("Ubicación exacta de Portacelli en Google Earth")',
+  ]
+  const conMedia = () => buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject], mediaInventory: inventario })
+
+  it('ya no le dicta prometer "planos y precios" sin saber qué trae el documento', () => {
+    expect(conMedia()).not.toContain('planos y precios')
+  })
+
+  it('lista el material por listing y tipo, no solo el nombre de la familia', () => {
+    expect(conMedia()).toContain('Portacelli Alta - Fase 1 Habitacional: brochure ("Broshure apartamentos alta")')
+  })
+
+  it('si dice que lo envía, send_media va en la MISMA respuesta', () => {
+    expect(conMedia()).toContain('en la misma respuesta')
+  })
+
+  it('si pregunta dónde queda y hay link de ubicación, lo manda sin preguntar primero', () => {
+    expect(conMedia()).toContain('no preguntes si lo quiere')
+  })
+
+  it('las notas [Material …] del historial son registro interno: no se imitan', () => {
+    expect(conMedia()).toContain('[Material')
+    expect(conMedia()).toContain('nunca las escribas tú')
+  })
+
+  it('no promete plusvalía', () => {
+    expect(conMedia()).toContain('nunca digas que una zona o un proyecto "promete"')
+  })
+
+  it('sin inventario sigue prohibiendo ofrecer documentos', () => {
+    const p = buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
+    expect(p).toContain('NUNCA ofrezcas enviar fichas')
+  })
+})

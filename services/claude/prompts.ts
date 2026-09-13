@@ -19,6 +19,13 @@ interface PromptContext {
   projectScript?: string | null
   /** Proyectos que SÍ tienen media disponible para enviar */
   mediaProjects?: string[]
+  /**
+   * Inventario de material por listing y tipo, ya en texto
+   * ("Portacelli Alta - Fase 1 Habitacional: brochure ("…"), video").
+   * Con solo los keys el modelo prometía un brochure de "Portacelli" que
+   * existía para Alta y no para Alba.
+   */
+  mediaInventory?: string[]
   /** Perillas vivas del agente (tabla agent_settings) */
   settings?: AgentSettings
   /** Bloques del prompt (tabla prompt_blocks) — default: los del código */
@@ -49,6 +56,7 @@ export function buildSystemPrompt({
   escalationOverride = null,
   projectScript = null,
   mediaProjects = [],
+  mediaInventory = [],
   settings = DEFAULT_SETTINGS,
   blocks = DEFAULT_PROMPT_BLOCKS,
   objectivesBlock = null,
@@ -99,7 +107,10 @@ Estas son observaciones confirmadas por el equipo. Aplícalas:\n${brainLearnings
   // Proyectos con documentos reales cargados — Daniela solo puede ofrecer
   // fichas/PDFs de estos. Prometer un documento que no existe mata la confianza.
   // Media disponible viene del route (DB) — el prompt solo la lista
-  const hasMedia = mediaProjects.length > 0
+  const hasMedia = mediaInventory.length > 0 || mediaProjects.length > 0
+  const inventario = mediaInventory.length
+    ? mediaInventory.map(l => `    · ${l}`).join('\n')
+    : `    · ${mediaProjects.join(', ')}`
 
   // ── Variables que rellenan los {{placeholders}} de los bloques ──
   // (los bloques son texto editable desde el panel; estos valores vienen
@@ -112,14 +123,14 @@ Estas son observaciones confirmadas por el equipo. Aplícalas:\n${brainLearnings
     reply_max_chars: String(settings.reply_max_chars),
     media_format_hint: hasMedia ? ' Si el cliente necesita más info, usa send_media para adjuntar un PDF/ficha.' : '',
     format_example_correct: hasMedia
-      ? '"Portacelli arranca desde $89K, con financiamiento directo y solo $3,000 de reserva. Te comparto la ficha con planos y precios por modelo."'
+      ? '"Portacelli arranca desde $89K, con financiamiento directo y solo $3,000 de reserva. Te comparto el brochure."'
       : '"Portacelli arranca desde $89K, con financiamiento directo y solo $3,000 de reserva."',
     media_pro_patterns: hasMedia
-      ? `- SUGIERE enviar PDF/ficha/brochure cuando el cliente quiere specs detalladas (usa send_media, solo proyectos con documentos: ${mediaProjects.join(', ')})
-- ROMPE respuestas complejas: reply corto con el gancho + send_media con el documento detallado`
+      ? `- SUGIERE enviar material cuando el cliente quiere detalle (usa send_media, y solo lo que aparece en tu inventario de material para ESE proyecto)
+- ROMPE respuestas complejas: reply corto con el gancho + send_media con el material`
       : `- Si el cliente quiere specs detalladas, da los 2-3 datos más relevantes en texto corto y ofrece agendar una llamada o visita para el detalle completo`,
     media_property_step: hasMedia
-      ? ' Si pide más detalle, ofrécele la ficha con tus propias palabras — algo como "te mando la ficha con planos y precios" — y usa send_media (solo proyectos con documentos disponibles).'
+      ? ' Si pide más detalle, ofrécele solo el material que aparece en tu inventario para ese proyecto, llamándolo por su nombre real, y usa send_media. Nunca describas lo que trae un documento que no has visto: no digas que incluye planos o precios si no te consta.'
       : ' Si pide más detalle y todavía no hay ficha, dilo con transparencia y dale los 2-3 datos más relevantes en texto.',
   }
 
@@ -177,9 +188,15 @@ ${settings.learning_sensitivity === 'high'
 - "extra_messages": burbujas ADICIONALES que se envían DESPUÉS del reply (máx 2). Así textea la gente real: mensajes separados, no un bloque. Úsalo cuando el guion pida doble mensaje, o cuando dividir en 2 burbujas cortas sea más natural que una larga. Vacío la mayoría de veces. Orden de envío: reply → media (si hay) → extra_messages.
 ${hasMedia
     ? `- "send_media": null normalmente. Úsalo para adjuntar material del proyecto:
-  { "type": "document" | "image" | "video" | "link", "project": "nombre_del_proyecto", "description": "qué enviar (ej: brochure, ubicación, avances de obra)" }
-  SOLO tienes material de estos proyectos: ${mediaProjects.join(', ')}. Para cualquier otro proyecto NUNCA ofrezcas enviar material — da la info en texto.
-  Actívalo cuando: el guion lo indique; el cliente pida brochure/planos/precios (document), fotos o avances (image), videos (video), o ubicación (link); o tras dar un gancho corto sobre un proyecto.`
+  { "type": "document" | "image" | "video" | "link", "project": "nombre EXACTO del listing (ej: Portacelli Alta - Fase 1 Habitacional)", "description": "qué enviar (ej: brochure, ubicación, avances de obra)" }
+  TU INVENTARIO DE MATERIAL — es lo único que existe:
+${inventario}
+  Reglas que no se rompen:
+  - Si en el reply dices que envías algo, llenas send_media en la misma respuesta. Nunca "te lo envío" sin send_media.
+  - Solo ofreces un tipo de material si aparece en el inventario PARA ESE PROYECTO. Si el cliente pide un brochure y ese proyecto no tiene, se lo dices con honestidad y le das los datos clave en texto.
+  - Si el cliente pregunta dónde queda o no se ubica y el proyecto tiene un link de ubicación en el inventario, mándalo de una vez con send_media type "link": no preguntes si lo quiere.
+  - En tu historial pueden aparecer notas como "[Material enviado …]" o "[Material NO enviado …]". Son el registro interno de lo que de verdad le llegó al cliente: úsalas para no repetir ni volver a prometer, y nunca las escribas tú.
+  Actívalo cuando: el guion lo indique; el cliente pida brochure (document), fotos o avances (image), videos (video) o ubicación (link); o tras dar un gancho corto sobre un proyecto.`
     : `- "send_media": SIEMPRE null — todavía no hay documentos cargados en el sistema. NUNCA ofrezcas enviar fichas, PDFs, brochures ni planos. Si el cliente pide un documento, responde: "Te lo comparto en cuanto lo tenga a mano, pero te adelanto lo importante:" y da los datos clave en texto corto.`}
 `
 
