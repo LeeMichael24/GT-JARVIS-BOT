@@ -38,6 +38,16 @@ describe('construirPromptJuez', () => {
     expect(p).toContain('descubrimiento')
   })
 
+  // Decisión de Mike 13-sep-2026: Daniela filtra el lead, así que califica —
+  // con UNA pregunta que dice para qué la hace, después de responder. Con 2
+  // preguntas numeradas el juez reprobaba 14 de 46 respuestas por "trámite".
+  it('una pregunta de calificación con motivo es siguiente paso válido; dos seguidas o sin motivo reprueban', () => {
+    const p = construirPromptJuez(base)
+    expect(p).toMatch(/UNA sola pregunta de calificación/)
+    expect(p).toMatch(/para qué/)
+    expect(p).toMatch(/dos o más preguntas/i)
+  })
+
   it('la rúbrica castiga lo genérico y lo literal, y exime al que pidió tiempo', () => {
     const p = construirPromptJuez(base)
     expect(p).toContain('genérica')
