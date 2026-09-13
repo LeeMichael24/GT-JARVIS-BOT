@@ -75,8 +75,10 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   auto_promote_enabled: true,
   auto_promote_threshold: 3,
   sales_critic_enabled: true,
-  llm_model: 'gpt-4o',
-  sales_critic_model: 'gpt-4.1-mini',
+  // Medido 13-sep-2026 con el mismo juez (mayoría de 3): gpt-4.1 + crítico
+  // o4-mini 9/12 vs gpt-4o 3/12. Mismo límite de tokens/min que gpt-4o.
+  llm_model: 'gpt-4.1',
+  sales_critic_model: 'o4-mini',
 }
 
 // Parseo numérico defensivo: valor inválido o fuera de rango → default.

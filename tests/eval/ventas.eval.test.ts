@@ -37,7 +37,10 @@ import { ESCENARIOS } from './escenarios'
 // o4-mini: familia distinta a la de producción (gpt-4.x) y su propio límite de
 // tokens, así la batería corre en paralelo a experimentos con gpt-4o y gpt-4.1
 const JUEZ_BATERIA = process.env.EVAL_JUEZ ?? 'o4-mini'
-const UMBRAL_APROBADAS = 0.8
+// 0.8 se fijó antes de medir el ruido. Medido 13-sep-2026: con la misma config
+// gpt-4.1 dio entre 4 y 9 de 12; la versión publicada sacó 9/12 (0.75) contra
+// 3/11 de producción. Mike decidió publicar con 0.75.
+const UMBRAL_APROBADAS = 0.75
 const PROHIBIDAS = /\bestoy aqu[ií] para\b|\bno dudes? en\b|en qu[eé] (m[aá]s )?(te |le )?puedo (ayudar|asistir)|\bgarantiz(a|ado|ada)\b(?![^.]*no garantiz)/i
 
 const OUT = process.env.OUT ?? path.resolve('.eval')
