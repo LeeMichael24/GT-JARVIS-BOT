@@ -22,15 +22,15 @@ export const PRESUPUESTO_REESCRITURA_MS = 32_000
 export const MODELO_JUEZ = 'gpt-4.1-mini'
 
 export interface DepsGenerar {
-  llamarModelo: (system: string, history: Conversation[], opts: { temperature: number }) => Promise<string>
-  juez: (prompt: string) => Promise<string>
+  llamarModelo: (system: string, history: Conversation[], opts: { temperature: number; model?: string }) => Promise<string>
+  juez: (prompt: string, model?: string) => Promise<string>
   ahora: () => number
 }
 
 export interface ArgsGenerar {
   systemPrompt: string
   history: Conversation[]
-  settings: Pick<AgentSettings, 'llm_temperature' | 'sales_critic_enabled'>
+  settings: Pick<AgentSettings, 'llm_temperature' | 'sales_critic_enabled'> & Partial<Pick<AgentSettings, 'llm_model' | 'sales_critic_model'>>
   mensajeCliente: string
   /** Momento en que llegó el mensaje del cliente (ms) — el presupuesto corre desde ahí */
   inicioMs: number
@@ -61,10 +61,11 @@ Reescribe el JSON COMPLETO corrigiendo eso. Conserva los datos correctos, el mat
 export function depsReales(): DepsGenerar {
   return {
     llamarModelo: (system, history, opts) => callClaude(system, history, opts),
-    juez: prompt => callClaude(
+    juez: (prompt, model) => callClaude(
       prompt,
       [{ id: 'juez', lead_id: 'juez', role: 'user', content: 'Evalúa la respuesta y devuelve el JSON.', wa_message_id: null, sent_by: null, created_at: new Date().toISOString() }],
-      { model: MODELO_JUEZ, temperature: 0, timeoutMs: 8_000 },
+      // o4-mini razona antes de responder: necesita más margen que el juez rápido
+      { model: model ?? MODELO_JUEZ, temperature: 0, timeoutMs: /^o\d/.test(model ?? '') ? 20_000 : 8_000 },
     ),
     ahora: () => Date.now(),
   }
@@ -72,7 +73,7 @@ export function depsReales(): DepsGenerar {
 
 export async function generarRespuesta(args: ArgsGenerar, deps: DepsGenerar = depsReales()): Promise<ResultadoGenerar> {
   const { systemPrompt, history, settings } = args
-  const opts = { temperature: settings.llm_temperature }
+  const opts = { temperature: settings.llm_temperature, model: settings.llm_model }
 
   // 1-2. Modelo, con un reintento si el JSON viene sin reply. Si falla dos
   // veces, lanza: el webhook tiene el mensaje de respaldo para no dejar en visto.
@@ -97,7 +98,7 @@ export async function generarRespuesta(args: ArgsGenerar, deps: DepsGenerar = de
       extras: respuesta.extra_messages ?? [],
       plan: respuesta.plan ?? null,
       sendMedia: respuesta.send_media,
-    }, deps)
+    }, { juez: prompt => deps.juez(prompt, settings.sales_critic_model) })
     revision.veredicto = v
     if (v.omitida) revision.motivoOmitida = v.omitida
 

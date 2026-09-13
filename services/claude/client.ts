@@ -7,6 +7,7 @@ import type {
 
 const MODEL = 'gpt-4o'
 const MAX_TOKENS = 2048
+const MAX_TOKENS_RAZONAMIENTO = 6000
 
 export interface CallClaudeOptions {
   /** Temperatura del modelo — configurable desde agent_settings.
@@ -37,10 +38,15 @@ export async function callClaude(
     })),
   ]
 
+  // Los modelos de razonamiento (o4-mini, o3…) rechazan max_tokens y
+  // temperature: piden max_completion_tokens, que además incluye su razonamiento.
+  const modelo = opts.model ?? MODEL
+  const esRazonamiento = /^o\d/.test(modelo)
   const response = await openai.chat.completions.create({
-    model: opts.model ?? MODEL,
-    max_tokens: MAX_TOKENS,
-    temperature: opts.temperature ?? 0.85,
+    model: modelo,
+    ...(esRazonamiento
+      ? { max_completion_tokens: MAX_TOKENS_RAZONAMIENTO }
+      : { max_tokens: MAX_TOKENS, temperature: opts.temperature ?? 0.85 }),
     messages,
     response_format: { type: 'json_object' },
   })

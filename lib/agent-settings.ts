@@ -48,6 +48,10 @@ export interface AgentSettings {
   auto_promote_threshold: number
   /** Revisión automática de venta: un juez rápido revisa cada respuesta y, si falla, se reescribe */
   sales_critic_enabled: boolean
+  /** Modelo que escribe las respuestas */
+  llm_model: 'gpt-4o' | 'gpt-4.1'
+  /** Modelo del juez de la revisión automática */
+  sales_critic_model: 'gpt-4.1-mini' | 'gpt-4.1' | 'o4-mini'
 }
 
 export const DEFAULT_SETTINGS: AgentSettings = {
@@ -71,6 +75,8 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   auto_promote_enabled: true,
   auto_promote_threshold: 3,
   sales_critic_enabled: true,
+  llm_model: 'gpt-4o',
+  sales_critic_model: 'gpt-4.1-mini',
 }
 
 // Parseo numérico defensivo: valor inválido o fuera de rango → default.
@@ -151,6 +157,12 @@ export async function getAgentSettings(): Promise<AgentSettings> {
             break
           case 'auto_promote_enabled':
             settings.auto_promote_enabled = v !== 'false'
+            break
+          case 'llm_model':
+            if (v === 'gpt-4o' || v === 'gpt-4.1') settings.llm_model = v
+            break
+          case 'sales_critic_model':
+            if (v === 'gpt-4.1-mini' || v === 'gpt-4.1' || v === 'o4-mini') settings.sales_critic_model = v
             break
           case 'sales_critic_enabled':
             settings.sales_critic_enabled = v !== 'false'

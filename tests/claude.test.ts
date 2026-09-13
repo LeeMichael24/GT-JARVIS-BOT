@@ -153,3 +153,37 @@ describe('parseClaudeResponse — plan del turno', () => {
     expect(parseClaudeResponse(JSON.stringify({ plan: 'pensar', reply: 'ok' })).plan).toBeNull()
   })
 })
+
+// o4-mini como juez: los modelos de razonamiento rechazan max_tokens y
+// temperature ("Unsupported parameter: 'max_tokens'…", probado el 13-sep).
+describe('callClaude — parámetros según el modelo', () => {
+  it('o4-mini: max_completion_tokens, sin max_tokens ni temperature', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test'
+    openaiSpy.create.mockClear()
+    await callClaude('system', [], { model: 'o4-mini', temperature: 0 })
+    const p = (openaiSpy.create.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+    expect(p.model).toBe('o4-mini')
+    expect(p).toHaveProperty('max_completion_tokens')
+    expect(p).not.toHaveProperty('max_tokens')
+    expect(p).not.toHaveProperty('temperature')
+  })
+
+  it('gpt-4o por defecto: max_tokens y temperature como siempre', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test'
+    openaiSpy.create.mockClear()
+    await callClaude('system', [], { temperature: 0.85 })
+    const p = (openaiSpy.create.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+    expect(p.model).toBe('gpt-4o')
+    expect(p.max_tokens).toBe(2048)
+    expect(p.temperature).toBe(0.85)
+  })
+
+  it('gpt-4.1 cuando los ajustes lo piden', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test'
+    openaiSpy.create.mockClear()
+    await callClaude('system', [], { model: 'gpt-4.1', temperature: 0.7 })
+    const p = (openaiSpy.create.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+    expect(p.model).toBe('gpt-4.1')
+    expect(p.temperature).toBe(0.7)
+  })
+})

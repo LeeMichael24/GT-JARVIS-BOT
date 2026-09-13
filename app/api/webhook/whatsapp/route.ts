@@ -36,6 +36,7 @@ import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/ag
 import { getEffectivePromptBlocks, DEFAULT_PROMPT_BLOCKS } from '@/lib/prompt-blocks'
 import { getActiveObjectives, formatObjectivesForPrompt } from '@/lib/objectives'
 import { generarRespuesta } from '@/lib/generar-respuesta'
+import { seleccionarConocimiento, construirConsulta } from '@/lib/contexto-recuperado'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -326,7 +327,6 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       projectScript = formatScriptForPrompt(matchedScript)
       console.log(`[processMessage] Guion activo: ${matchedScript.project_name}`)
     }
-    const brainLearnings = formatLearningsForPrompt(brainEntries)
 
     try {
       if (leadSource && leadSource.source_type !== 'organic') {
@@ -394,9 +394,17 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
 
     // El playbook se filtra AQUÍ (con el proyecto ya resuelto) y no en el fetch
     // paralelo: entradas generales + las del proyecto en conversación, nada más.
-    const salesPlaybook = formatPlaybookForPrompt(
-      filterPlaybookByProject(playbookEntries, project?.slug ?? null, project?.name ?? lead.project_interest),
-    )
+    // Memoria recuperada: del conocimiento y del cerebro entra solo lo relevante
+    // a ESTE mensaje. Antes entraba todo (~18K tokens por respuesta) con la
+    // cuenta de OpenAI a 30K tokens/min: dos clientes en el mismo minuto chocaban.
+    const seleccion = await seleccionarConocimiento({
+      consulta: construirConsulta({ mensajeCliente: combinedBody, ultimaRespuestaBot: lastBotMessage }),
+      playbook: filterPlaybookByProject(playbookEntries, project?.slug ?? null, project?.name ?? lead.project_interest),
+      cerebro: brainEntries,
+    })
+    console.log(`[processMessage] Memoria recuperada — conocimiento: ${seleccion.playbook.length} (${seleccion.modo.playbook}) | cerebro: ${seleccion.cerebro.length} (${seleccion.modo.cerebro})`)
+    const salesPlaybook = formatPlaybookForPrompt(seleccion.playbook)
+    const brainLearnings = formatLearningsForPrompt(seleccion.cerebro)
 
     // 8b. Objetivos del negocio aplicables a este turno (general + proyecto + inversión)
     const objectivesBlock = formatObjectivesForPrompt(objectives, {

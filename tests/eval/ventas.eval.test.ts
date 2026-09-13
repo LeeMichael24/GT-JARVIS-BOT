@@ -13,6 +13,9 @@ import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } fr
 import { getActiveObjectives, formatObjectivesForPrompt } from '@/lib/objectives'
 import { getAllProjectMediaItems, mediaProjectKeys, inventarioDeMaterial } from '@/lib/project-media'
 import { generarRespuesta } from '@/lib/generar-respuesta'
+import { seleccionarConocimiento, construirConsulta } from '@/lib/contexto-recuperado'
+import type { AgentSettings } from '@/lib/agent-settings'
+import type { KBEntry } from '@/lib/knowledge-base'
 import { construirPromptJuez, parsearVeredicto, type Veredicto } from '@/lib/sales-critic'
 import type { Conversation, Lead, SendMedia, TurnPlan } from '@/types'
 import { ESCENARIOS } from './escenarios'
@@ -23,11 +26,17 @@ import { ESCENARIOS } from './escenarios'
  *   npm run eval:ventas            corre el pipeline real sobre los escenarios fijos
  *   JUZGAR=archivo.json npm run eval:ventas   solo califica resultados ya generados
  *
+ * Experimentos (sin tocar la base): EVAL_LLM_MODEL=gpt-4.1 · EVAL_CRITIC_MODEL=o4-mini
+ * · EVAL_SIN_RECUPERACION=1 (todo el conocimiento, como antes) · EVAL_BIBLIOTECA=borrador.json
+ * (entradas de conocimiento que se suman en memoria) · EVAL_JUEZ=otro-modelo
+ *
  * Corre con el modelo real y cuesta centavos. No corre en `npm test`.
  * El juez de la batería es DISTINTO y más fuerte que el de producción: si fuera
  * el mismo, la revisión automática aprendería a pasarle a su propio juez.
  */
-const JUEZ_BATERIA = 'gpt-4.1'
+// o4-mini: familia distinta a la de producción (gpt-4.x) y su propio límite de
+// tokens, así la batería corre en paralelo a experimentos con gpt-4o y gpt-4.1
+const JUEZ_BATERIA = process.env.EVAL_JUEZ ?? 'o4-mini'
 const UMBRAL_APROBADAS = 0.8
 const PROHIBIDAS = /\bestoy aqu[ií] para\b|\bno dudes? en\b|en qu[eé] (m[aá]s )?(te |le )?puedo (ayudar|asistir)|\bgarantiz(a|ado|ada)\b(?![^.]*no garantiz)/i
 
@@ -52,7 +61,7 @@ async function juzgar(mensajeCliente: string, reply: string, extras: string[], p
   return parsearVeredicto(await conReintento(() => callClaude(prompt, [userMsg('Evalúa la respuesta y devuelve el JSON.')], { model: JUEZ_BATERIA, temperature: 0 })))
 }
 
-function resumen(filas: { juez: Veredicto; burbujas: string[]; reescrita?: boolean; ms?: number }[]) {
+function resumen(filas: { juez: Veredicto; burbujas: string[]; reescrita?: boolean; ms?: number; prompt_chars?: number }[]) {
   const aprobadas = filas.filter(f => f.juez.aprobada).length
   const ms = filas.map(f => f.ms ?? 0).filter(Boolean).sort((x, y) => x - y)
   return {
@@ -62,6 +71,8 @@ function resumen(filas: { juez: Veredicto; burbujas: string[]; reescrita?: boole
     reescritas: filas.filter(f => f.reescrita).length,
     con_frase_prohibida: filas.filter(f => f.burbujas.some(b => PROHIBIDAS.test(b))).length,
     ms_mediana: ms.length ? ms[Math.floor(ms.length / 2)] : null,
+    prompt_chars_mediana: (() => { const p = filas.map(f => f.prompt_chars ?? 0).filter(Boolean).sort((x, y) => x - y); return p.length ? p[Math.floor(p.length / 2)] : null })(),
+    juez: JUEZ_BATERIA,
   }
 }
 
@@ -70,26 +81,35 @@ it.skipIf(!process.env.RUN_EVAL)('batería de venta', async () => {
 
   // ── Modo solo-juzgar: califica un archivo de resultados ya generado ──
   if (process.env.JUZGAR) {
-    const origen = JSON.parse(fs.readFileSync(process.env.JUZGAR, 'utf8')) as { id: string; cliente: string; reply?: string; extra_messages?: string[]; send_media?: SendMedia | null; plan?: TurnPlan | null }[]
+    type Fila = { id: string; cliente: string; reply?: string; extra_messages?: string[]; send_media?: SendMedia | null; plan?: TurnPlan | null }
+    // Acepta el formato viejo (arreglo) y el de la batería ({ resumen, filas })
+    const bruto = JSON.parse(fs.readFileSync(process.env.JUZGAR, 'utf8')) as Fila[] | { filas: Fila[] }
+    const origen = Array.isArray(bruto) ? bruto : bruto.filas
     const filas = []
     for (const r of origen) {
       if (!r.reply) continue
       const burbujas = [r.reply, ...(r.extra_messages ?? [])]
       filas.push({ id: r.id, burbujas, juez: await juzgar(r.cliente, r.reply, r.extra_messages ?? [], r.plan ?? null, r.send_media ?? null) })
     }
-    const destino = process.env.JUZGAR.replace(/\.json$/, '.juzgado.json')
+    const destino = process.env.JUZGAR.replace(/\.json$/, `.juzgado-${JUEZ_BATERIA}.json`)
     fs.writeFileSync(destino, JSON.stringify({ resumen: resumen(filas), filas }, null, 2))
     console.log('RESUMEN', JSON.stringify(resumen(filas)))
     return
   }
 
   // ── Modo batería: pipeline real, igual que el webhook ──
-  const settings = await getAgentSettings()
+  const settings = {
+    ...(await getAgentSettings()),
+    ...(process.env.EVAL_LLM_MODEL ? { llm_model: process.env.EVAL_LLM_MODEL } : {}),
+    ...(process.env.EVAL_CRITIC_MODEL ? { sales_critic_model: process.env.EVAL_CRITIC_MODEL } : {}),
+  } as AgentSettings
   const blocks = await getEffectivePromptBlocks()
   const projects = await getAllProjects()
   const project = projects.find(p => p.name.startsWith('Portacelli Alta'))!
-  const salesPlaybook = formatPlaybookForPrompt(filterPlaybookByProject(await getPlaybook(), project.slug, project.name))
-  const brain = formatLearningsForPrompt(await getHighConfidenceLearnings(settings.brain_min_confidence))
+  const biblioteca: KBEntry[] = process.env.EVAL_BIBLIOTECA ? JSON.parse(fs.readFileSync(process.env.EVAL_BIBLIOTECA, 'utf8')) : []
+  const kbProyecto = filterPlaybookByProject([...(await getPlaybook()), ...biblioteca], project.slug, project.name)
+  const cerebroTodo = await getHighConfidenceLearnings(settings.brain_min_confidence)
+  console.log('CONFIG', JSON.stringify({ llm: settings.llm_model, critico: settings.sales_critic_model, juez: JUEZ_BATERIA, recuperacion: !process.env.EVAL_SIN_RECUPERACION, biblioteca: biblioteca.length }))
   const scripts = await getActiveProjectScripts()
   const objectives = await getActiveObjectives()
   const media = await getAllProjectMediaItems()
@@ -103,9 +123,14 @@ it.skipIf(!process.env.RUN_EVAL)('batería de venta', async () => {
     for (let i = history.length - 1; i >= 0 && history[i].role === 'user'; i--) usuario.unshift(history[i].content)
     const mensajeCliente = usuario.join('\n')
     const matched = matchProjectScript(scripts, mensajeCliente, project.name)
+    const lastBotMessage = extractLastBotMessage(history)
+    const seleccion = process.env.EVAL_SIN_RECUPERACION
+      ? { playbook: kbProyecto, cerebro: cerebroTodo, modo: { playbook: 'todo', cerebro: 'todo' } }
+      : await seleccionarConocimiento({ consulta: construirConsulta({ mensajeCliente, ultimaRespuestaBot: lastBotMessage }), playbook: kbProyecto, cerebro: cerebroTodo })
     const systemPrompt = buildSystemPrompt({
-      lead, project, projects, intent: classifyIntent(mensajeCliente, history), lastBotMessage: extractLastBotMessage(history),
-      salesPlaybook, brainLearnings: brain || null, projectScript: matched ? formatScriptForPrompt(matched) : null,
+      lead, project, projects, intent: classifyIntent(mensajeCliente, history), lastBotMessage,
+      salesPlaybook: formatPlaybookForPrompt(seleccion.playbook), brainLearnings: formatLearningsForPrompt(seleccion.cerebro) || null,
+      projectScript: matched ? formatScriptForPrompt(matched) : null,
       mediaProjects: mediaProjectKeys(media), mediaInventory: inventarioDeMaterial(media, projects), settings, blocks,
       objectivesBlock: formatObjectivesForPrompt(objectives, { projectNames: [project.name, project.slug], investmentNames: [], isInvestmentTopic: false }) || null,
     })
@@ -118,6 +143,7 @@ it.skipIf(!process.env.RUN_EVAL)('batería de venta', async () => {
 
     filas.push({
       id: e.id, cliente: mensajeCliente, burbujas, send_media: respuesta.send_media, plan: respuesta.plan ?? null,
+      prompt_chars: systemPrompt.length, memoria: seleccion.modo,
       revision_produccion: revision, reescrita: revision.reescrita, ms, juez,
       // campos planos para poder re-juzgar este archivo con JUZGAR=
       reply: respuesta.reply, extra_messages: respuesta.extra_messages ?? [],

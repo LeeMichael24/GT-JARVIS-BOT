@@ -581,6 +581,8 @@ const SETTINGS_WHITELIST: Record<string, (v: string) => boolean> = {
   custom_instructions: v => v.length <= 3000,
   reflection_enabled: v => ['true', 'false'].includes(v),
   sales_critic_enabled: v => ['true', 'false'].includes(v),
+  llm_model: v => ['gpt-4o', 'gpt-4.1'].includes(v),
+  sales_critic_model: v => ['gpt-4.1-mini', 'gpt-4.1', 'o4-mini'].includes(v),
   agent_enabled: v => ['true', 'false'].includes(v),
   ceo_name: v => v.length > 0 && v.length <= 80,
   escalation_budget_usd: inRange(1_000, 100_000_000),

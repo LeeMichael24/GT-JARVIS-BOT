@@ -30,6 +30,15 @@ const OPTION_LABELS: Record<string, { value: string; label: string; hint: string
     { value: 'true', label: 'Encendida', hint: 'Observaciones repetidas entran solas al prompt' },
     { value: 'false', label: 'Apagada', hint: 'Todo aprendizaje requiere promoción manual' },
   ],
+  llm_model: [
+    { value: 'gpt-4o', label: 'GPT-4o', hint: 'El modelo con el que Daniela respondió hasta septiembre' },
+    { value: 'gpt-4.1', label: 'GPT-4.1', hint: 'Más reciente; sigue mejor instrucciones largas. Probarlo con la batería antes de dejarlo' },
+  ],
+  sales_critic_model: [
+    { value: 'gpt-4.1-mini', label: 'Rápido', hint: 'gpt-4.1-mini: el más veloz, pero blando — en la batería aprobó respuestas que el juez fuerte reprueba' },
+    { value: 'gpt-4.1', label: 'Estricto', hint: 'gpt-4.1: juzga mejor; comparte el límite de tokens por minuto si GPT-4.1 también responde' },
+    { value: 'o4-mini', label: 'Razonador', hint: 'o4-mini: razona antes de juzgar y tiene su propio límite de tokens; tarda un poco más' },
+  ],
   sales_critic_enabled: [
     { value: 'true', label: 'Encendida', hint: 'Un juez revisa cada respuesta antes de enviarla y reescribe las que salen vagas o literales. Suma unos segundos.' },
     { value: 'false', label: 'Apagada', hint: 'Responde sin revisión: más rápido, pero sin el control de calidad de venta' },
@@ -56,6 +65,8 @@ const SETTING_TITLES: Record<string, string> = {
   auto_promote_enabled: 'Auto-promoción de aprendizajes',
   auto_promote_threshold: 'Repeticiones para auto-promover',
   sales_critic_enabled: 'Revisión automática de venta',
+  llm_model: 'Modelo que responde',
+  sales_critic_model: 'Modelo del juez de la revisión',
 }
 
 // Secciones — agent_enabled se maneja en el tab Estado, no aquí
@@ -78,7 +89,7 @@ const SECTIONS: { title: string; hint: string; keys: string[] }[] = [
   {
     title: 'Motor (avanzado)',
     hint: 'Perillas finas del modelo — cambiar solo si sabes lo que haces.',
-    keys: ['llm_temperature', 'reflection_temperature', 'history_window'],
+    keys: ['llm_model', 'sales_critic_model', 'llm_temperature', 'reflection_temperature', 'history_window'],
   },
 ]
 
