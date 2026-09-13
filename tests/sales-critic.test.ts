@@ -48,6 +48,14 @@ describe('construirPromptJuez', () => {
     expect(p).toMatch(/dos o más preguntas/i)
   })
 
+  // El guion arranca preguntando el nombre; o4-mini lo reprobaba como trámite
+  // ("¿Con quién tengo el gusto de platicar?") aun con la pregunta respondida.
+  it('pedir el nombre en el primer contacto, después de responder, no reprueba', () => {
+    const p = construirPromptJuez(base)
+    expect(p).toMatch(/primer contacto/)
+    expect(p).toMatch(/nombre/)
+  })
+
   it('la rúbrica castiga lo genérico y lo literal, y exime al que pidió tiempo', () => {
     const p = construirPromptJuez(base)
     expect(p).toContain('genérica')

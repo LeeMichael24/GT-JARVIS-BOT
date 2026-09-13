@@ -37,6 +37,7 @@ REPRUEBA la respuesta si ocurre cualquiera de estas:
 6. Anuncia que envía material y no hay material adjunto.
 
 SIGUIENTE PASO VÁLIDO — no reprueba por 3: después de responder, UNA sola pregunta de calificación que dice para qué la hace ("si me cuenta si es para vivir o invertir, le armo el escenario con el descuento que le aplica"). La asesora filtra al cliente para pasarlo al equipo: calificar así ES avanzar la venta. Una pregunta de calificación sin decir para qué, o dos o más preguntas seguidas, sí reprueban.
+Tampoco reprueba por 3 pedir el nombre en el primer contacto ("¿con quién tengo el gusto?"), siempre que antes haya respondido lo que el cliente preguntó.
 
 EXCEPCIONES — no reprueban por 2 ni por 3:
 - momento pidio_tiempo: el cliente pidió tiempo o lo va a consultar; lo correcto es una respuesta cálida y corta, sin empujar.
