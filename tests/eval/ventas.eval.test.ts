@@ -144,6 +144,7 @@ it.skipIf(!process.env.RUN_EVAL)('batería de venta', async () => {
     filas.push({
       id: e.id, cliente: mensajeCliente, burbujas, send_media: respuesta.send_media, plan: respuesta.plan ?? null,
       prompt_chars: systemPrompt.length, memoria: seleccion.modo,
+      temas: seleccion.playbook.map(k => k.topic), lazo_abierto: respuesta.lazo_abierto ?? null,
       revision_produccion: revision, reescrita: revision.reescrita, ms, juez,
       // campos planos para poder re-juzgar este archivo con JUZGAR=
       reply: respuesta.reply, extra_messages: respuesta.extra_messages ?? [],

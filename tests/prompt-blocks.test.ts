@@ -41,6 +41,25 @@ beforeEach(() => {
   _clearPromptBlocksCache()
 })
 
+// 13-sep-2026: prompt_blocks en producción tiene 0 filas, así que estos textos
+// son los que corren. La guía de inversión decía "Portacelli Alta ($242k-$265k,
+// zona en desarrollo acelerado)" con el catálogo en $252,500 — precio viejo y la
+// frase genérica exacta por la que el juez reprueba. Regla de oro: precio,
+// reserva y disponibilidad llegan del catálogo, nunca de un texto fijo.
+describe('prompt blocks — sin datos vivos escritos a mano', () => {
+  const CIFRA_PROYECTO = /\$\s?\d{3}(?:[.,]\d{3}|\s?[kK])|\$\d{1,3},\d{3}\s+de\s+reserva/
+
+  it.each(['investment_guide', 'price_psychology'])('%s no trae precios ni montos de reserva', key => {
+    expect(DEFAULT_PROMPT_BLOCKS[key]).not.toMatch(CIFRA_PROYECTO)
+  })
+
+  it('ningún bloque usa "desarrollo acelerado" como argumento', () => {
+    for (const [key, texto] of Object.entries(DEFAULT_PROMPT_BLOCKS)) {
+      expect(texto, key).not.toMatch(/desarrollo acelerado/i)
+    }
+  })
+})
+
 describe('prompt blocks — defaults', () => {
   it('cada bloque definido tiene texto default y viceversa', () => {
     for (const def of PROMPT_BLOCK_DEFS) {
