@@ -875,3 +875,95 @@ describe('webhook — el material prometido se entrega o se dice la verdad', () 
     expect(db.updateLead).not.toHaveBeenCalledWith('lead-1', expect.objectContaining({ project_interest: ALBA.name }))
   })
 })
+
+// ─── Venta guiada: el lazo abierto declarado siempre le llega al cliente ───
+describe('webhook — lazo_abierto', () => {
+  function respuesta(extra: Partial<ClaudeResponse>): Partial<ClaudeResponse> {
+    return {
+      reply: 'El de 101 m² arranca en $252,500, y de contado baja a $244,925.', stage: 'warm', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      schedule_meeting: null, opt_out: false,
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
+      send_media: null, extra_messages: [], lazo_abierto: null,
+      ...extra,
+    }
+  }
+  const textos = () => (wa.sendText.mock.calls as unknown as unknown[][]).map(c => String(c[1]))
+
+  beforeEach(() => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: '¿Cuánto sale el de 101 m²?', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+  })
+
+  // Evaluación 13-sep: agregar el lazo como burbuja cuando el modelo no lo
+  // escribió producía mensajes sin contexto o en desorden. Nunca se envía texto
+  // que el modelo no compuso dentro de su respuesta.
+  it('un lazo declarado que no quedó escrito NO se inventa como burbuja', async () => {
+    const lazo = 'Están diseñados para aprovechar la vista al valle; esa vista hay que verla en persona.'
+    ai.parseClaudeResponse.mockReturnValueOnce(respuesta({ lazo_abierto: lazo }))
+
+    await POST(buildRequest()); await flush()
+
+    expect(textos()).toEqual(['El de 101 m² arranca en $252,500, y de contado baja a $244,925.'])
+  })
+
+  it('si el lazo ya está en el reply, no se duplica', async () => {
+    const lazo = 'esa vista hay que verla en persona'
+    ai.parseClaudeResponse.mockReturnValueOnce(respuesta({
+      reply: 'El de 101 m² arranca en $252,500 — y esa vista hay que verla en persona.', lazo_abierto: lazo,
+    }))
+
+    await POST(buildRequest()); await flush()
+
+    expect(textos().filter(t => t.toLowerCase().includes(lazo)).length).toBe(1)
+  })
+
+  it('sin lazo (el cliente pidió tiempo) no se agrega nada', async () => {
+    ai.parseClaudeResponse.mockReturnValueOnce(respuesta({ reply: 'Claro que sí, quedamos en comunicación.', lazo_abierto: null }))
+
+    await POST(buildRequest()); await flush()
+
+    expect(textos()).toEqual(['Claro que sí, quedamos en comunicación.'])
+  })
+})
+
+describe('webhook — lineamientos que el prompt solo no garantiza', () => {
+  function respuesta(extra: Partial<ClaudeResponse>): Partial<ClaudeResponse> {
+    return {
+      reply: 'ok', stage: 'warm', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      schedule_meeting: null, opt_out: false, agent_action: null, deal_summary: null,
+      brain_observations: [], interactive_buttons: [], send_media: null, extra_messages: [], lazo_abierto: null,
+      ...extra,
+    }
+  }
+  const textos = () => (wa.sendText.mock.calls as unknown as unknown[][]).map(c => String(c[1]))
+
+  beforeEach(() => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Ok', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+  })
+
+  it('la frase prohibida no llega al cliente aunque el modelo la escriba', async () => {
+    ai.parseClaudeResponse.mockReturnValueOnce(respuesta({
+      reply: 'Perfecto, si tienes cualquier otra pregunta o necesitas más información, estoy aquí para ayudarte. Quedamos en comunicación.',
+    }))
+    await POST(buildRequest()); await flush()
+    expect(textos().join(' ').toLowerCase()).not.toContain('estoy aquí')
+  })
+
+  it('un "lazo" que es una pregunta no se agrega como burbuja', async () => {
+    ai.parseClaudeResponse.mockReturnValueOnce(respuesta({
+      reply: 'El de 101 m² arranca en $252,500.',
+      lazo_abierto: '¿Lo busca para vivir o como inversión?',
+    }))
+    await POST(buildRequest()); await flush()
+    expect(textos()).toEqual(['El de 101 m² arranca en $252,500.'])
+  })
+})

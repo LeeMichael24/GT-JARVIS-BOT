@@ -76,7 +76,15 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     interactive_buttons: parseInteractiveButtons((parsed as Record<string, unknown>).interactive_buttons),
     send_media: parseSendMedia((parsed as Record<string, unknown>).send_media),
     extra_messages: parseExtraMessages((parsed as Record<string, unknown>).extra_messages),
+    lazo_abierto: parseLazo((parsed as Record<string, unknown>).lazo_abierto),
   }
+}
+
+// El lazo abierto de VENTA GUIADA. Vacío o no-string → null.
+function parseLazo(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const t = raw.trim()
+  return t ? t.slice(0, 400) : null
 }
 
 // Burbujas adicionales: máx 2, texto plano, con tope de largo por burbuja

@@ -119,3 +119,16 @@ describe('contrato sin campos muertos', () => {
     expect('qualified' in parsed).toBe(false)
   })
 })
+
+describe('parseClaudeResponse — lazo_abierto', () => {
+  it('conserva la frase del lazo, recortada', () => {
+    const r = parseClaudeResponse(JSON.stringify({ reply: 'ok', lazo_abierto: '  esa vista hay que verla en persona  ' }))
+    expect(r.lazo_abierto).toBe('esa vista hay que verla en persona')
+  })
+
+  it('vacío, no-string u omitido → null', () => {
+    expect(parseClaudeResponse(JSON.stringify({ reply: 'ok', lazo_abierto: '' })).lazo_abierto).toBeNull()
+    expect(parseClaudeResponse(JSON.stringify({ reply: 'ok', lazo_abierto: 42 })).lazo_abierto).toBeNull()
+    expect(parseClaudeResponse(JSON.stringify({ reply: 'ok' })).lazo_abierto).toBeNull()
+  })
+})

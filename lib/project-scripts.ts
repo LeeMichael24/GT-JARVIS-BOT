@@ -50,6 +50,7 @@ export function formatScriptForPrompt(script: ProjectScript): string {
   return `
 # GUION OFICIAL DE VENTA — ${script.project_name.toUpperCase()} ← SIGUE ESTE PROCESO
 Este es el proceso de venta REAL del equipo para ${script.project_name}. Tu prioridad es avanzar por estos pasos en orden — el guion filtra y califica al cliente. Lee el historial para detectar en qué paso vas y NO repitas pasos ya completados.
+Si el mensaje del cliente trae una pregunta concreta (dónde queda, cuánto cuesta, qué incluye), primero la respondes con el dato real y el paso del guion va después, en la misma respuesta o en el siguiente mensaje. Nunca dejes su pregunta sin responder por seguir el guion.
 
 ${script.script}
 `

@@ -39,10 +39,10 @@ describe('presupuesto del playbook en el prompt', () => {
     expect(out).not.toContain('playbook truncado')
   })
 
-  it('más de 12K chars sí se trunca (el prompt no explota)', () => {
-    const out = formatPlaybookForPrompt(entradas(40, 420))
+  it('más de 14K chars sí se trunca (el prompt no explota)', () => {
+    const out = formatPlaybookForPrompt(entradas(45, 420))
     expect(out).toContain('playbook truncado')
-    expect(out.length).toBeLessThan(12200)
+    expect(out.length).toBeLessThan(14200)
   })
 })
 
@@ -117,5 +117,41 @@ describe('getPlaybook — tolerante a que la migración 019 no haya corrido', ()
     expect(out).toHaveLength(1)
     vi.doUnmock('@supabase/supabase-js')
     vi.resetModules()
+  })
+})
+
+// ─── 13-sep-2026: el tope cortaba a mitad de texto y por posición en la BD ───
+// Con 62 entradas quedaban FUERA las 5 técnicas de cierre y 9 de 11 objeciones,
+// y entraban el post-venta y la compra corporativa. Lo que vende va primero.
+describe('formatPlaybookForPrompt — lo que vende entra primero y entero', () => {
+  const e = (category: string, topic: string, chars: number, extra: Partial<KBEntry> = {}): KBEntry =>
+    ({ category, topic, title: topic, content: topic + ' ' + 'x'.repeat(chars), project_slug: null, ...extra })
+
+  it('ficha del proyecto, cierres y objeciones van antes que FAQ y playbook general', () => {
+    const out = formatPlaybookForPrompt([
+      e('faq', 'costos_cierre', 50),
+      e('sales_playbook', 'seguimiento_postventa', 50),
+      e('objection', 'obj_muy_caro', 50),
+      e('closing_technique', 'cierre_visita', 50),
+      e('faq', 'ficha_pago', 50, { project_slug: 'portacelli-alta' }),
+    ])
+    const pos = (t: string) => out.indexOf(t + ':')
+    expect(pos('ficha_pago')).toBeLessThan(pos('cierre_visita'))
+    expect(pos('cierre_visita')).toBeLessThan(pos('obj_muy_caro'))
+    expect(pos('obj_muy_caro')).toBeLessThan(pos('seguimiento_postventa'))
+    expect(pos('seguimiento_postventa')).toBeLessThan(pos('costos_cierre'))
+  })
+
+  it('cuando no cabe, deja afuera entradas enteras — nunca corta una a la mitad', () => {
+    const muchas = [
+      ...Array.from({ length: 10 }, (_, i) => e('closing_technique', `cierre_${i}`, 440)),
+      ...Array.from({ length: 30 }, (_, i) => e('faq', `faq_${i}`, 440)),
+    ]
+    const out = formatPlaybookForPrompt(muchas)
+    for (const x of muchas) {
+      const idx = out.indexOf(x.title + ':')
+      if (idx >= 0) expect(out).toContain(x.content)
+    }
+    for (let i = 0; i < 10; i++) expect(out).toContain(`cierre_${i}:`)
   })
 })

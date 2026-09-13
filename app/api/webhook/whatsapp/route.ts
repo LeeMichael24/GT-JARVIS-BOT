@@ -35,6 +35,7 @@ import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } fr
 import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
 import { getEffectivePromptBlocks, DEFAULT_PROMPT_BLOCKS } from '@/lib/prompt-blocks'
 import { getActiveObjectives, formatObjectivesForPrompt } from '@/lib/objectives'
+import { limpiarFrasesProhibidas } from '@/lib/reply-guard'
 
 // Configure max execution time — requires Vercel Pro plan for 60s
 // On Hobby plan, default is 10s (sufficient for most responses)
@@ -653,6 +654,11 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       console.log(`[processMessage] Lead ${lead.id} opted out — seguimientos cancelados`)
     }
 
+    // 11-bis. Frases de call center: el prompt las prohíbe pero se colaban igual
+    // (prueba real 13-sep). Se quitan antes de enviar y de guardar.
+    claudeResponse.reply = limpiarFrasesProhibidas(claudeResponse.reply)
+    claudeResponse.extra_messages = (claudeResponse.extra_messages ?? []).map(limpiarFrasesProhibidas)
+
     // 12. Send the reply — use interactive buttons if GPT-4o provided them
     let waMessageId: string | null = null
     let replySent = false
@@ -757,8 +763,18 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       }
     }
 
+    // 14-bis. lazo_abierto es la autoevaluación del modelo: se registra, NO se
+    // envía. Mandarlo como burbuja cuando no estaba escrito se probó el 13-sep
+    // contra producción y armaba mensajes sin contexto ("Conozcamos más sobre el
+    // proyecto…") o en desorden (la introducción de unas preguntas llegaba
+    // DESPUÉS de las preguntas). Solo se envía lo que el modelo compuso.
+    if (!claudeResponse.lazo_abierto) {
+      console.log(`[processMessage] Sin lazo abierto declarado — lead ${lead.id}`)
+    }
+    const burbujas = claudeResponse.extra_messages ?? []
+
     // 15. Burbujas adicionales (multi-mensaje humano / pasos dobles del guion)
-    for (const extra of claudeResponse.extra_messages ?? []) {
+    for (const extra of burbujas) {
       try {
         // Reactivar "escribiendo..." — la espera entre burbujas se ve viva
         sendTypingIndicator(parsed.messageId).catch(() => {})

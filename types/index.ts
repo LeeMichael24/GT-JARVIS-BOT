@@ -152,6 +152,10 @@ export interface ClaudeResponse {
   // Burbujas adicionales tras el reply — como textea la gente real (máx 2).
   // El guion de proyecto las usa para los pasos de "doble mensaje".
   extra_messages: string[]
+  // La frase que deja al cliente con ganas del siguiente paso (VENTA GUIADA).
+  // null solo si el cliente pidió tiempo, se despidió o es un mensaje de trámite.
+  // Si no quedó escrita en reply ni en extra_messages, el webhook la entrega.
+  lazo_abierto?: string | null
 }
 
 // ── SDR Agent types ──────────────────────────────────────────

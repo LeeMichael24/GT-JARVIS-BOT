@@ -108,3 +108,12 @@ describe('inventarioDeMaterial — lo que el prompt sabe que existe', () => {
     expect(inv).toContain('Portacelli (común a todos sus listings): link ("Ubicación 🌍")')
   })
 })
+
+// Evaluación 13-sep: "Soy Carlos. ¿Dónde queda exactamente?" → Daniela soltó el
+// PASO 2 del guion con las dos preguntas de calificación y no dijo dónde queda.
+describe('formatScriptForPrompt — la pregunta del cliente va antes que el paso', () => {
+  it('ordena responder primero lo que preguntó', () => {
+    const block = formatScriptForPrompt(portacelli)
+    expect(block).toContain('primero la respondes')
+  })
+})

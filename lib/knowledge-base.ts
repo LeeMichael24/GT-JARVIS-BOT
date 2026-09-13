@@ -81,39 +81,72 @@ export function filterPlaybookByProject(
   })
 }
 
-// Presupuesto del playbook en el prompt. Subió de 6K a 12K (~3K tokens) al
-// sembrar la base de conocimiento de ventas/legal/financiera (migración 016):
-// la competencia de Daniela ES el producto; el costo extra por mensaje es
-// de centavos. El tope sigue existiendo para que la DB no infle el prompt.
-const PLAYBOOK_PROMPT_BUDGET_CHARS = 12000
+// Presupuesto del playbook en el prompt. Subió de 6K a 12K al sembrar la base
+// de ventas/legal/financiera (migración 016) y a 14K cuando se vio que con 62
+// entradas quedaban FUERA las 5 técnicas de cierre y 9 de 11 objeciones. La
+// competencia de Daniela ES el producto; el tope sigue para que la BD no infle
+// el prompt.
+const PLAYBOOK_PROMPT_BUDGET_CHARS = 14000
+
+// Qué entra primero cuando no cabe todo. Antes mandaba el orden de la BD y el
+// tope cortaba por posición, a mitad de una entrada: entraban el post-venta y
+// la compra corporativa, y quedaban afuera los cierres y las objeciones.
+const ORDEN_CATEGORIAS = ['closing_technique', 'objection', 'project_pitch', 'sales_playbook', 'faq']
+
+const categoryLabels: Record<string, string> = {
+  project_pitch: 'PITCH DE PROYECTOS',
+  sales_playbook: 'PLAYBOOK DE VENTAS',
+  objection: 'MANEJO DE OBJECIONES',
+  faq: 'PREGUNTAS FRECUENTES',
+  closing_technique: 'TÉCNICAS DE CIERRE',
+}
+
+function recortar(content: string): string {
+  return content.length > 450 ? content.slice(0, 450) + '…' : content
+}
 
 export function formatPlaybookForPrompt(entries: KBEntry[]): string {
   if (!entries.length) return ''
 
-  const grouped: Record<string, KBEntry[]> = {}
-  for (const e of entries) {
-    if (!grouped[e.category]) grouped[e.category] = []
-    grouped[e.category].push(e)
+  // Lo anclado al proyecto en conversación (su ficha, sus FAQ) es lo más
+  // específico y va primero; después lo universal, por categoría.
+  const esEspecifica = (e: KBEntry) => !!(e.project_slug || e.project_key)
+  const rango = (e: KBEntry) => {
+    const cat = ORDEN_CATEGORIAS.indexOf(e.category)
+    return (esEspecifica(e) ? 0 : 10) + (cat === -1 ? ORDEN_CATEGORIAS.length : cat)
+  }
+  const ordenadas = entries
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => rango(a.e) - rango(b.e) || a.i - b.i)
+    .map(x => x.e)
+
+  // Entra entera o no entra: una entrada cortada a la mitad es peor que ninguna
+  const incluidas: KBEntry[] = []
+  let usado = 0
+  let fuera = 0
+  for (const e of ordenadas) {
+    const costo = `${e.title}: ${recortar(e.content)}`.length + 2
+    if (usado + costo > PLAYBOOK_PROMPT_BUDGET_CHARS) { fuera++; continue }
+    incluidas.push(e)
+    usado += costo
   }
 
-  const categoryLabels: Record<string, string> = {
-    project_pitch: 'PITCH DE PROYECTOS',
-    sales_playbook: 'PLAYBOOK DE VENTAS',
-    objection: 'MANEJO DE OBJECIONES',
-    faq: 'PREGUNTAS FRECUENTES',
-    closing_technique: 'TÉCNICAS DE CIERRE',
+  const secciones: { clave: string; label: string; items: KBEntry[] }[] = []
+  for (const e of incluidas) {
+    const clave = `${esEspecifica(e) ? 'p' : 'u'}:${e.category}`
+    let sec = secciones.find(x => x.clave === clave)
+    if (!sec) {
+      const base = categoryLabels[e.category] ?? e.category.toUpperCase()
+      sec = { clave, label: esEspecifica(e) ? `${base} — DE ESTE PROYECTO` : base, items: [] }
+      secciones.push(sec)
+    }
+    sec.items.push(e)
   }
 
-  const sections: string[] = []
-  for (const [cat, items] of Object.entries(grouped)) {
-    const label = categoryLabels[cat] ?? cat.toUpperCase()
-    const itemLines = items.map(i => `${i.title}: ${i.content.length > 450 ? i.content.slice(0, 450) + '…' : i.content}`).join('\n\n')
-    sections.push(`${label}\n${itemLines}`)
-  }
-
-  const full = sections.join('\n\n')
-  // Tope total: si el playbook crece en la DB, el prompt no explota
-  return full.length > PLAYBOOK_PROMPT_BUDGET_CHARS
-    ? full.slice(0, PLAYBOOK_PROMPT_BUDGET_CHARS) + '\n…(playbook truncado — el resto vive en el panel)'
+  const full = secciones
+    .map(sec => `${sec.label}\n${sec.items.map(i => `${i.title}: ${recortar(i.content)}`).join('\n\n')}`)
+    .join('\n\n')
+  return fuera > 0
+    ? `${full}\n\n…(playbook truncado — ${fuera} entradas quedaron fuera; el resto vive en el panel)`
     : full
 }

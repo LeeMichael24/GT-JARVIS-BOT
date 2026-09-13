@@ -452,3 +452,92 @@ describe('prompt — material: solo lo que existe, dicho con su nombre real', ()
     expect(p).toContain('NUNCA ofrezcas enviar fichas')
   })
 })
+
+// ─── Venta guiada: responder + gancho + lazo abierto (13-sep-2026) ───
+// Daniela respondía y se callaba: el prompt le decía seis veces que cerrara
+// sin nada. Mike quiere que oriente y deje intriga del siguiente paso, SIN
+// volver a interrogar con preguntas de trámite (commit a3df2b6).
+describe('prompt — venta guiada', () => {
+  const p = () => buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
+
+  it('trae el método: responde, suma un gancho y deja un lazo abierto', () => {
+    const t = p()
+    expect(t).toContain('VENTA GUIADA')
+    expect(t).toContain('SUMA UN GANCHO')
+    expect(t).toContain('DEJA UN LAZO ABIERTO')
+  })
+
+  it('el lazo no es una pregunta de trámite', () => {
+    expect(p()).toContain('El lazo no es una pregunta')
+  })
+
+  it('ya no le enseña a soltar el dato e irse', () => {
+    const t = p()
+    expect(t).not.toContain('Un vendedor de verdad responde y se calla')
+    expect(t).not.toContain('dar el dato y quedarte ahí es un cierre válido')
+    expect(t).not.toContain('El cierre es OPCIONAL')
+    expect(t).not.toContain('o simplemente no cierras con nada')
+  })
+
+  it('respeta al cliente que pidió tiempo: ahí no hay lazo', () => {
+    expect(p()).toContain('Excepción que manda')
+  })
+
+  it('el lazo solo con respaldo real — nada de escasez ni material inventado', () => {
+    expect(p()).toContain('Todo lazo va respaldado por algo real')
+  })
+
+  it('manda sobre lo que el conocimiento diga de cerrar siempre con pregunta', () => {
+    expect(p()).toContain('esta regla manda')
+  })
+
+  it('lo último que lee antes de responder es el chequeo del lazo, no "respondé y callate"', () => {
+    const t = p()
+    expect(t.lastIndexOf('ANTES DE ENVIAR')).toBeGreaterThan(t.indexOf('MISIÓN DE CALIFICACIÓN'))
+  })
+
+  it('el bloque existe en el panel como bloque editable', async () => {
+    const { PROMPT_BLOCK_KEYS } = await import('@/lib/prompt-blocks')
+    expect(PROMPT_BLOCK_KEYS).toContain('venta_guiada')
+  })
+})
+
+describe('prompt — el lazo se declara en el JSON y se demuestra con ejemplos', () => {
+  const p = () => buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
+
+  it('el formato de respuesta pide lazo_abierto', () => {
+    expect(p()).toContain('"lazo_abierto"')
+  })
+
+  it('explica cuándo va null: solo si pidió tiempo, se despidió o es trámite', () => {
+    expect(p()).toContain('null SOLO si el cliente pidió tiempo')
+  })
+
+  it('venta guiada trae ejemplos completos, no solo reglas', async () => {
+    const { DEFAULT_PROMPT_BLOCKS } = await import('@/lib/prompt-blocks')
+    expect(DEFAULT_PROMPT_BLOCKS.venta_guiada).toContain('EJEMPLOS COMPLETOS')
+  })
+
+  it('ningún ejemplo usa frases prohibidas', async () => {
+    const { DEFAULT_PROMPT_BLOCKS } = await import('@/lib/prompt-blocks')
+    expect(DEFAULT_PROMPT_BLOCKS.venta_guiada.toLowerCase()).not.toContain('estoy aquí')
+    expect(DEFAULT_PROMPT_BLOCKS.venta_guiada.toLowerCase()).not.toContain('no dudes')
+  })
+})
+
+describe('prompt — segunda iteración de venta guiada', () => {
+  const p = () => buildSystemPrompt({ lead: mockLead, project: mockProject, projects: [mockProject] })
+
+  it('los ejemplos no traen frases completas que el modelo copie textual', async () => {
+    const { DEFAULT_PROMPT_BLOCKS } = await import('@/lib/prompt-blocks')
+    const b = DEFAULT_PROMPT_BLOCKS.venta_guiada
+    // copiadas palabra por palabra en la evaluación del 13-sep
+    expect(b).not.toContain('esa vista hay que verla en persona para dimensionarla')
+    expect(b).not.toContain('es una decisión para tomarla juntos')
+    expect(b).toContain('nunca copies')
+  })
+
+  it('el lazo no puede ser una pregunta ni el precio a secas', () => {
+    expect(p()).toContain('no puede ser una pregunta')
+  })
+})

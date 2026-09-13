@@ -42,6 +42,17 @@ interface PromptContext {
 // Entry point
 // ─────────────────────────────────────────────────────────────
 
+// Lo último que lee antes de responder. En un prompt de ~15K tokens lo del
+// final pesa más, y antes lo último era "un vendedor de verdad responde y se
+// calla" — así respondía. No es editable a propósito: es el control de calidad
+// del método de VENTA GUIADA, que sí se edita desde el panel.
+const CHEQUEO_ANTES_DE_ENVIAR = `# ANTES DE ENVIAR — CHEQUEO DE CINCO SEGUNDOS
+1. ¿Respondí exacto lo que preguntó, con el dato real y no con una frase genérica?
+2. ¿Sumé un gancho que le aumente las ganas?
+3. ¿Dejé un lazo abierto hacia el siguiente paso, sin pregunta de trámite? (Si pidió tiempo, no: ahí se cierra cálido y sin lazo.)
+4. ¿Prometí algo? Entonces va en esta misma respuesta.
+5. ¿Terminé con "¿te gustaría…?", "¿te interesa…?" o con un "quedamos atentos" en plena conversación de venta? Cámbialo por el lazo.`
+
 export function buildSystemPrompt({
   lead,
   project,
@@ -176,6 +187,7 @@ Estas son observaciones confirmadas por el equipo. Aplícalas:\n${brainLearnings
   "brain_observations": [],
   "interactive_buttons": [],
   "send_media": null,
+  "lazo_abierto": "la frase exacta de tu reply o extra_messages que deja el lazo abierto, o null",
   "extra_messages": []
 }
 - "agent_action": SIEMPRE incluir. Es tu decisión como SDR.
@@ -186,6 +198,7 @@ ${settings.learning_sensitivity === 'high'
 - "interactive_buttons": máximo 3 botones, títulos de máximo 20 caracteres. Úsalos solo en momentos clave: después de presentar opciones, al ofrecer visita, al confirmar interés. Array vacío la mayoría de veces.
 - "opt_out": boolean — true SOLO si el cliente pide explícitamente no ser contactado.
 - "extra_messages": burbujas ADICIONALES que se envían DESPUÉS del reply (máx 2). Así textea la gente real: mensajes separados, no un bloque. Úsalo cuando el guion pida doble mensaje, o cuando dividir en 2 burbujas cortas sea más natural que una larga. Vacío la mayoría de veces. Orden de envío: reply → media (si hay) → extra_messages.
+- "lazo_abierto": copia EXACTA de la frase de tu reply o de extra_messages que deja al cliente con ganas del siguiente paso (ver VENTA GUIADA). null SOLO si el cliente pidió tiempo, se despidió, o el mensaje es de trámite (confirmar una cita, escalar al equipo). Si no encuentras esa frase en lo que escribiste, te faltó el lazo: escríbelo en el reply o en extra_messages y cópialo aquí. El lazo no puede ser una pregunta ni el precio a secas: es la frase que anticipa, recomienda, prepara o invita a ver algo.
 ${hasMedia
     ? `- "send_media": null normalmente. Úsalo para adjuntar material del proyecto:
   { "type": "document" | "image" | "video" | "link", "project": "nombre EXACTO del listing (ej: Portacelli Alta - Fase 1 Habitacional)", "description": "qué enviar (ej: brochure, ubicación, avances de obra)" }
@@ -213,6 +226,7 @@ ${inventario}
     r('banned_phrases'),
     r('first_contact'),
     [r('communication_style'), emojiRule].filter(Boolean).join('\n'),
+    r('venta_guiada'),
     r('truth_source'),
     r('anti_loop'),
     r('combined_messages'),
@@ -244,6 +258,8 @@ ${dealBlock}
 ${missionBlock}
 
 ${schedulingBlock}
+
+${CHEQUEO_ANTES_DE_ENVIAR}
 
 ${responseFormat}`
 }
