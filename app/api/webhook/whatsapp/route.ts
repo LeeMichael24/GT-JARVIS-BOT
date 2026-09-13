@@ -38,9 +38,10 @@ import { getActiveObjectives, formatObjectivesForPrompt } from '@/lib/objectives
 import { generarRespuesta } from '@/lib/generar-respuesta'
 import { seleccionarConocimiento, construirConsulta } from '@/lib/contexto-recuperado'
 
-// Configure max execution time — requires Vercel Pro plan for 60s
-// On Hobby plan, default is 10s (sufficient for most responses)
-export const maxDuration = 60
+// Con Fluid compute, Hobby permite hasta 300 s (Pro 800 s). Medido 13-sep-2026:
+// una respuesta con revisión y reescritura llega a ~52 s; con 60 s de tope
+// Vercel cortaba y el cliente quedaba en visto.
+export const maxDuration = 300
 
 // Adaptive debounce: waits for the user to finish typing.
 // Duration is learned from each lead's typing pattern via calculateAdaptiveDebounce.

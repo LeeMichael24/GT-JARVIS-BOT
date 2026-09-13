@@ -71,23 +71,45 @@ export function depsReales(): DepsGenerar {
   }
 }
 
+/**
+ * Si el modelo principal está saturado (429), responde este: tiene su propio
+ * límite de tokens por minuto (200K contra 30K de gpt-4o/gpt-4.1).
+ */
+export const MODELO_RESPALDO = 'gpt-4.1-mini'
+
+function esSaturacion(err: unknown): boolean {
+  const status = (err as { status?: unknown } | null)?.status
+  return status === 429 || /\b429\b|rate limit/i.test(err instanceof Error ? err.message : String(err))
+}
+
 export async function generarRespuesta(args: ArgsGenerar, deps: DepsGenerar = depsReales()): Promise<ResultadoGenerar> {
   const { systemPrompt, history, settings } = args
   const opts = { temperature: settings.llm_temperature, model: settings.llm_model }
 
   // 1-2. Modelo, con un reintento si el JSON viene sin reply. Si falla dos
   // veces, lanza: el webhook tiene el mensaje de respaldo para no dejar en visto.
+  // Si OpenAI está saturado, responde el modelo de respaldo sin revisión.
   let respuesta: ClaudeResponse
+  let saturado = false
   try {
     respuesta = parseClaudeResponse(await deps.llamarModelo(systemPrompt, history, opts))
   } catch (primerError) {
-    console.warn('[generar-respuesta] JSON inválido — reintentando:', primerError instanceof Error ? primerError.message : primerError)
-    respuesta = parseClaudeResponse(await deps.llamarModelo(systemPrompt + AVISO_REINTENTO, history, opts))
+    if (esSaturacion(primerError)) {
+      console.warn(`[generar-respuesta] ${opts.model ?? 'modelo'} saturado — responde ${MODELO_RESPALDO} sin revisión`)
+      saturado = true
+      respuesta = parseClaudeResponse(await deps.llamarModelo(systemPrompt, history, { ...opts, model: MODELO_RESPALDO }))
+    } else {
+      console.warn('[generar-respuesta] JSON inválido — reintentando:', primerError instanceof Error ? primerError.message : primerError)
+      respuesta = parseClaudeResponse(await deps.llamarModelo(systemPrompt + AVISO_REINTENTO, history, opts))
+    }
   }
 
   // 3. Revisión de venta
   const revision: ResultadoGenerar['revision'] = { veredicto: null, reescrita: false, motivoOmitida: null }
-  if (!settings.sales_critic_enabled) {
+  if (saturado) {
+    // Reescribir usaría otra vez el modelo saturado
+    revision.motivoOmitida = 'saturado'
+  } else if (!settings.sales_critic_enabled) {
     revision.motivoOmitida = 'apagada'
   } else if (deps.ahora() - args.inicioMs > PRESUPUESTO_REVISION_MS) {
     revision.motivoOmitida = 'sin_tiempo'

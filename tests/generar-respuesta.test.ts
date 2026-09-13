@@ -86,6 +86,22 @@ describe('generarRespuesta', () => {
     expect(r.respuesta.reply).toBe('Ya.')
   })
 
+  // gpt-4.1 comparte 30K tokens/min con toda la cuenta: tres clientes a la vez
+  // lo saturan. Mejor una respuesta del modelo chico que dejar al cliente en visto.
+  it('OpenAI saturado (429): responde con gpt-4.1-mini y sin revisión', async () => {
+    const { deps } = armar([])
+    const e429 = Object.assign(new Error('429 Rate limit reached for gpt-4.1 on tokens per min'), { status: 429 })
+    deps.llamarModelo
+      .mockRejectedValueOnce(e429)
+      .mockResolvedValueOnce(json({ reply: 'Queda frente al Centro Forense.' }))
+    const r = await generarRespuesta(args({ settings: { ...settings, llm_model: 'gpt-4.1' } }), deps)
+    expect(deps.llamarModelo).toHaveBeenCalledTimes(2)
+    expect(deps.llamarModelo).toHaveBeenLastCalledWith('SYS', [], expect.objectContaining({ model: 'gpt-4.1-mini' }))
+    expect(deps.juez).not.toHaveBeenCalled()
+    expect(r.revision.motivoOmitida).toBe('saturado')
+    expect(r.respuesta.reply).toBe('Queda frente al Centro Forense.')
+  })
+
   it('dos JSON inválidos: lanza, para que el webhook mande el mensaje de respaldo', async () => {
     const { deps } = armar(['{}', '{}'])
     await expect(generarRespuesta(args(), deps)).rejects.toThrow()

@@ -86,8 +86,10 @@ export async function ensureFollowUpsForSilentLeads(now: Date): Promise<number> 
     return 0
   }
   type Row = { id: string; stage: string; sequences: { status: string }[] | null }
+  // Pausada cuenta como existente: es una decisión humana (panel, "Lo tomo yo")
+  // y la red no la deshace creando otra activa al día siguiente
   const sinSecuencia = ((data ?? []) as Row[]).filter(
-    l => !(l.sequences ?? []).some(s => s.status === 'active'),
+    l => !(l.sequences ?? []).some(s => s.status === 'active' || s.status === 'paused'),
   )
   let creadas = 0
   for (const l of sinSecuencia) {
@@ -164,6 +166,30 @@ export async function getDueSequences(now: Date): Promise<Sequence[]> {
     .limit(20)
   if (error) throw new Error(`getDueSequences: ${error.message}`)
   return (data as Sequence[]) ?? []
+}
+
+/** Minutos que una corrida aparta una secuencia mientras intenta enviarla */
+const RECLAMO_MINUTOS = 15
+
+/**
+ * Aparta la secuencia para ESTA corrida antes de enviar. Con dos relojes
+ * (Supabase cada 15 min + Vercel diario) dos corridas pueden leer la misma
+ * secuencia vencida: solo gana la que logra mover next_fire_at desde el valor
+ * que leyó. Si el envío no sale, la secuencia vuelve a estar lista en 15 min.
+ */
+export async function reclamarSecuencia(seq: Pick<Sequence, 'id' | 'next_fire_at'>): Promise<boolean> {
+  const { data, error } = await getServiceClient()
+    .from('sequences')
+    .update({ next_fire_at: new Date(Date.now() + RECLAMO_MINUTOS * 60_000).toISOString() })
+    .eq('id', seq.id)
+    .eq('status', 'active')
+    .eq('next_fire_at', seq.next_fire_at)
+    .select('id')
+  if (error) {
+    console.warn('[sequences] No se pudo reclamar', seq.id, error.message)
+    return false
+  }
+  return (data ?? []).length === 1
 }
 
 export async function advanceSequence(

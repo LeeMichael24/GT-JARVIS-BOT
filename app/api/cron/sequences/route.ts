@@ -1,5 +1,6 @@
 import {
   getDueSequences,
+  reclamarSecuencia,
   advanceSequence,
   SEQUENCE_DEFINITIONS,
   isWithinBusinessHours,
@@ -18,7 +19,12 @@ import { getAgentSettings } from '@/lib/agent-settings'
 import { recordCronRun } from '@/lib/cron-log'
 import type { SequenceType } from '@/types'
 
-export const maxDuration = 60
+// Hobby permite hasta 300 s. Con 60 s la corrida se cortaba antes de llegar al
+// registro final: cron_runs no tuvo ni una fila de 'sequences' del 2 al 13-sep.
+export const maxDuration = 300
+
+/** Se deja de tomar secuencias con margen antes del corte de Vercel */
+const PRESUPUESTO_MS = 240_000
 
 export async function GET(request: Request): Promise<Response> {
   const auth = request.headers.get('authorization')
@@ -28,6 +34,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const startedAt = new Date()
+  const inicio = Date.now()
   const settings = await getAgentSettings()
 
   // PAUSA GLOBAL: con Daniela pausada NO salen seguimientos automáticos
@@ -48,10 +55,18 @@ export async function GET(request: Request): Promise<Response> {
   let errors = 0
   let failed = 0
   let blockedMissingTemplate = 0
+  let deferredTimeBudget = 0
   // Alerta UNA sola vez por corrida (no por lead) si falta la plantilla HSM
   let missingTemplateAlerted = false
 
-  for (const seq of due) {
+  for (const [i, seq] of due.entries()) {
+    // Lo que no alcanza a salir queda vencido y lo toma la próxima vuelta
+    if (Date.now() - inicio > PRESUPUESTO_MS) {
+      deferredTimeBudget = due.length - i
+      console.warn(`[cron/sequences] Presupuesto de tiempo agotado: ${deferredTimeBudget} quedan para la próxima vuelta`)
+      break
+    }
+
     try {
       const lead = await getLeadById(seq.lead_id)
       if (!lead || lead.opted_out || !lead.bot_active) {
@@ -72,6 +87,13 @@ export async function GET(request: Request): Promise<Response> {
       const def = SEQUENCE_DEFINITIONS[seq.sequence_type as SequenceType]
       const step = def?.steps[seq.current_step]
       if (!step) {
+        skipped++
+        continue
+      }
+
+      // Dos relojes (Supabase cada 15 min y Vercel diario) pueden leer la misma
+      // secuencia a la vez: solo envía la corrida que logra apartarla
+      if (!(await reclamarSecuencia(seq))) {
         skipped++
         continue
       }
@@ -145,7 +167,8 @@ Reglas:
 - NO uses asteriscos, bullets, ni listas
 - Responde SOLO con un JSON: {"message": "<el texto del mensaje aquí>"}`
 
-      const rawReply = await callClaude(followUpPrompt, [])
+      // 20 s por intento: con el reintento del SDK, un cliente no se come la corrida
+      const rawReply = await callClaude(followUpPrompt, [], { timeoutMs: 20_000 })
 
       // Extract message from JSON response
       let reply: string
@@ -185,9 +208,16 @@ Reglas:
   }
 
   console.log(
-    `[cron/sequences] Done: ${sent} sent, ${skipped} skipped, ${failed} failed, ${blockedMissingTemplate} bloqueados (sin plantilla), ${errors} errors`,
+    `[cron/sequences] Done: ${sent} sent, ${skipped} skipped, ${failed} failed, ${blockedMissingTemplate} bloqueados (sin plantilla), ${deferredTimeBudget} para la próxima vuelta, ${errors} errors`,
   )
-  const summary = { sent, skipped, errors, failed, blocked_missing_template: blockedMissingTemplate }
+  const summary = {
+    sent,
+    skipped,
+    errors,
+    failed,
+    blocked_missing_template: blockedMissingTemplate,
+    deferred_time_budget: deferredTimeBudget,
+  }
   await recordCronRun('sequences', startedAt, errors > 0 ? 'error' : 'ok', summary)
   return Response.json(summary)
 }

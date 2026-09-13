@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const seqLib = vi.hoisted(() => ({
   getDueSequences: vi.fn(async (): Promise<unknown[]> => []),
+  reclamarSecuencia: vi.fn(async (): Promise<boolean> => true),
   advanceSequence: vi.fn(async () => 'advanced' as const),
   isWithinBusinessHours: vi.fn(() => true),
   SEQUENCE_DEFINITIONS: {
@@ -223,5 +224,65 @@ describe('cron sequences — ventana de 24h de Meta', () => {
     expect(body.skipped).toBe(1)
     expect(db.getLatestUserMessageAt).not.toHaveBeenCalled()
     expect(wa.sendText).not.toHaveBeenCalled()
+  })
+})
+
+// 13-sep-2026: el cron no dejaba registro desde el 2-sep (se cortaba antes del
+// final) y en Hobby el reloj cada 15 min vive en Supabase mientras Vercel sigue
+// con su corrida diaria: dos relojes pueden tomar la misma secuencia a la vez.
+describe('cron sequences — dos relojes y límite de tiempo', () => {
+  const fueraDeVentana = () => new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString()
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reclama la secuencia antes de enviar', async () => {
+    process.env.WA_TEMPLATE_FOLLOWUP = 'seguimiento_interes'
+    seqLib.getDueSequences.mockResolvedValue([dueSeq])
+    db.getLeadById.mockResolvedValue(lead)
+    db.getLatestUserMessageAt.mockResolvedValue(fueraDeVentana())
+
+    await GET(req('Bearer sec123'))
+
+    expect(seqLib.reclamarSecuencia.mock.calls[0]).toEqual([dueSeq])
+    expect(seqLib.reclamarSecuencia.mock.invocationCallOrder[0])
+      .toBeLessThan(wa.sendTemplate.mock.invocationCallOrder[0])
+  })
+
+  it('si otra corrida ya la reclamó, no envía nada', async () => {
+    process.env.WA_TEMPLATE_FOLLOWUP = 'seguimiento_interes'
+    seqLib.getDueSequences.mockResolvedValue([dueSeq])
+    seqLib.reclamarSecuencia.mockResolvedValueOnce(false)
+    db.getLeadById.mockResolvedValue(lead)
+    db.getLatestUserMessageAt.mockResolvedValue(fueraDeVentana())
+
+    const body = await (await GET(req('Bearer sec123'))).json()
+
+    expect(body.sent).toBe(0)
+    expect(body.skipped).toBe(1)
+    expect(wa.sendTemplate).not.toHaveBeenCalled()
+    expect(wa.sendText).not.toHaveBeenCalled()
+    expect(seqLib.advanceSequence).not.toHaveBeenCalled()
+  })
+
+  it('corta antes del límite de Vercel y deja el resto para la próxima vuelta', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-14T15:00:00Z'))
+    process.env.WA_TEMPLATE_FOLLOWUP = 'seguimiento_interes'
+    seqLib.getDueSequences.mockResolvedValue([dueSeq, { ...dueSeq, id: 'seq-2', lead_id: 'lead-2' }])
+    db.getLeadById.mockResolvedValue(lead)
+    db.getLatestUserMessageAt.mockResolvedValue(fueraDeVentana())
+    // El primer envío se come todo el presupuesto (240 s de los 300 que da Vercel)
+    wa.sendTemplate.mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.now() + 241_000)
+      return 'wamid.lento'
+    })
+
+    const body = await (await GET(req('Bearer sec123'))).json()
+
+    expect(wa.sendTemplate).toHaveBeenCalledTimes(1)
+    expect(body.sent).toBe(1)
+    expect(body.deferred_time_budget).toBe(1)
   })
 })

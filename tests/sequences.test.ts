@@ -112,6 +112,47 @@ describe('cancelSequencesForLead', () => {
 })
 
 // ─────────────────────────────────────────────────────────────
+// Dos relojes (Supabase cada 15 min + Vercel diario) no mandan
+// el mismo seguimiento dos veces
+// ─────────────────────────────────────────────────────────────
+
+describe('reclamarSecuencia', () => {
+  const seq = { id: 'seq-1', next_fire_at: '2026-09-01T20:36:08.792+00:00' }
+
+  beforeEach(() => {
+    db.llamadas.length = 0
+    for (const k of Object.keys(db.resultados)) delete db.resultados[k]
+  })
+
+  it('gana solo si mueve next_fire_at desde el valor que leyó, y lo aparta hacia adelante', async () => {
+    const { reclamarSecuencia } = await import('@/lib/sequences')
+    db.resultados.sequences = { data: [{ id: 'seq-1' }], error: null }
+
+    expect(await reclamarSecuencia(seq)).toBe(true)
+
+    const eqs = db.llamadas.filter(c => c.tabla === 'sequences' && c.op === 'eq').map(c => c.args)
+    expect(eqs).toContainEqual(['id', 'seq-1'])
+    expect(eqs).toContainEqual(['status', 'active'])
+    expect(eqs).toContainEqual(['next_fire_at', '2026-09-01T20:36:08.792+00:00'])
+    const update = db.llamadas.find(c => c.tabla === 'sequences' && c.op === 'update')
+    const apartadaHasta = new Date((update?.args[0] as { next_fire_at: string }).next_fire_at).getTime()
+    expect(apartadaHasta).toBeGreaterThan(Date.now())
+  })
+
+  it('si otra corrida ya la movió (0 filas actualizadas), pierde', async () => {
+    const { reclamarSecuencia } = await import('@/lib/sequences')
+    db.resultados.sequences = { data: [], error: null }
+    expect(await reclamarSecuencia(seq)).toBe(false)
+  })
+
+  it('si la base falla, no la reclama ni lanza', async () => {
+    const { reclamarSecuencia } = await import('@/lib/sequences')
+    db.resultados.sequences = { error: { message: 'boom' } }
+    expect(await reclamarSecuencia(seq)).toBe(false)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────
 // Red de seguridad: seguimiento aunque el modelo no lo pida
 // ─────────────────────────────────────────────────────────────
 
@@ -152,6 +193,15 @@ describe('ensureFollowUpsForSilentLeads', () => {
     }
     const creadas = await ensureFollowUpsForSilentLeads(new Date())
     expect(creadas).toBe(1)
+  })
+
+  // 13-sep-2026: se pausaron 63 seguimientos de leads de prueba antes de
+  // conectar el número real; la red diaria los habría recreado al otro día.
+  // Pausado es una decisión humana (panel o "Lo tomo yo"): la red la respeta.
+  it('secuencia pausada SÍ cuenta: la red diaria no deshace una pausa', async () => {
+    db.resultados.leads = { data: [{ id: 'l5', stage: 'warm', sequences: [{ status: 'paused' }] }], error: null }
+    const creadas = await ensureFollowUpsForSilentLeads(new Date())
+    expect(creadas).toBe(0)
   })
 
   it('si la lectura falla devuelve 0 sin lanzar (convención fail-safe)', async () => {
