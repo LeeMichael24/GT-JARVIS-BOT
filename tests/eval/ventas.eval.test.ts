@@ -16,7 +16,7 @@ import { generarRespuesta } from '@/lib/generar-respuesta'
 import { seleccionarConocimiento, construirConsulta } from '@/lib/contexto-recuperado'
 import type { AgentSettings } from '@/lib/agent-settings'
 import type { KBEntry } from '@/lib/knowledge-base'
-import { construirPromptJuez, parsearVeredicto, type Veredicto } from '@/lib/sales-critic'
+import { construirPromptJuez, votarVeredicto, type Veredicto } from '@/lib/sales-critic'
 import type { Conversation, Lead, SendMedia, TurnPlan } from '@/types'
 import { ESCENARIOS } from './escenarios'
 
@@ -56,9 +56,14 @@ async function conReintento<T>(fn: () => Promise<T>): Promise<T> {
   throw new Error('inalcanzable')
 }
 
+// Mayoría de 3, igual que el crítico de producción: con un solo voto el mismo
+// texto cambiaba de veredicto en 5 de 12 escenarios
 async function juzgar(mensajeCliente: string, reply: string, extras: string[], plan: TurnPlan | null, sendMedia: SendMedia | null): Promise<Veredicto> {
   const prompt = construirPromptJuez({ mensajeCliente, reply, extras, plan, sendMedia })
-  return parsearVeredicto(await conReintento(() => callClaude(prompt, [userMsg('Evalúa la respuesta y devuelve el JSON.')], { model: JUEZ_BATERIA, temperature: 0 })))
+  const v = await votarVeredicto(prompt, p => conReintento(() => callClaude(p, [userMsg('Evalúa la respuesta y devuelve el JSON.')], { model: JUEZ_BATERIA, temperature: 0 })))
+  // En la batería un juez caído no aprueba: invalidaría la medición
+  if (!v) throw new Error('ningún juez de la batería respondió')
+  return v
 }
 
 function resumen(filas: { juez: Veredicto; burbujas: string[]; reescrita?: boolean; ms?: number; prompt_chars?: number }[]) {

@@ -24,11 +24,12 @@ const args = (extra: Record<string, unknown> = {}) =>
   ({ systemPrompt: 'SYS', history: [], settings, mensajeCliente: '¿Adónde está ubicado?', inicioMs: 1_000, ...extra })
 
 describe('generarRespuesta', () => {
-  it('aprobada por el juez: una sola llamada y la respuesta sale igual', async () => {
+  it('aprobada por el juez: una sola llamada al modelo y la respuesta sale igual', async () => {
     const { deps } = armar([json({ reply: 'Queda frente al Centro Forense.' })])
     const r = await generarRespuesta(args(), deps)
     expect(deps.llamarModelo).toHaveBeenCalledTimes(1)
-    expect(deps.juez).toHaveBeenCalledTimes(1)
+    // tres jueces en paralelo, decide la mayoría (ver sales-critic)
+    expect(deps.juez).toHaveBeenCalledTimes(3)
     expect(r.respuesta.reply).toBe('Queda frente al Centro Forense.')
     expect(r.revision.reescrita).toBe(false)
   })

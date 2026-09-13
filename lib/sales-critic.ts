@@ -84,16 +84,49 @@ export function parsearVeredicto(raw: string): Veredicto {
   return { aprobada, fallas, sugerencia }
 }
 
+/**
+ * Cuántas veces se consulta al juez. Medido 13-sep-2026: o4-mini juzgando 4
+ * veces las mismas 12 respuestas cambió de veredicto en 5. Un voto es una tirada.
+ */
+export const VOTOS_JUEZ = 3
+
+export interface Votos { aprueban: number; reprueban: number }
+
+/** Consulta al juez N veces en paralelo y decide por mayoría. null si ninguno respondió. */
+export async function votarVeredicto(
+  prompt: string,
+  juez: (prompt: string) => Promise<string>,
+  votos: number = VOTOS_JUEZ,
+): Promise<(Veredicto & { votos: Votos }) | null> {
+  const resultados = await Promise.allSettled(Array.from({ length: Math.max(1, votos) }, () => juez(prompt)))
+  const caidos = resultados.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (caidos.length) {
+    const motivo = caidos[0].reason
+    console.warn(`[sales-critic] ${caidos.length}/${resultados.length} jueces fallaron:`, motivo instanceof Error ? motivo.message : motivo)
+  }
+  const validos = resultados.flatMap(r => (r.status === 'fulfilled' ? [parsearVeredicto(r.value)] : []))
+  if (!validos.length) return null
+
+  const reprobados = validos.filter(v => !v.aprobada)
+  const conteo = { aprueban: validos.length - reprobados.length, reprueban: reprobados.length }
+  // Empate aprueba: el juez nunca bloquea una respuesta
+  if (conteo.reprueban <= conteo.aprueban) return { ...APROBADO, votos: conteo }
+  return {
+    aprobada: false,
+    fallas: [...new Set(reprobados.flatMap(v => v.fallas))].slice(0, 6),
+    sugerencia: reprobados.find(v => v.sugerencia)?.sugerencia ?? null,
+    votos: conteo,
+  }
+}
+
 export async function revisarRespuesta(
   e: EntradaRevision,
   deps: { juez: (prompt: string) => Promise<string> },
-): Promise<Veredicto & { omitida?: string }> {
+  opts: { votos?: number } = {},
+): Promise<Veredicto & { omitida?: string; votos?: Votos }> {
   // Confirmar una cita o escalar no se juzga como venta: ahorra tiempo
   if (e.plan?.momento === 'tramite') return { ...APROBADO, omitida: 'tramite' }
-  try {
-    return parsearVeredicto(await deps.juez(construirPromptJuez(e)))
-  } catch (err) {
-    console.warn('[sales-critic] el juez falló — se aprueba:', err instanceof Error ? err.message : err)
-    return { ...APROBADO, omitida: 'error_juez' }
-  }
+  const v = await votarVeredicto(construirPromptJuez(e), deps.juez, opts.votos)
+  if (!v) return { ...APROBADO, omitida: 'error_juez' }
+  return v
 }

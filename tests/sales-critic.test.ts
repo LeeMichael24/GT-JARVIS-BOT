@@ -67,3 +67,62 @@ describe('revisarRespuesta', () => {
     expect(v.fallas).toEqual(['literal'])
   })
 })
+
+// 13-sep-2026: o4-mini juzgó 4 veces las MISMAS 12 respuestas y cambió de
+// veredicto en 5. Con un solo voto, el crítico reescribía respuestas buenas
+// (≈20 s y tokens de gpt-4.1) y dejaba pasar malas según la tirada.
+describe('revisarRespuesta — voto por mayoría', () => {
+  const REPRUEBA = (falla: string) => `{"aprobada":false,"fallas":["${falla}"],"sugerencia":"sugerencia ${falla}"}`
+  const APRUEBA = '{"aprobada":true,"fallas":[]}'
+  const jueces = (...salidas: (string | Error)[]) => {
+    let i = 0
+    return vi.fn(async () => {
+      const s = salidas[i++ % salidas.length]
+      if (s instanceof Error) throw s
+      return s
+    })
+  }
+
+  it('por defecto consulta 3 jueces', async () => {
+    const juez = jueces(APRUEBA)
+    await revisarRespuesta(base, { juez })
+    expect(juez).toHaveBeenCalledTimes(3)
+  })
+
+  it('un solo voto en contra no reprueba: no se reescribe una respuesta buena por mala suerte', async () => {
+    const v = await revisarRespuesta(base, { juez: jueces(APRUEBA, REPRUEBA('literal'), APRUEBA) })
+    expect(v.aprobada).toBe(true)
+    expect(v.votos).toEqual({ aprueban: 2, reprueban: 1 })
+  })
+
+  it('2 de 3 en contra reprueba, con las fallas de quienes reprobaron y sin repetir', async () => {
+    const v = await revisarRespuesta(base, { juez: jueces(REPRUEBA('literal'), APRUEBA, REPRUEBA('literal')) })
+    expect(v.aprobada).toBe(false)
+    expect(v.fallas).toEqual(['literal'])
+    expect(v.sugerencia).toBe('sugerencia literal')
+  })
+
+  it('si un juez truena, deciden los que respondieron', async () => {
+    const v = await revisarRespuesta(base, { juez: jueces(new Error('timeout'), REPRUEBA('genérica'), REPRUEBA('sin lazo')) })
+    expect(v.aprobada).toBe(false)
+    expect(v.fallas).toEqual(['genérica', 'sin lazo'])
+  })
+
+  it('empate entre los que respondieron: aprueba (el juez nunca bloquea)', async () => {
+    const v = await revisarRespuesta(base, { juez: jueces(new Error('timeout'), REPRUEBA('literal'), APRUEBA) })
+    expect(v.aprobada).toBe(true)
+  })
+
+  it('si todos truenan: aprueba y avisa que se omitió', async () => {
+    const v = await revisarRespuesta(base, { juez: jueces(new Error('timeout')) })
+    expect(v.aprobada).toBe(true)
+    expect(v.omitida).toBe('error_juez')
+  })
+
+  it('votos: 1 hace una sola llamada', async () => {
+    const juez = jueces(REPRUEBA('literal'))
+    const v = await revisarRespuesta(base, { juez }, { votos: 1 })
+    expect(juez).toHaveBeenCalledTimes(1)
+    expect(v.aprobada).toBe(false)
+  })
+})
