@@ -95,11 +95,17 @@ const STOP_WORDS = new Set([
 ])
 
 /**
- * Palabras del nombre que son español común aunque distingan un listing
- * ("Portacelli ALTA"): sola no identifica nada ("plusvalía alta"); solo vale
- * junto a otra palabra distintiva del mismo nombre ("portacelli alta").
+ * Palabras del nombre que también son español/inglés común, un nombre propio o
+ * una nota de WhatsApp: sola no identifica nada ("plusvalía alta", "Voice call,
+ * 35 sec", "bienes raíces", "Ronald Miguel", "Carmen Elena"); solo vale junto a
+ * otra palabra distintiva del mismo nombre ("portacelli alta", "call center",
+ * "santa elena"). Salieron de un barrido de 6,622 mensajes reales (29-sep-2026):
+ * "call" fijaba el Call Center en 231 mensajes.
  */
-const WEAK_WORDS = new Set(['alta'])
+const WEAK_WORDS = new Set([
+  'alta', 'call', 'center', 'plug', 'play', 'life', 'santa', 'elena', 'miguel',
+  'raices', 'panorama', 'tower',
+])
 
 /**
  * Pistas de tipología: desempatan entre listings de una misma familia.

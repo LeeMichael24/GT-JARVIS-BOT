@@ -28,6 +28,8 @@ const db = vi.hoisted(() => ({
   getLatestUserMessageAt: vi.fn(async () => null as string | null),
   updateLead: vi.fn(async () => {}),
   saveConversation: vi.fn(async () => {}),
+  // requerido por lib/proactive/engine (importado transitivamente por actions.ts)
+  getConversationHistory: vi.fn(async () => []),
   getServiceClient: vi.fn(() => serviceChain),
 }))
 vi.mock('@/lib/supabase', () => db)

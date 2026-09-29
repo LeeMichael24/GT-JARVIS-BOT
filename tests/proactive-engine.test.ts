@@ -45,6 +45,7 @@ function makeDeps(over: Partial<EngineDeps> = {}): EngineDeps & { created: unkno
     markRecipient: vi.fn(async () => {}),
     sendTemplate: vi.fn(async () => 'wamid.x'),
     saveConversation: vi.fn(async () => {}),
+    getConversationHistory: vi.fn(async () => []),
     updateLead: vi.fn(async () => {}),
     now: () => NOW,
     ...over,
@@ -61,6 +62,41 @@ describe('runRecontactRules', () => {
     const camp = deps.created[0] as { kind: string; recipients: { lead_id: string; variables: string[] }[] }
     expect(camp.kind).toBe('recontact')
     expect(camp.recipients[0]).toMatchObject({ lead_id: 'l1', variables: ['Carlos', 'nuestras propiedades'] })
+  })
+
+  // 29-sep-2026: {{2}} de la plantilla salía de lead.project_interest, que puede
+  // estar mal fijado (leads con "Local Comercial…" sin haberlo pedido).
+  it('{{2}} sale de la conversación, no del project_interest guardado', async () => {
+    const portacelli = { slug: 'portacelli-raices-fase-1-habitacional-en-proyecto-x-1', name: 'Portacelli Raices - Fase 1 Habitacional', type: 'Residencial', entityType: 'project', location: 'X', description: '', status: 'ok' }
+    const local = { slug: 'local-comercial-excelente-para-negocio-en-alquiler-x-2', name: 'Local Comercial excelente para negocio', type: 'Local Comercial', entityType: 'residency', location: 'X', description: '', status: 'ok' }
+    const deps = makeDeps({
+      leadsWithTags: vi.fn(async () => [
+        { lead: mkLead({ id: 'a', project_interest: 'Local Comercial excelente para negocio' }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+        { lead: mkLead({ id: 'b', project_interest: 'Local Comercial excelente para negocio' }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+      ]),
+      listActiveRules: vi.fn(async () => [{ ...rule, max_per_run: 5 }]),
+      getAllProjects: vi.fn(async () => [portacelli, local]) as unknown as EngineDeps['getAllProjects'],
+      getConversationHistory: vi.fn(async (leadId: string) =>
+        leadId === 'a'
+          ? [{ role: 'user', content: 'me interesa Portacelli Raices' }]
+          : [{ role: 'user', content: 'Para ambas' }]) as unknown as EngineDeps['getConversationHistory'],
+    })
+    await runRecontactRules(deps)
+    const camp = deps.created[0] as { recipients: { lead_id: string; variables: string[] }[] }
+    expect(camp.recipients.find(r => r.lead_id === 'a')!.variables).toEqual(['Carlos', 'Portacelli Raices'])
+    expect(camp.recipients.find(r => r.lead_id === 'b')!.variables).toEqual(['Carlos', 'nuestras propiedades'])
+  })
+
+  it('si el historial o el catálogo fallan, el destinatario igual sale con texto genérico', async () => {
+    const deps = makeDeps({
+      leadsWithTags: vi.fn(async () => [
+        { lead: mkLead({ project_interest: 'Local Comercial excelente para negocio' }), tagIds: [], lastUserMessageAt: daysAgo(10) },
+      ]),
+      getConversationHistory: vi.fn(async () => { throw new Error('db down') }) as unknown as EngineDeps['getConversationHistory'],
+    })
+    await runRecontactRules(deps)
+    const camp = deps.created[0] as { recipients: { variables: string[] }[] }
+    expect(camp.recipients[0].variables).toEqual(['Carlos', 'nuestras propiedades'])
   })
 
   it('excluye opted_out, bot pausado, gap reciente y leads ya en campaña activa', async () => {

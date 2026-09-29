@@ -199,6 +199,10 @@ describe('resolveProject — catálogo real, sin palabras genéricas', () => {
     { slug: 'apartamento-de-lujo-colonia-escalon-en-venta-san-salvador-d813fb', name: 'Apartamento de lujo Colonia Escalón', type: 'Apartamento', entityType: 'residency' },
     { slug: 'foresta-townhomes-en-proyecto-zaragoza-040f45', name: 'Foresta Townhomes', type: 'Townhouses', entityType: 'project' },
     { slug: 'local-comercial-excelente-para-negocio-en-alquiler-san-salvador-ef8f5b', name: 'Local Comercial excelente para negocio', type: 'Local Comercial', entityType: 'residency' },
+    { slug: 'centro-de-operaciones-call-center-plug-play-de-hasta-130-estaciones-en-torre-cefinco-en-alquiler-san-salvador-aa1', name: 'Centro de Operaciones Call Center "Plug & Play" de hasta 130 Estaciones en Torre Cefinco', type: 'Oficina', entityType: 'residency' },
+    { slug: 'life-santa-elena-torre-ii-115-m-premium-en-nuevo-cuscatlan-bb2', name: 'Life Santa Elena Torre II · 115 m² premium en Nuevo Cuscatlán — rentado y con vista al bosque', type: 'Apartamento', entityType: 'residency' },
+    { slug: 'apartamento-panorama-tower-en-alquiler-san-salvador-e6e716', name: 'Apartamento Panorama Tower', type: 'Apartamento', entityType: 'residency' },
+    { slug: 'elegante-y-espaciosa-residencia-familiar-de-dos-niveles-en-venta-en-san-miguel-cc3', name: 'Elegante y Espaciosa Residencia Familiar de Dos Niveles en Venta en San Miguel', type: 'Casa', entityType: 'residency' },
     { slug: 'oficina-en-nuevo-cuscatlan-en-alquiler-la-libertad-ef9021', name: 'Oficina en Nuevo Cuscatlán', type: 'Oficina', entityType: 'residency' },
     { slug: 'portacelli-alba-fase-1-habitacional-en-proyecto-nuevo-cuscatlan-584516', name: 'Portacelli Alba - Fase 1 Habitacional', type: 'Townhouses', entityType: 'project' },
     { slug: 'portacelli-alta-fase-1-habitacional-en-proyecto-nuevo-cuscatlan-58448f', name: 'Portacelli Alta - Fase 1 Habitacional', type: 'Apartamentos', entityType: 'project' },
@@ -258,5 +262,28 @@ describe('resolveProject — catálogo real, sin palabras genéricas', () => {
   it('"alta" suelta (rentabilidad alta) no elige Portacelli Alta; con "portacelli" sí', () => {
     expect(nombre('busco una inversión con plusvalía alta')).toBeNull()
     expect(nombre('portacelli alta')).toBe('Portacelli Alta - Fase 1 Habitacional')
+  })
+
+  // Barrido del 29-sep sobre 6,622 mensajes reales de clientes: la misma clase
+  // de error que "para" ocurría con otras palabras sueltas del catálogo.
+  it('la nota de llamada de WhatsApp "Voice call" no es el Call Center (231 mensajes reales)', () => {
+    expect(nombre('Voice call, 35 sec')).toBeNull()
+    expect(nombre('Voice call, 9 min')).toBeNull()
+    expect(nombre('me interesa el call center de torre cefinco')).toBe(
+      'Centro de Operaciones Call Center "Plug & Play" de hasta 130 Estaciones en Torre Cefinco')
+  })
+
+  it('"bienes raíces", un nombre propio o "todo el panorama" no eligen un listing', () => {
+    expect(nombre('Ah no? es bienes raices? nada de cripto entonces?')).toBeNull()
+    expect(nombre('Ronald Miguel para servirte')).toBeNull()
+    expect(nombre('Te mando la cuenta a nombre de Carmen Elena Acevedo')).toBeNull()
+    expect(nombre('Ya cambia todo el panorama')).toBeNull()
+  })
+
+  it('las mismas palabras, dentro del nombre real del proyecto, sí resuelven', () => {
+    expect(nombre('portacelli raices')).toBe('Portacelli Raices - Fase 1 Habitacional')
+    expect(nombre('me interesa Life Santa Elena')).toBe(
+      'Life Santa Elena Torre II · 115 m² premium en Nuevo Cuscatlán — rentado y con vista al bosque')
+    expect(nombre('el apartamento panorama tower')).toBe('Apartamento Panorama Tower')
   })
 })

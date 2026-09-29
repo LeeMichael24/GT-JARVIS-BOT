@@ -1,7 +1,8 @@
 import * as data from '@/lib/proactive/data'
 import { getAllProjects } from '@/services/projects/gt-api'
 import { sendTemplate } from '@/services/whatsapp/client'
-import { saveConversation, updateLead } from '@/lib/supabase'
+import { saveConversation, updateLead, getConversationHistory } from '@/lib/supabase'
+import { temaDeConversacion } from '@/lib/recontact-topic'
 import { isLeadEligible, matchesRule, rankByStage } from '@/lib/proactive/eligibility'
 import { buildRecipientParams, renderTemplate } from '@/lib/proactive/render'
 import { matchLeadsToListing } from '@/lib/proactive/matching'
@@ -26,6 +27,7 @@ export interface EngineDeps {
   markRecipient: typeof data.markRecipient
   sendTemplate: typeof sendTemplate
   saveConversation: typeof saveConversation
+  getConversationHistory: typeof getConversationHistory
   updateLead: typeof updateLead
   now: () => number
 }
@@ -48,6 +50,7 @@ const realDeps: EngineDeps = {
   markRecipient: data.markRecipient,
   sendTemplate,
   saveConversation,
+  getConversationHistory,
   updateLead,
   now: () => Date.now(),
 }
@@ -85,6 +88,19 @@ export async function runRecontactRules(deps: EngineDeps = realDeps): Promise<{ 
     const chosen = rankByStage(candidates).slice(0, rule.max_per_run)
     if (chosen.length === 0) continue
 
+    // {{2}} = lo que de verdad se habló, NO lead.project_interest (puede estar
+    // mal fijado). Sin proyecto claro cae al genérico; un fallo de lectura no
+    // frena la campaña.
+    const catalogo = await deps.getAllProjects().catch(() => [] as GTProject[])
+    const paramsDe = async (lead: (typeof chosen)[number]): Promise<string[]> => {
+      let tema: string | null = null
+      try {
+        tema = temaDeConversacion(await deps.getConversationHistory(lead.id, 30), catalogo)
+      } catch { /* genérico */ }
+      return buildRecipientParams({ ...lead, project_interest: tema }, { variables: template.variables })
+    }
+    const paramsPorLead = new Map(await Promise.all(chosen.map(async l => [l.id, await paramsDe(l)] as const)))
+
     try {
       await deps.createCampaign({
         kind: 'recontact',
@@ -94,7 +110,7 @@ export async function runRecontactRules(deps: EngineDeps = realDeps): Promise<{ 
         template_id: template.id,
         recipients: chosen.map(lead => ({
           lead_id: lead.id,
-          variables: buildRecipientParams(lead, { variables: template.variables }),
+          variables: paramsPorLead.get(lead.id)!,
           match_reason: `Etapa ${lead.stage}`,
         })),
       })
