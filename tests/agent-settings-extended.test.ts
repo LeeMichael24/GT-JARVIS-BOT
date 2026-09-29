@@ -40,9 +40,18 @@ describe('agent settings — perillas nuevas (migración 012)', () => {
     expect((await getAgentSettings()).llm_model).toBe(DEFAULT_SETTINGS.llm_model)
   })
 
-  it('daily_budget_usd: default $5; acepta 0 (sin tope) y decimales; fuera de rango vuelve al default', async () => {
-    expect(DEFAULT_SETTINGS.daily_budget_usd).toBe(5)
-    for (const [valor, esperado] of [['0', 0], ['12.5', 12.5], ['5000', 5], ['-3', 5], ['abc', 5]] as const) {
+  it('monthly_budget_usd: default $20 (el presupuesto de la cuenta); 0 = sin tope; fuera de rango vuelve al default', async () => {
+    expect(DEFAULT_SETTINGS.monthly_budget_usd).toBe(20)
+    for (const [valor, esperado] of [['0', 0], ['35.5', 35.5], ['99999', 20], ['-3', 20], ['abc', 20]] as const) {
+      _clearSettingsCache()
+      db.rows = [{ key: 'monthly_budget_usd', value: valor }]
+      expect((await getAgentSettings()).monthly_budget_usd).toBe(esperado)
+    }
+  })
+
+  it('daily_budget_usd: default 0 (solo el ritmo del mes); acepta decimales; fuera de rango vuelve al default', async () => {
+    expect(DEFAULT_SETTINGS.daily_budget_usd).toBe(0)
+    for (const [valor, esperado] of [['0.5', 0.5], ['5000', 0], ['-3', 0], ['abc', 0]] as const) {
       _clearSettingsCache()
       db.rows = [{ key: 'daily_budget_usd', value: valor }]
       expect((await getAgentSettings()).daily_budget_usd).toBe(esperado)

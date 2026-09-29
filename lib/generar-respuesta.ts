@@ -4,7 +4,7 @@ import { callClaude, parseClaudeResponse } from '@/services/claude/client'
 import { revisarRespuesta, type Veredicto } from '@/lib/sales-critic'
 import { limpiarFrasesProhibidas } from '@/lib/reply-guard'
 import {
-  crearMedidor, estadoPresupuesto, avisarSiCorresponde, MODELO_TOPE, TOPE_DIARIO_USD_DEFAULT,
+  crearMedidor, estadoPresupuesto, avisarSiCorresponde, MODELO_TOPE, TOPE_MENSUAL_USD_DEFAULT,
   type Medidor, type NivelPresupuesto,
 } from '@/lib/llm-budget'
 import { sendText } from '@/services/whatsapp/client'
@@ -30,14 +30,14 @@ export interface DepsGenerar {
   llamarModelo: (system: string, history: Conversation[], opts: { temperature: number; model?: string }) => Promise<string>
   juez: (prompt: string, model?: string) => Promise<string>
   ahora: () => number
-  /** Nivel del tope de gasto diario. Opcional: sin él (tests, batería) todo queda como siempre. */
-  presupuesto?: (presupuestoUsd: number) => Promise<{ nivel: NivelPresupuesto; gastoUsd: number }>
+  /** Nivel del tope de gasto (mensual repartido por ritmo). Opcional: sin él (tests, batería) todo queda como siempre. */
+  presupuesto?: (cfg: { mensualUsd: number; diarioUsd: number }) => Promise<{ nivel: NivelPresupuesto }>
 }
 
 export interface ArgsGenerar {
   systemPrompt: string
   history: Conversation[]
-  settings: Pick<AgentSettings, 'llm_temperature' | 'sales_critic_enabled'> & Partial<Pick<AgentSettings, 'llm_model' | 'sales_critic_model' | 'daily_budget_usd'>>
+  settings: Pick<AgentSettings, 'llm_temperature' | 'sales_critic_enabled'> & Partial<Pick<AgentSettings, 'llm_model' | 'sales_critic_model' | 'daily_budget_usd' | 'monthly_budget_usd'>>
   mensajeCliente: string
   /** Momento en que llegó el mensaje del cliente (ms) — el presupuesto corre desde ahí */
   inicioMs: number
@@ -77,11 +77,14 @@ export function depsReales(medidor?: Medidor): DepsGenerar {
       { model: model ?? MODELO_JUEZ, temperature: 0, timeoutMs: /^o\d/.test(model ?? '') ? 20_000 : 8_000, medidor },
     ),
     ahora: () => Date.now(),
-    presupuesto: esEvaluacion ? undefined : async presupuestoUsd => {
-      const e = await estadoPresupuesto(presupuestoUsd)
+    presupuesto: esEvaluacion ? undefined : async cfg => {
+      const e = await estadoPresupuesto(cfg)
       const ceo = process.env.CEO_PHONE_NUMBER
       if (ceo) {
-        await avisarSiCorresponde(e.nivel, e.gastoUsd, presupuestoUsd, {
+        await avisarSiCorresponde(e.nivel, {
+          gastoHoyUsd: e.gastoUsd, permitidoHoyUsd: e.permitidoHoyUsd, gastoMesUsd: e.gastoMesUsd,
+          mensualUsd: e.mensualUsd, mensajesRestantes: e.mensajesRestantes,
+        }, {
           enviar: async texto => { await sendText(ceo, texto, { typingDelay: false }) },
         })
       }
@@ -108,7 +111,7 @@ export async function generarRespuesta(args: ArgsGenerar, depsInyectadas?: DepsG
   try {
     return await generar(args, depsInyectadas ?? depsReales(medidor ?? undefined))
   } finally {
-    if (medidor) await medidor.guardar().catch(() => {})
+    if (medidor) await medidor.guardar(new Date(), { mensaje: true }).catch(() => {})
   }
 }
 
@@ -120,7 +123,10 @@ async function generar(args: ArgsGenerar, deps: DepsGenerar): Promise<ResultadoG
   let nivel: NivelPresupuesto = 'normal'
   if (deps.presupuesto) {
     try {
-      nivel = (await deps.presupuesto(settings.daily_budget_usd ?? TOPE_DIARIO_USD_DEFAULT)).nivel
+      nivel = (await deps.presupuesto({
+        mensualUsd: settings.monthly_budget_usd ?? TOPE_MENSUAL_USD_DEFAULT,
+        diarioUsd: settings.daily_budget_usd ?? 0,
+      })).nivel
     } catch (err) {
       console.warn('[generar-respuesta] no se pudo leer el tope de gasto — sigo normal:', err instanceof Error ? err.message : err)
     }

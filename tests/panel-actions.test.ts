@@ -297,6 +297,8 @@ describe('ajustes vivos (agent_settings)', () => {
     expect(await saveAgentSettings({ daily_budget_usd: '-1' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
     expect(await saveAgentSettings({ daily_budget_usd: '5000' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
     expect(await saveAgentSettings({ daily_budget_usd: 'mucho' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
+    expect(await saveAgentSettings({ monthly_budget_usd: '-5' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
+    expect(await saveAgentSettings({ monthly_budget_usd: '20000' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
   })
 
   it('acepta un lote válido y upserta cada clave', async () => {
