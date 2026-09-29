@@ -75,11 +75,12 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   auto_promote_enabled: true,
   auto_promote_threshold: 3,
   sales_critic_enabled: true,
-  // Batería de ventas 29-sep-2026, mismo día y mismo juez (o4-mini): gpt-5.6-terra
-  // 9/12 (pasa el candado de 0.75, mediana 25.8 s) vs gpt-4.1 7/12 (no lo pasa,
-  // 29.4 s). Además su límite es 500K tokens/min contra 30K de gpt-4.1: se acaba
-  // el cuello de botella de capacidad. Antes: gpt-4.1 9/12 vs gpt-4o 3/12 (13-sep).
-  llm_model: 'gpt-5.6-terra',
+  // 29-sep-2026: se vuelve a gpt-4.1 por costo. Medido en la factura real de OpenAI:
+  // gpt-5.6-terra ~$0.044 por llamada (74% son "cache writes") vs gpt-4.1 ~$0.027;
+  // un mensaje de Daniela con crítico ≈ $0.078 vs ≈ $0.053. Terra sigue disponible
+  // en el panel (500K tokens/min contra 30K de gpt-4.1: conviene si el volumen de
+  // anuncios choca con el límite). Batería 29-sep: terra 9-11/12, gpt-4.1 7-11/12.
+  llm_model: 'gpt-4.1',
   sales_critic_model: 'o4-mini',
 }
 
