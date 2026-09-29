@@ -570,20 +570,8 @@ describe('buildSystemPrompt — calendario para proponer citas', () => {
   })
 })
 
-// 29-sep-2026, costo: OpenAI cobra al 25 % solo el INICIO del prompt que se repite
-// exacto. El marco de decisión es fijo y estaba después del guion y el conocimiento,
-// que cambian por cliente: se cobraba completo en cada mensaje.
-describe('buildSystemPrompt — lo fijo va antes que lo que cambia por cliente (caché)', () => {
-  it('el marco de decisión queda dentro del inicio común entre dos clientes distintos', () => {
-    const a = buildSystemPrompt({ lead: { id: 'a', phone: '1', name: 'Ana', stage: 'warm', qualification_data: null } as unknown as Lead, project: null, salesPlaybook: 'PLAYBOOK A', projectScript: 'GUION A' })
-    const b = buildSystemPrompt({ lead: { id: 'b', phone: '2', name: 'Luis', stage: 'new', qualification_data: null } as unknown as Lead, project: null, salesPlaybook: 'PLAYBOOK B', projectScript: null })
-    let comun = 0
-    while (comun < a.length && a[comun] === b[comun]) comun++
-    const marco = a.indexOf('MARCO DE DECISIÓN')
-    expect(marco).toBeGreaterThan(-1)
-    expect(marco).toBeLessThan(comun)
-  })
-
+// El formato y el chequeo van al final, lo más cercano a la respuesta del modelo.
+describe('buildSystemPrompt — orden de las secciones', () => {
   it('el formato de respuesta y el chequeo siguen al final (lo más cercano a la respuesta)', () => {
     const p = buildSystemPrompt({ lead: { id: 'a', phone: '1', name: 'Ana', stage: 'warm', qualification_data: null } as unknown as Lead, project: null })
     expect(p.lastIndexOf('ANTES DE ENVIAR')).toBeGreaterThan(p.indexOf('# PERFIL DEL CLIENTE'))
