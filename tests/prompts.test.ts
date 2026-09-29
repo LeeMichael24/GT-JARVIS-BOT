@@ -561,7 +561,7 @@ describe('prompt — piensa antes de escribir', () => {
 // días por su cuenta. Ahora el prompt trae el calendario ya resuelto.
 describe('buildSystemPrompt — calendario para proponer citas', () => {
   it('incluye hora actual, el calendario de los próximos días y el horario para proponer', () => {
-    const p = buildSystemPrompt({ lead: { id: 'l', phone: '503', name: 'Ana', stage: 'warm', qualification_data: null } as never })
+    const p = buildSystemPrompt({ lead: { id: 'l', phone: '503', name: 'Ana', stage: 'warm', qualification_data: null } as unknown as Lead, project: null })
     expect(p).toMatch(/Hora actual \(El Salvador\): \d{2}:\d{2}/)
     expect(p).toMatch(/Calendario/)
     expect(p).toMatch(/hoy \p{L}+ \d{1,2} de \p{L}+/u)
@@ -575,8 +575,8 @@ describe('buildSystemPrompt — calendario para proponer citas', () => {
 // que cambian por cliente: se cobraba completo en cada mensaje.
 describe('buildSystemPrompt — lo fijo va antes que lo que cambia por cliente (caché)', () => {
   it('el marco de decisión queda dentro del inicio común entre dos clientes distintos', () => {
-    const a = buildSystemPrompt({ lead: { id: 'a', phone: '1', name: 'Ana', stage: 'warm', qualification_data: null } as never, salesPlaybook: 'PLAYBOOK A', projectScript: 'GUION A' })
-    const b = buildSystemPrompt({ lead: { id: 'b', phone: '2', name: 'Luis', stage: 'new', qualification_data: null } as never, salesPlaybook: 'PLAYBOOK B', projectScript: null })
+    const a = buildSystemPrompt({ lead: { id: 'a', phone: '1', name: 'Ana', stage: 'warm', qualification_data: null } as unknown as Lead, project: null, salesPlaybook: 'PLAYBOOK A', projectScript: 'GUION A' })
+    const b = buildSystemPrompt({ lead: { id: 'b', phone: '2', name: 'Luis', stage: 'new', qualification_data: null } as unknown as Lead, project: null, salesPlaybook: 'PLAYBOOK B', projectScript: null })
     let comun = 0
     while (comun < a.length && a[comun] === b[comun]) comun++
     const marco = a.indexOf('MARCO DE DECISIÓN')
@@ -585,7 +585,7 @@ describe('buildSystemPrompt — lo fijo va antes que lo que cambia por cliente (
   })
 
   it('el formato de respuesta y el chequeo siguen al final (lo más cercano a la respuesta)', () => {
-    const p = buildSystemPrompt({ lead: { id: 'a', phone: '1', name: 'Ana', stage: 'warm', qualification_data: null } as never })
+    const p = buildSystemPrompt({ lead: { id: 'a', phone: '1', name: 'Ana', stage: 'warm', qualification_data: null } as unknown as Lead, project: null })
     expect(p.lastIndexOf('ANTES DE ENVIAR')).toBeGreaterThan(p.indexOf('# PERFIL DEL CLIENTE'))
   })
 })

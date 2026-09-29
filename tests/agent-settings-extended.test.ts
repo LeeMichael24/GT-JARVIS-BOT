@@ -63,6 +63,15 @@ describe('agent settings — perillas nuevas (migración 012)', () => {
     expect(await getAgentSettings()).toEqual(DEFAULT_SETTINGS)
   })
 
+  it('sales_critic_effort: default "default"; acepta low/medium; otro valor vuelve al default', async () => {
+    expect(DEFAULT_SETTINGS.sales_critic_effort).toBe('default')
+    for (const [valor, esperado] of [['low', 'low'], ['medium', 'medium'], ['high', 'default'], ['x', 'default']] as const) {
+      _clearSettingsCache()
+      db.rows = [{ key: 'sales_critic_effort', value: valor }]
+      expect((await getAgentSettings()).sales_critic_effort).toBe(esperado)
+    }
+  })
+
   it('agent_enabled=false pausa globalmente', async () => {
     db.rows = [{ key: 'agent_enabled', value: 'false' }]
     const s = await getAgentSettings()

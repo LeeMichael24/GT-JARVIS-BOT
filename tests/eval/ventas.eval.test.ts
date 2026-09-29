@@ -110,6 +110,7 @@ it.skipIf(!process.env.RUN_EVAL)('batería de venta', async () => {
     ...(await getAgentSettings()),
     ...(process.env.EVAL_LLM_MODEL ? { llm_model: process.env.EVAL_LLM_MODEL } : {}),
     ...(process.env.EVAL_CRITIC_MODEL ? { sales_critic_model: process.env.EVAL_CRITIC_MODEL } : {}),
+    ...(process.env.EVAL_CRITIC_EFFORT ? { sales_critic_effort: process.env.EVAL_CRITIC_EFFORT } : {}),
   } as AgentSettings
   const blocks = await getEffectivePromptBlocks()
   const projects = await getAllProjects()

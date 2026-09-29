@@ -28,7 +28,7 @@ export const MODELO_JUEZ = 'gpt-4.1-mini'
 
 export interface DepsGenerar {
   llamarModelo: (system: string, history: Conversation[], opts: { temperature: number; model?: string }) => Promise<string>
-  juez: (prompt: string, model?: string) => Promise<string>
+  juez: (prompt: string, model?: string, effort?: 'low' | 'medium') => Promise<string>
   ahora: () => number
   /** Nivel del tope de gasto (mensual repartido por ritmo). Opcional: sin él (tests, batería) todo queda como siempre. */
   presupuesto?: (cfg: { mensualUsd: number; diarioUsd: number }) => Promise<{ nivel: NivelPresupuesto }>
@@ -37,7 +37,7 @@ export interface DepsGenerar {
 export interface ArgsGenerar {
   systemPrompt: string
   history: Conversation[]
-  settings: Pick<AgentSettings, 'llm_temperature' | 'sales_critic_enabled'> & Partial<Pick<AgentSettings, 'llm_model' | 'sales_critic_model' | 'daily_budget_usd' | 'monthly_budget_usd'>>
+  settings: Pick<AgentSettings, 'llm_temperature' | 'sales_critic_enabled'> & Partial<Pick<AgentSettings, 'llm_model' | 'sales_critic_model' | 'sales_critic_effort' | 'daily_budget_usd' | 'monthly_budget_usd'>>
   mensajeCliente: string
   /** Momento en que llegó el mensaje del cliente (ms) — el presupuesto corre desde ahí */
   inicioMs: number
@@ -70,11 +70,11 @@ export function depsReales(medidor?: Medidor): DepsGenerar {
   const esEvaluacion = !!(process.env.RUN_EVAL || process.env.RUN_EVAL_VISUAL)
   return {
     llamarModelo: (system, history, opts) => callClaude(system, history, { ...opts, medidor }),
-    juez: (prompt, model) => callClaude(
+    juez: (prompt, model, effort) => callClaude(
       prompt,
       [{ id: 'juez', lead_id: 'juez', role: 'user', content: 'Evalúa la respuesta y devuelve el JSON.', wa_message_id: null, sent_by: null, created_at: new Date().toISOString() }],
       // o4-mini razona antes de responder: necesita más margen que el juez rápido
-      { model: model ?? MODELO_JUEZ, temperature: 0, timeoutMs: /^o\d/.test(model ?? '') ? 20_000 : 8_000, medidor },
+      { model: model ?? MODELO_JUEZ, temperature: 0, timeoutMs: /^o\d/.test(model ?? '') ? 20_000 : 8_000, medidor, reasoningEffort: effort },
     ),
     ahora: () => Date.now(),
     presupuesto: esEvaluacion ? undefined : async cfg => {
@@ -171,7 +171,7 @@ async function generar(args: ArgsGenerar, deps: DepsGenerar): Promise<ResultadoG
       extras: respuesta.extra_messages ?? [],
       plan: respuesta.plan ?? null,
       sendMedia: respuesta.send_media,
-    }, { juez: prompt => deps.juez(prompt, settings.sales_critic_model) })
+    }, { juez: prompt => deps.juez(prompt, settings.sales_critic_model, settings.sales_critic_effort === 'default' ? undefined : settings.sales_critic_effort) })
     revision.veredicto = v
     if (v.omitida) revision.motivoOmitida = v.omitida
 

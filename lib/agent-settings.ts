@@ -50,6 +50,8 @@ export interface AgentSettings {
   sales_critic_enabled: boolean
   /** Modelo que escribe las respuestas */
   llm_model: 'gpt-4o' | 'gpt-4.1' | 'gpt-5.6-terra'
+  /** Esfuerzo de razonamiento del crítico: 'low' gasta mucho menos en o4-mini. 'default' = el del modelo. */
+  sales_critic_effort: 'default' | 'low' | 'medium'
   /** Presupuesto MENSUAL de IA (USD). 0 = sin tope. Se reparte por ritmo (lo que queda entre los días que faltan). */
   monthly_budget_usd: number
   /** Tope diario adicional (USD): solo puede bajar el ritmo del mes. 0 = usar solo el ritmo. */
@@ -84,6 +86,7 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   // llamada (hasta ~33 % con el mismo caché), aunque escribe el doble, y mejor calidad.
   llm_model: 'gpt-4.1',
   sales_critic_model: 'o4-mini',
+  sales_critic_effort: 'default',
   monthly_budget_usd: 20,
   daily_budget_usd: 0,
 }
@@ -172,6 +175,9 @@ export async function getAgentSettings(): Promise<AgentSettings> {
             break
           case 'sales_critic_model':
             if (v === 'gpt-4.1-mini' || v === 'gpt-4.1' || v === 'o4-mini') settings.sales_critic_model = v
+            break
+          case 'sales_critic_effort':
+            if (v === 'default' || v === 'low' || v === 'medium') settings.sales_critic_effort = v
             break
           case 'monthly_budget_usd':
             settings.monthly_budget_usd = num(v, 0, 10_000, d.monthly_budget_usd)

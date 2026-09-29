@@ -26,6 +26,8 @@ export interface CallClaudeOptions {
   model?: string
   /** Tiempo máximo de la llamada; default 30 s */
   timeoutMs?: number
+  /** Esfuerzo de razonamiento (solo modelos que razonan: o-series, gpt-5.x). Sin él, el del modelo. */
+  reasoningEffort?: 'low' | 'medium'
   /** Acumula el costo de varias llamadas de un mismo mensaje (tope de gasto diario). Sin él, cada llamada se registra sola. */
   medidor?: Medidor
 }
@@ -55,7 +57,7 @@ export async function callClaude(
   const response = await openai.chat.completions.create({
     model: modelo,
     ...(esRazonamiento
-      ? { max_completion_tokens: MAX_TOKENS_RAZONAMIENTO }
+      ? { max_completion_tokens: MAX_TOKENS_RAZONAMIENTO, ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}) }
       : { max_tokens: MAX_TOKENS, temperature: opts.temperature ?? 0.85 }),
     messages,
     response_format: { type: 'json_object' },

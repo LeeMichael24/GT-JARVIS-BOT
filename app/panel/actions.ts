@@ -583,6 +583,7 @@ const SETTINGS_WHITELIST: Record<string, (v: string) => boolean> = {
   sales_critic_enabled: v => ['true', 'false'].includes(v),
   llm_model: v => ['gpt-4o', 'gpt-4.1', 'gpt-5.6-terra'].includes(v),
   sales_critic_model: v => ['gpt-4.1-mini', 'gpt-4.1', 'o4-mini'].includes(v),
+  sales_critic_effort: v => ['default', 'low', 'medium'].includes(v),
   monthly_budget_usd: inRange(0, 10_000),
   daily_budget_usd: inRange(0, 1_000),
   agent_enabled: v => ['true', 'false'].includes(v),

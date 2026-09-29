@@ -40,6 +40,11 @@ const OPTION_LABELS: Record<string, { value: string; label: string; hint: string
     { value: 'gpt-4.1', label: 'Estricto', hint: 'gpt-4.1: juzga mejor; comparte el límite de tokens por minuto si GPT-4.1 también responde' },
     { value: 'o4-mini', label: 'Razonador', hint: 'o4-mini: razona antes de juzgar y tiene su propio límite de tokens; tarda un poco más' },
   ],
+  sales_critic_effort: [
+    { value: 'default', label: 'Normal', hint: 'El juez razona a fondo antes de decidir: el más preciso y el más caro' },
+    { value: 'low', label: 'Económico', hint: 'Razona menos: gasta mucho menos en el juez; puede ser algo menos preciso' },
+    { value: 'medium', label: 'Intermedio', hint: 'Punto medio entre costo y precisión' },
+  ],
   sales_critic_enabled: [
     { value: 'true', label: 'Encendida', hint: 'Un juez revisa cada respuesta antes de enviarla y reescribe las que salen vagas o literales. Suma unos segundos.' },
     { value: 'false', label: 'Apagada', hint: 'Responde sin revisión: más rápido, pero sin el control de calidad de venta' },
@@ -68,6 +73,7 @@ const SETTING_TITLES: Record<string, string> = {
   sales_critic_enabled: 'Revisión automática de venta',
   llm_model: 'Modelo que responde',
   sales_critic_model: 'Modelo del juez de la revisión',
+  sales_critic_effort: 'Esfuerzo del juez (costo)',
   monthly_budget_usd: 'Presupuesto mensual de IA (USD, 0 = sin tope)',
   daily_budget_usd: 'Tope diario extra (USD, 0 = solo el ritmo del mes)',
 }
@@ -92,7 +98,7 @@ const SECTIONS: { title: string; hint: string; keys: string[] }[] = [
   {
     title: 'Motor (avanzado)',
     hint: 'Perillas finas del modelo — cambiar solo si sabes lo que haces.',
-    keys: ['monthly_budget_usd', 'daily_budget_usd', 'llm_model', 'sales_critic_model', 'llm_temperature', 'reflection_temperature', 'history_window'],
+    keys: ['monthly_budget_usd', 'daily_budget_usd', 'llm_model', 'sales_critic_model', 'sales_critic_effort', 'llm_temperature', 'reflection_temperature', 'history_window'],
   },
 ]
 

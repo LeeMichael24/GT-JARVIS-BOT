@@ -172,3 +172,14 @@ describe('generarRespuesta — tope de gasto diario', () => {
   })
 })
 
+describe('generarRespuesta — esfuerzo del crítico', () => {
+  it('pasa sales_critic_effort al juez; sin ajuste, esfuerzo por defecto', async () => {
+    const { deps } = armar([json({ reply: 'Respuesta.' })])
+    await generarRespuesta(args({ settings: { ...settings, sales_critic_model: 'o4-mini', sales_critic_effort: 'low' } }), deps)
+    expect(deps.juez).toHaveBeenCalledWith(expect.any(String), 'o4-mini', 'low')
+    const otra = armar([json({ reply: 'Respuesta.' })])
+    await generarRespuesta(args({ settings: { ...settings, sales_critic_model: 'o4-mini' } }), otra.deps)
+    expect(otra.deps.juez).toHaveBeenCalledWith(expect.any(String), 'o4-mini', undefined)
+  })
+})
+

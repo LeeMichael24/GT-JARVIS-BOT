@@ -202,4 +202,19 @@ describe('callClaude — parámetros según el modelo', () => {
     expect(p).not.toHaveProperty('temperature')
     expect(p.response_format).toEqual({ type: 'json_object' })
   })
+
+  // 29-sep-2026, costo: el crítico (o4-mini) gasta la mayor parte en razonamiento.
+  it('esfuerzo de razonamiento: se manda solo a modelos que razonan', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test'
+    openaiSpy.create.mockClear()
+    await callClaude('system', [], { model: 'o4-mini', reasoningEffort: 'low' })
+    expect((openaiSpy.create.mock.calls[0] as unknown as [Record<string, unknown>])[0].reasoning_effort).toBe('low')
+    openaiSpy.create.mockClear()
+    await callClaude('system', [], { model: 'gpt-4.1', reasoningEffort: 'low' })
+    expect((openaiSpy.create.mock.calls[0] as unknown as [Record<string, unknown>])[0]).not.toHaveProperty('reasoning_effort')
+    openaiSpy.create.mockClear()
+    await callClaude('system', [], { model: 'o4-mini' })
+    expect((openaiSpy.create.mock.calls[0] as unknown as [Record<string, unknown>])[0]).not.toHaveProperty('reasoning_effort')
+  })
 })
+
