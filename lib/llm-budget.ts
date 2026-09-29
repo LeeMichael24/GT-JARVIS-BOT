@@ -74,10 +74,12 @@ export const UMBRAL_TOPE = 2
 export const TOPE_MENSUAL_USD_DEFAULT = 20
 
 /**
- * Costo estimado de un mensaje de Daniela (gpt-4.1 + crítico + ~45 % de reescrituras,
- * medido en la factura del 29-sep) mientras no haya 10 mensajes reales medidos en el mes.
+ * Costo estimado de un mensaje de Daniela mientras no haya 10 mensajes reales medidos
+ * en el mes. Con gpt-4o (tarifa pública, sin caché) + crítico + ~45 % de reescrituras:
+ * ~$0.08. Con gpt-4.1 medido en la factura del 29-sep serían ~$0.053. Se prefiere el
+ * estimado prudente: el conteo real lo corrige a los 10 mensajes.
  */
-export const COSTO_MENSAJE_ESTIMADO_USD = 0.053
+export const COSTO_MENSAJE_ESTIMADO_USD = 0.08
 const MENSAJES_PARA_MEDIR = 10
 
 /** Modelo con el que Daniela sigue respondiendo cuando se pasa el doble de lo permitido. */

@@ -79,12 +79,11 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   auto_promote_enabled: true,
   auto_promote_threshold: 3,
   sales_critic_enabled: true,
-  // 29-sep-2026: se vuelve a gpt-4.1 por costo. Medido en la factura real de OpenAI:
-  // gpt-5.6-terra ~$0.044 por llamada (74% son "cache writes") vs gpt-4.1 ~$0.027;
-  // un mensaje de Daniela con crítico ≈ $0.078 vs ≈ $0.053. Terra sigue disponible
-  // en el panel (500K tokens/min contra 30K de gpt-4.1: conviene si el volumen de
-  // anuncios choca con el límite). Batería 29-sep: terra 9-11/12, gpt-4.1 7-11/12.
-  llm_model: 'gpt-4.1',
+  // 29-sep-2026: por decisión de Mike se vuelve al modelo original, gpt-4o. Ojo: por
+  // token cuesta ~25 % más que gpt-4.1 ($2.50/$10 vs $2.00/$8 por millón) y en la
+  // batería del 13-sep sacó 3-4/12 contra 5-9/12 de gpt-4.1 (con el prompt de entonces).
+  // Terra y gpt-4.1 siguen disponibles en el panel.
+  llm_model: 'gpt-4o',
   sales_critic_model: 'o4-mini',
   monthly_budget_usd: 20,
   daily_budget_usd: 0,
