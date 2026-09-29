@@ -198,6 +198,7 @@ describe('resolveProject — catálogo real, sin palabras genéricas', () => {
     { slug: 'apartamento-con-vista-escalon-en-venta-san-salvador-d8131f', name: 'Apartamento Con Vista Escalón', type: 'Apartamento', entityType: 'residency' },
     { slug: 'apartamento-de-lujo-colonia-escalon-en-venta-san-salvador-d813fb', name: 'Apartamento de lujo Colonia Escalón', type: 'Apartamento', entityType: 'residency' },
     { slug: 'foresta-townhomes-en-proyecto-zaragoza-040f45', name: 'Foresta Townhomes', type: 'Townhouses', entityType: 'project' },
+    { slug: 'local-comercial-excelente-para-negocio-en-alquiler-san-salvador-ef8f5b', name: 'Local Comercial excelente para negocio', type: 'Local Comercial', entityType: 'residency' },
     { slug: 'oficina-en-nuevo-cuscatlan-en-alquiler-la-libertad-ef9021', name: 'Oficina en Nuevo Cuscatlán', type: 'Oficina', entityType: 'residency' },
     { slug: 'portacelli-alba-fase-1-habitacional-en-proyecto-nuevo-cuscatlan-584516', name: 'Portacelli Alba - Fase 1 Habitacional', type: 'Townhouses', entityType: 'project' },
     { slug: 'portacelli-alta-fase-1-habitacional-en-proyecto-nuevo-cuscatlan-58448f', name: 'Portacelli Alta - Fase 1 Habitacional', type: 'Apartamentos', entityType: 'project' },
@@ -238,5 +239,24 @@ describe('resolveProject — catálogo real, sin palabras genéricas', () => {
 
   it('empate entre dos listings distintos (dos apartamentos en Escalón) no adivina', () => {
     expect(nombre('busco apartamento en escalón')).toBeNull()
+  })
+
+  // 29-sep-2026: "para" era la ÚNICA palabra distintiva de "Local Comercial
+  // excelente para negocio" (las otras son genéricas), así que cualquier
+  // mensaje con "para" fijaba ese local como interés del lead.
+  it('palabras de uso común ("para") no identifican un listing: mensajes reales del lead 31204ec5', () => {
+    expect(nombre('Para ambas')).toBeNull()
+    expect(nombre('Para inversion y vivienda')).toBeNull()
+    expect(nombre('Pero serían varias propiedades para inversión')).toBeNull()
+    expect(nombre('Ay $100,000+ es demasiado para mi, yo gano salario minimo')).toBeNull()
+  })
+
+  it('el local comercial sigue resolviendo cuando se pide por su nombre completo', () => {
+    expect(nombre('Local Comercial excelente para negocio')).toBe('Local Comercial excelente para negocio')
+  })
+
+  it('"alta" suelta (rentabilidad alta) no elige Portacelli Alta; con "portacelli" sí', () => {
+    expect(nombre('busco una inversión con plusvalía alta')).toBeNull()
+    expect(nombre('portacelli alta')).toBe('Portacelli Alta - Fase 1 Habitacional')
   })
 })

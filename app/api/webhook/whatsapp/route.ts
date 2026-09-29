@@ -23,7 +23,7 @@ import {
   upsertDealSummary,
 } from '@/lib/supabase'
 import { calculateAdaptiveDebounce, computeBurstPattern } from '@/lib/debounce'
-import { createSequence, pauseLeadSequences, cancelSequencesForLead } from '@/lib/sequences'
+import { createSequence, pauseLeadSequences, cancelSequencesForLead, pickHoraActiva } from '@/lib/sequences'
 import { saveBrainObservations, getHighConfidenceLearnings, formatLearningsForPrompt } from '@/lib/agent-brain'
 import { saveLeadSource, getLeadSource, getActiveAdCampaigns, matchAdCampaign, formatSourceContextForPrompt, formatActiveAdsForPrompt } from '@/lib/lead-sources'
 import { logActivity } from '@/lib/activity-log'
@@ -613,11 +613,14 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
         const seqType = effectiveStage === 'hot' ? 'hot_close' as const
           : effectiveStage === 'cold' ? 'cold_reactivation' as const
           : 'post_conversation' as const
+        const activeHourSV = pickHoraActiva(
+          history.filter(m => m.role === 'user').map(m => m.created_at),
+        )
         await createSequence(lead.id, seqType, {
           summary: claudeResponse.deal_summary?.summary ?? claudeResponse.reply.slice(0, 200),
           hint: action.follow_up_hint,
           project: project?.name ?? lead.project_interest,
-        })
+        }, activeHourSV)
         console.log(`[processMessage] Created ${seqType} sequence for lead ${lead.id}`)
       } catch (err) {
         console.warn('[processMessage] Failed to create sequence:', err instanceof Error ? err.message : err)

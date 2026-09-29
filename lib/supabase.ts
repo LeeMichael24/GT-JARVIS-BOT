@@ -125,6 +125,20 @@ export async function getLeadById(id: string): Promise<Lead | null> {
   return (data as Lead) ?? null
 }
 
+/** Timestamps de los mensajes del lead, para aprender a qué hora suele escribir. */
+export async function getUserMessageHours(leadId: string, limit = 50): Promise<string[]> {
+  const supabase = getServiceClient()
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('created_at')
+    .eq('lead_id', leadId)
+    .eq('role', 'user')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(`getUserMessageHours: ${error.message}`)
+  return ((data as { created_at: string }[]) ?? []).map(r => r.created_at)
+}
+
 export async function getLatestUserMessageAt(leadId: string): Promise<string | null> {
   const supabase = getServiceClient()
   const { data, error } = await supabase

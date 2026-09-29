@@ -1,4 +1,4 @@
-import { getServiceClient } from '@/lib/supabase'
+import { getServiceClient, getUserMessageHours } from '@/lib/supabase'
 import type { Sequence, SequenceType } from '@/types'
 
 export interface SequenceStepDef {
@@ -62,6 +62,37 @@ export const SEQUENCE_DEFINITIONS: Record<SequenceType, SequenceDef> = {
  * para siempre. Recibe `cold_reactivation`, cuyo primer toque cae a 30 días,
  * así que reactivar no significa insistir mañana.
  */
+/** Días que un lead escalado al CEO queda fuera de los seguimientos automáticos */
+const DIAS_ESCALACION_ACTIVA = 14
+
+/**
+ * ¿Escaló Daniela a este lead al CEO hace poco? Es la zona de cierre: la
+ * decisión del 10-sep es que ahí Daniela pasa al humano y no sigue sola. Sin
+ * esto, el lead que pidió 5 casas recibía seguimientos automáticos mientras
+ * esperaba a Michael. Ante un error de lectura se devuelve true (no enviar):
+ * un seguimiento de menos cuesta mucho menos que uno a un lead en manos del CEO.
+ */
+export async function tieneEscalacionCeoReciente(leadId: string, now = new Date()): Promise<boolean> {
+  try {
+    const desde = new Date(now.getTime() - DIAS_ESCALACION_ACTIVA * 24 * 60 * 60 * 1000).toISOString()
+    const { data, error } = await getServiceClient()
+      .from('activity_log')
+      .select('id')
+      .eq('entity_id', leadId)
+      .eq('action', 'escalate_ceo')
+      .gte('created_at', desde)
+      .limit(1)
+    if (error) {
+      console.warn('[sequences] no se pudo leer escalaciones de', leadId, error.message)
+      return true
+    }
+    return (data ?? []).length > 0
+  } catch (err) {
+    console.warn('[sequences] escalaciones sin cliente de BD:', err instanceof Error ? err.message : err)
+    return true
+  }
+}
+
 export async function ensureFollowUpsForSilentLeads(now: Date): Promise<number> {
   // Fail-safe integral: sin cliente de BD (env incompleto) la red degrada a 0
   // creadas en vez de marcar en error todo el cron diario.
@@ -98,7 +129,15 @@ export async function ensureFollowUpsForSilentLeads(now: Date): Promise<number> 
         l.stage === 'hot' ? ('hot_close' as const)
         : l.stage === 'cold' ? ('cold_reactivation' as const)
         : ('post_conversation' as const)
-      await createSequence(l.id, tipo, { origin: 'safety_net_daily' })
+      // Aprende la hora del lead si hay señal; si falla la lectura no se
+      // pierde la secuencia — cae al plazo fijo de siempre (null).
+      let activeHourSV: number | null = null
+      try {
+        activeHourSV = pickHoraActiva(await getUserMessageHours(l.id))
+      } catch (err) {
+        console.warn('[sequences] no se pudo leer el historial de', l.id, err instanceof Error ? err.message : err)
+      }
+      await createSequence(l.id, tipo, { origin: 'safety_net_daily' }, activeHourSV)
       creadas++
     } catch (err) {
       console.warn('[sequences] ensureFollowUps falló para', l.id, err instanceof Error ? err.message : err)
@@ -127,19 +166,75 @@ export function isWithinBusinessHours(date: Date, startHour = 8, endHour = 18): 
   return svHour >= startHour && svHour < endHour
 }
 
-export function getNextFireAt(from: Date, delayHours: number): string {
-  return new Date(from.getTime() + delayHours * 60 * 60 * 1000).toISOString()
+/** Mínimo de mensajes del lead para confiar en su patrón de horario — con
+ *  menos, cualquier "hora favorita" sería ruido de una sola conversación. */
+const MIN_MENSAJES_PARA_APRENDER = 5
+
+/**
+ * Aprende la hora local (El Salvador) en la que el lead más suele escribir,
+ * a partir de sus propios mensajes. `null` si aún no hay señal suficiente —
+ * el caller cae de vuelta al comportamiento de siempre (hora fija por plazo).
+ */
+export function pickHoraActiva(
+  timestamps: string[],
+  minMensajes = MIN_MENSAJES_PARA_APRENDER,
+): number | null {
+  if (timestamps.length < minMensajes) return null
+  const conteo = new Array(24).fill(0)
+  for (const ts of timestamps) {
+    const utcHour = new Date(ts).getUTCHours()
+    conteo[(utcHour + 24 + SV_OFFSET_HOURS) % 24]++
+  }
+  let mejor = 0
+  for (let h = 1; h < 24; h++) if (conteo[h] > conteo[mejor]) mejor = h
+  return mejor
+}
+
+/**
+ * Plazo fijo (delay_hours) + hora aprendida del lead: llega el día que manda
+ * la cadencia, pero a la hora en que ese lead realmente suele estar en el
+ * teléfono, en vez de la hora mecánica en que corrió el cron anterior.
+ * Acotada al horario laboral — fuera de él el cron completo no envía nada
+ * (isWithinBusinessHours), así que una hora aprendida fuera de rango solo
+ * pospondría el envío sin motivo.
+ * Sin `activeHourSV` (lead nuevo, sin señal) se comporta exactamente igual
+ * que antes: from + delayHours, sin tocar la hora.
+ */
+export function getNextFireAt(
+  from: Date,
+  delayHours: number,
+  activeHourSV?: number | null,
+  startHour = 8,
+  endHour = 18,
+): string {
+  const base = new Date(from.getTime() + delayHours * 60 * 60 * 1000)
+  if (activeHourSV == null) return base.toISOString()
+
+  const horaAcotada = Math.min(Math.max(Math.trunc(activeHourSV), startHour), endHour - 1)
+  // Se opera en reloj de pared de El Salvador: restar el offset deja la
+  // fecha/hora civil en los campos UTC del Date, fáciles de recomponer.
+  const svBase = new Date(base.getTime() + SV_OFFSET_HOURS * 60 * 60 * 1000)
+  let svTarget = new Date(Date.UTC(
+    svBase.getUTCFullYear(), svBase.getUTCMonth(), svBase.getUTCDate(), horaAcotada, 0, 0, 0,
+  ))
+  // Si la hora activa de ese día calendario ya pasó, cae al día siguiente —
+  // nunca dispara más temprano de lo que pedía la cadencia (from + delayHours).
+  if (svTarget.getTime() < svBase.getTime()) {
+    svTarget = new Date(svTarget.getTime() + 24 * 60 * 60 * 1000)
+  }
+  return new Date(svTarget.getTime() - SV_OFFSET_HOURS * 60 * 60 * 1000).toISOString()
 }
 
 export async function createSequence(
   leadId: string,
   type: SequenceType,
   context: Record<string, unknown>,
+  activeHourSV?: number | null,
 ): Promise<void> {
   const def = SEQUENCE_DEFINITIONS[type]
   if (!def) return
   const supabase = getServiceClient()
-  const nextFire = getNextFireAt(new Date(), def.steps[0].delay_hours)
+  const nextFire = getNextFireAt(new Date(), def.steps[0].delay_hours, activeHourSV)
   const { error } = await supabase
     .from('sequences')
     .upsert({
@@ -196,6 +291,7 @@ export async function advanceSequence(
   id: string,
   sequenceType: SequenceType,
   currentStep: number,
+  activeHourSV?: number | null,
 ): Promise<'advanced' | 'completed'> {
   const def = SEQUENCE_DEFINITIONS[sequenceType]
   const nextStep = currentStep + 1
@@ -209,7 +305,7 @@ export async function advanceSequence(
     return 'completed'
   }
 
-  const nextFire = getNextFireAt(new Date(), def.steps[nextStep].delay_hours)
+  const nextFire = getNextFireAt(new Date(), def.steps[nextStep].delay_hours, activeHourSV)
   await supabase
     .from('sequences')
     .update({

@@ -31,6 +31,7 @@ import {
   isWithinBusinessHours,
   cancelSequencesForLead,
   ensureFollowUpsForSilentLeads,
+  pickHoraActiva,
 } from '@/lib/sequences'
 
 describe('sequence definitions', () => {
@@ -65,6 +66,53 @@ describe('getNextFireAt', () => {
     const now = new Date('2026-06-27T10:00:00-06:00')
     const result = getNextFireAt(now, 24)
     expect(new Date(result).getTime()).toBe(now.getTime() + 24 * 60 * 60 * 1000)
+  })
+
+  it('sin hora activa (lead nuevo, sin señal) no toca la hora — mismo comportamiento de siempre', () => {
+    const now = new Date('2026-06-27T10:00:00-06:00')
+    expect(getNextFireAt(now, 24, null)).toBe(getNextFireAt(now, 24))
+  })
+
+  it('con hora activa aprendida, aterriza ese día a esa hora (El Salvador)', () => {
+    // 2026-06-27 10:00 SV + 24h = 2026-06-28 10:00 SV. El lead suele escribir a las 15h SV.
+    const now = new Date('2026-06-27T16:00:00.000Z') // 10:00 SV
+    const result = new Date(getNextFireAt(now, 24, 15))
+    expect(result.toISOString()).toBe('2026-06-28T21:00:00.000Z') // 2026-06-28 15:00 SV
+  })
+
+  it('nunca dispara más temprano que el plazo pedido (delay_hours)', () => {
+    // Si la hora activa ya pasó ese día calendario SV, se mueve al día siguiente
+    const now = new Date('2026-06-27T16:00:00.000Z') // 10:00 SV, destino 2026-06-28 10:00 SV
+    const result = new Date(getNextFireAt(now, 24, 7)) // hora activa 7am ya pasó para ese día
+    const base = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+    expect(result.getTime()).toBeGreaterThanOrEqual(base.getTime())
+  })
+
+  it('acota la hora activa al horario laboral (8-18) para no perderse la ventana de negocio', () => {
+    const now = new Date('2026-06-27T16:00:00.000Z') // 10:00 SV
+    const result = new Date(getNextFireAt(now, 24, 23)) // el lead suele escribir de noche
+    // 23h queda fuera de [8,18) → se acota a 17h (endHour-1)
+    expect(result.toISOString()).toBe('2026-06-28T23:00:00.000Z') // 2026-06-28 17:00 SV
+  })
+})
+
+describe('pickHoraActiva — aprende la hora en que el lead suele escribir', () => {
+  it('sin suficientes mensajes (< mínimo), no arriesga una hora: devuelve null', () => {
+    const pocos = ['2026-06-01T20:00:00Z', '2026-06-02T20:00:00Z']
+    expect(pickHoraActiva(pocos)).toBeNull()
+  })
+
+  it('con señal suficiente, devuelve la hora (SV) más frecuente', () => {
+    // Todas a las 20:00 UTC = 14:00 SV, salvo una distinta
+    const horas = [
+      '2026-06-01T20:00:00Z', '2026-06-02T20:00:00Z', '2026-06-03T20:00:00Z',
+      '2026-06-04T20:00:00Z', '2026-06-05T13:00:00Z',
+    ]
+    expect(pickHoraActiva(horas)).toBe(14)
+  })
+
+  it('lista vacía devuelve null sin lanzar', () => {
+    expect(pickHoraActiva([])).toBeNull()
   })
 })
 

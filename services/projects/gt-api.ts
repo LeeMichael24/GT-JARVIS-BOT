@@ -83,6 +83,25 @@ const GENERIC_WORDS = new Set([
 ])
 
 /**
+ * Palabras de uso corriente en español que pueden colarse en el nombre de un
+ * listing ("Local Comercial excelente PARA negocio") sin identificarlo. Con
+ * ellas contando, cualquier "para ambas" del cliente fijaba ese local como su
+ * interés (29-sep-2026, lead 31204ec5).
+ */
+const STOP_WORDS = new Set([
+  'para', 'pero', 'como', 'desde', 'hacia', 'entre', 'sobre', 'esta', 'este', 'esto', 'estos',
+  'estas', 'donde', 'cuando', 'porque', 'tiene', 'tienen', 'tengo', 'quiero', 'busco', 'ando',
+  'unas', 'unos', 'todo', 'toda', 'todos', 'todas', 'mismo', 'misma', 'otra', 'otro', 'otras', 'otros',
+])
+
+/**
+ * Palabras del nombre que son español común aunque distingan un listing
+ * ("Portacelli ALTA"): sola no identifica nada ("plusvalía alta"); solo vale
+ * junto a otra palabra distintiva del mismo nombre ("portacelli alta").
+ */
+const WEAK_WORDS = new Set(['alta'])
+
+/**
  * Pistas de tipología: desempatan entre listings de una misma familia.
  * "apartamentos Portacelli" → Alta (Apartamentos), no Alba (Townhouses).
  */
@@ -124,9 +143,13 @@ export function resolveProject(message: string, projects: GTProject[]): ProjectR
     if (p.slug && msg.includes(p.slug.replace(/-/g, ' '))) return { p, score: 900 }
 
     // 2. Palabras distintivas del nombre (≥4 letras, no genéricas), tolerando plural
-    const distintivas = Array.from(tokens(normName)).filter(w => w.length >= 4 && !GENERIC_WORDS.has(w))
-    const hits = distintivas.filter(w => msgWords.has(w) || msgWords.has(w + 's') || msgWords.has(w + 'es')).length
+    const distintivas = Array.from(tokens(normName))
+      .filter(w => w.length >= 4 && !GENERIC_WORDS.has(w) && !STOP_WORDS.has(w))
+    const hitWords = distintivas.filter(w => msgWords.has(w) || msgWords.has(w + 's') || msgWords.has(w + 'es'))
+    const hits = hitWords.length
     if (hits === 0) return { p, score: 0 }
+    // Una palabra débil sola no basta
+    if (hits === 1 && WEAK_WORDS.has(hitWords[0])) return { p, score: 0 }
 
     // 3. La tipología mencionada desempata
     const tipo = normalise(p.type ?? '')

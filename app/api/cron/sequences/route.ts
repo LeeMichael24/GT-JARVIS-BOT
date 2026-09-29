@@ -4,11 +4,16 @@ import {
   advanceSequence,
   SEQUENCE_DEFINITIONS,
   isWithinBusinessHours,
+  pickHoraActiva,
+  tieneEscalacionCeoReciente,
 } from '@/lib/sequences'
+import { temaDeConversacion } from '@/lib/recontact-topic'
+import { getAllProjects } from '@/services/projects/gt-api'
 import {
   getLeadById,
   getDealSummary,
   getLatestUserMessageAt,
+  getConversationHistory,
   saveConversation,
   updateLead,
 } from '@/lib/supabase'
@@ -84,6 +89,12 @@ export async function GET(request: Request): Promise<Response> {
         }
       }
 
+      // Zona de cierre: un lead escalado al CEO espera a un humano, no a un bot
+      if (await tieneEscalacionCeoReciente(seq.lead_id, now)) {
+        skipped++
+        continue
+      }
+
       const def = SEQUENCE_DEFINITIONS[seq.sequence_type as SequenceType]
       const step = def?.steps[seq.current_step]
       if (!step) {
@@ -97,6 +108,17 @@ export async function GET(request: Request): Promise<Response> {
         skipped++
         continue
       }
+
+      // Historial real de la charla: sin esto el modelo no sabe qué pidió el
+      // cliente y el seguimiento sale genérico o de otro tema. Antes se
+      // mandaba [] a callClaude — el bug de "recontacto sin contexto".
+      const history = await getConversationHistory(seq.lead_id, settings.history_window)
+
+      // Tema del recontacto = lo que de verdad se habló. NO lead.project_interest:
+      // es un campo que puede quedar mal fijado (lead 31204ec5, 29-sep-2026).
+      const proyectos = await getAllProjects().catch(() => [])
+      const temaVerificado = temaDeConversacion(history, proyectos)
+      const proyectoDelContexto = (seq.context as Record<string, string>).project ?? temaVerificado
 
       // Ventana de 24h de Meta: fuera de ella el texto libre es RECHAZADO
       // (error 131047). Fuera de ventana la ÚNICA vía legal es una plantilla
@@ -117,9 +139,7 @@ export async function GET(request: Request): Promise<Response> {
           blockedMissingTemplate++
           continue
         }
-        const topic = (seq.context as Record<string, string>).project
-          ?? lead.project_interest
-          ?? 'tu consulta con Grupo Terranova'
+        const topic = proyectoDelContexto ?? 'tu consulta con Grupo Terranova'
         // {{1}}=saludo: nombre real, o "de nuevo" → plantilla lee "Hola de nuevo 😊"
         let tplWaId: string | null
         try {
@@ -152,14 +172,17 @@ export async function GET(request: Request): Promise<Response> {
         deal?.summary ??
         (seq.context as Record<string, string>).summary ??
         ''
+      const projectInterest = proyectoDelContexto
 
       // Ask for JSON with a "message" field so callClaude (which forces JSON mode) works
-      const followUpPrompt = `Genera un mensaje de seguimiento de WhatsApp para ${lead.name ?? 'el cliente'}.
-Contexto del deal: ${dealContext}
+      const followUpPrompt = `Eres Daniela, de Grupo Terranova. Arriba tienes la conversación real que ya tuviste con ${lead.name ?? 'este cliente'} — LÉELA antes de escribir: el seguimiento debe retomar lo último que el cliente preguntó o dijo, nunca un tema aparte o genérico.
+${dealContext ? `Resumen del caso: ${dealContext}` : ''}
+${projectInterest ? `Proyecto de interés: ${projectInterest}` : ''}
 Propósito de este seguimiento: ${step.purpose}
 Paso ${seq.current_step + 1} de ${def.steps.length} (${step.purpose === 'last_chance' ? 'último intento' : 'seguimiento normal'}).
 
 Reglas:
+- Conecta con el hilo real de la conversación de arriba, nunca con un tema distinto
 - Máximo 400 caracteres
 - Tono cálido y natural, como si fueras Daniela de Grupo Terranova
 - No presiones. Sé útil y genuina.
@@ -168,7 +191,7 @@ Reglas:
 - Responde SOLO con un JSON: {"message": "<el texto del mensaje aquí>"}`
 
       // 20 s por intento: con el reintento del SDK, un cliente no se come la corrida
-      const rawReply = await callClaude(followUpPrompt, [], { timeoutMs: 20_000 })
+      const rawReply = await callClaude(followUpPrompt, history, { timeoutMs: 20_000 })
 
       // Extract message from JSON response
       let reply: string
@@ -193,7 +216,12 @@ Reglas:
         waMessageId: waMessageId ?? undefined,
       })
       await updateLead(seq.lead_id, { last_proactive_at: now.toISOString() })
-      await advanceSequence(seq.id, seq.sequence_type as SequenceType, seq.current_step)
+      // Reaprovecha el historial ya cargado para el mensaje: la próxima cita
+      // de la secuencia aterriza en la hora en que este lead suele escribir.
+      const activeHourSV = pickHoraActiva(
+        history.filter(m => m.role === 'user').map(m => m.created_at),
+      )
+      await advanceSequence(seq.id, seq.sequence_type as SequenceType, seq.current_step, activeHourSV)
       sent++
       console.log(
         `[cron/sequences] Sent follow-up to lead ${seq.lead_id} (step ${seq.current_step}, ${step.purpose})`,
