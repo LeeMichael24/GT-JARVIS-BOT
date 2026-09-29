@@ -96,13 +96,25 @@ export const VOTOS_JUEZ = 3
 
 export interface Votos { aprueban: number; reprueban: number }
 
-/** Consulta al juez N veces en paralelo y decide por mayoría. null si ninguno respondió. */
+/**
+ * Decide por mayoría de N votos. Consulta primero a la mayoría mínima (2 de 3) en
+ * paralelo: si responden todos y coinciden, el resto no puede cambiar el resultado y
+ * no se consulta (misma decisión, ~1/3 menos gasto). Si discrepan o alguno falla, se
+ * consultan los que faltan. null si ninguno respondió.
+ */
 export async function votarVeredicto(
   prompt: string,
   juez: (prompt: string) => Promise<string>,
   votos: number = VOTOS_JUEZ,
 ): Promise<(Veredicto & { votos: Votos }) | null> {
-  const resultados = await Promise.allSettled(Array.from({ length: Math.max(1, votos) }, () => juez(prompt)))
+  const total = Math.max(1, votos)
+  const mayoria = Math.floor(total / 2) + 1
+  const consultar = (n: number) => Promise.allSettled(Array.from({ length: n }, () => juez(prompt)))
+
+  let resultados = await consultar(mayoria)
+  const primeros = resultados.flatMap(r => (r.status === 'fulfilled' ? [parsearVeredicto(r.value).aprobada] : []))
+  const decidido = primeros.length === mayoria && primeros.every(a => a === primeros[0])
+  if (!decidido && total > mayoria) resultados = [...resultados, ...(await consultar(total - mayoria))]
   const caidos = resultados.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
   if (caidos.length) {
     const motivo = caidos[0].reason

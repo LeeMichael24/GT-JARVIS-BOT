@@ -267,8 +267,11 @@ ${inventario}
   const missionBlock = r('qualification_mission')
   const schedulingBlock = r('scheduling')
 
+  // Orden por costo: OpenAI cobra al 25 % solo el INICIO del prompt que se repite exacto.
+  // Lo fijo (bloques + marco de decisión) va primero; lo que cambia por cliente o por
+  // mensaje (guion, intención, conocimiento recuperado, catálogo, perfil) después.
   return `${header}
-${noticesBlock ?? ''}${projectScript ? '\n' + projectScript + '\n' : ''}${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${investableBlock ?? ''}${objectivesSection}${decisionSection}
+${decisionSection}${noticesBlock ?? ''}${projectScript ? '\n' + projectScript + '\n' : ''}${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${investableBlock ?? ''}${objectivesSection}
 ${settings.custom_instructions ? '# INSTRUCCIONES DEL EQUIPO (configuración viva — prioridad alta)\n' + settings.custom_instructions + '\n\n' : ''}# PERFIL DEL CLIENTE
 Fecha actual (zona horaria El Salvador): ${today}
 Hora actual (El Salvador): ${horaActualSV(ahora)}

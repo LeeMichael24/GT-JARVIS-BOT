@@ -28,8 +28,8 @@ describe('generarRespuesta', () => {
     const { deps } = armar([json({ reply: 'Queda frente al Centro Forense.' })])
     const r = await generarRespuesta(args(), deps)
     expect(deps.llamarModelo).toHaveBeenCalledTimes(1)
-    // tres jueces en paralelo, decide la mayoría (ver sales-critic)
-    expect(deps.juez).toHaveBeenCalledTimes(3)
+    // mayoría de 3: con los 2 primeros de acuerdo el tercero no hace falta (ver sales-critic)
+    expect(deps.juez).toHaveBeenCalledTimes(2)
     expect(r.respuesta.reply).toBe('Queda frente al Centro Forense.')
     expect(r.revision.reescrita).toBe(false)
   })
@@ -127,7 +127,7 @@ describe('generarRespuesta — tope de gasto diario', () => {
     for (const nivel of ['normal', 'aviso'] as const) {
       const { deps } = armar([json({ reply: 'Respuesta.' })])
       const r = await generarRespuesta(args(), { ...deps, ...conNivel(nivel) })
-      expect(deps.juez).toHaveBeenCalledTimes(3)
+      expect(deps.juez).toHaveBeenCalledTimes(2)
       expect(r.revision.motivoOmitida).toBeNull()
     }
   })
@@ -154,21 +154,21 @@ describe('generarRespuesta — tope de gasto diario', () => {
   it('si leer el gasto falla, se trabaja como normal: nunca se recorta a Daniela por un error de lectura', async () => {
     const { deps } = armar([json({ reply: 'Respuesta.' })])
     const r = await generarRespuesta(args(), { ...deps, ...conNivel('falla') })
-    expect(deps.juez).toHaveBeenCalledTimes(3)
+    expect(deps.juez).toHaveBeenCalledTimes(2)
     expect(r.respuesta.reply).toBe('Respuesta.')
   })
 
   it('sin la dependencia de presupuesto (tests, batería) todo queda igual', async () => {
     const { deps } = armar([json({ reply: 'Respuesta.' })])
     const r = await generarRespuesta(args(), deps)
-    expect(deps.juez).toHaveBeenCalledTimes(3)
+    expect(deps.juez).toHaveBeenCalledTimes(2)
     expect(r.revision.motivoOmitida).toBeNull()
   })
 
   it('el tope de presupuesto en 0 desde los ajustes = sin tope (lo resuelve estadoPresupuesto)', async () => {
     const { deps } = armar([json({ reply: 'Respuesta.' })])
     await generarRespuesta(args({ settings: { ...settings, daily_budget_usd: 0 } }), { ...deps, ...conNivel('normal') })
-    expect(deps.juez).toHaveBeenCalledTimes(3)
+    expect(deps.juez).toHaveBeenCalledTimes(2)
   })
 })
 

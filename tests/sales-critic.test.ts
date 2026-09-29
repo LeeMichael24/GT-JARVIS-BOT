@@ -101,10 +101,30 @@ describe('revisarRespuesta — voto por mayoría', () => {
     })
   }
 
-  it('por defecto consulta 3 jueces', async () => {
-    const juez = jueces(APRUEBA)
-    await revisarRespuesta(base, { juez })
+  // 29-sep-2026, costo: si los 2 primeros coinciden, el tercero no puede cambiar la
+  // mayoría — misma decisión con un voto menos (~1/3 menos gasto del crítico).
+  it('si los 2 primeros coinciden, no consulta al tercero: la mayoría ya está decidida', async () => {
+    const aprueban = jueces(APRUEBA)
+    expect((await revisarRespuesta(base, { juez: aprueban })).votos).toEqual({ aprueban: 2, reprueban: 0 })
+    expect(aprueban).toHaveBeenCalledTimes(2)
+    const reprueban = jueces(REPRUEBA('literal'))
+    const v = await revisarRespuesta(base, { juez: reprueban })
+    expect(reprueban).toHaveBeenCalledTimes(2)
+    expect(v.aprobada).toBe(false)
+  })
+
+  it('si los 2 primeros discrepan, consulta al tercero para desempatar', async () => {
+    const juez = jueces(APRUEBA, REPRUEBA('literal'), REPRUEBA('literal'))
+    const v = await revisarRespuesta(base, { juez })
     expect(juez).toHaveBeenCalledTimes(3)
+    expect(v.aprobada).toBe(false)
+  })
+
+  it('si uno de los 2 primeros truena, consulta al tercero', async () => {
+    const juez = jueces(new Error('timeout'), APRUEBA, APRUEBA)
+    const v = await revisarRespuesta(base, { juez })
+    expect(juez).toHaveBeenCalledTimes(3)
+    expect(v.aprobada).toBe(true)
   })
 
   it('un solo voto en contra no reprueba: no se reescribe una respuesta buena por mala suerte', async () => {
