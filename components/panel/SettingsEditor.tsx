@@ -68,6 +68,7 @@ const SETTING_TITLES: Record<string, string> = {
   sales_critic_enabled: 'Revisión automática de venta',
   llm_model: 'Modelo que responde',
   sales_critic_model: 'Modelo del juez de la revisión',
+  daily_budget_usd: 'Tope de gasto diario en IA (USD, 0 = sin tope)',
 }
 
 // Secciones — agent_enabled se maneja en el tab Estado, no aquí
@@ -90,14 +91,14 @@ const SECTIONS: { title: string; hint: string; keys: string[] }[] = [
   {
     title: 'Motor (avanzado)',
     hint: 'Perillas finas del modelo — cambiar solo si sabes lo que haces.',
-    keys: ['llm_model', 'sales_critic_model', 'llm_temperature', 'reflection_temperature', 'history_window'],
+    keys: ['daily_budget_usd', 'llm_model', 'sales_critic_model', 'llm_temperature', 'reflection_temperature', 'history_window'],
   },
 ]
 
 const NUMERIC_KEYS = new Set([
   'escalation_budget_usd', 'escalation_units', 'reply_max_chars', 'llm_temperature',
   'reflection_temperature', 'business_hours_start', 'business_hours_end',
-  'rental_threshold_usd', 'history_window', 'brain_min_confidence', 'auto_promote_threshold',
+  'rental_threshold_usd', 'history_window', 'brain_min_confidence', 'auto_promote_threshold', 'daily_budget_usd',
 ])
 
 export function SettingsEditor({ rows, tableReady }: Props) {

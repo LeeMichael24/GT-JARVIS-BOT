@@ -3,6 +3,11 @@ import type { ClaudeResponse, Conversation } from '@/types'
 import { callClaude, parseClaudeResponse } from '@/services/claude/client'
 import { revisarRespuesta, type Veredicto } from '@/lib/sales-critic'
 import { limpiarFrasesProhibidas } from '@/lib/reply-guard'
+import {
+  crearMedidor, estadoPresupuesto, avisarSiCorresponde, MODELO_TOPE, TOPE_DIARIO_USD_DEFAULT,
+  type Medidor, type NivelPresupuesto,
+} from '@/lib/llm-budget'
+import { sendText } from '@/services/whatsapp/client'
 
 /**
  * GENERAR LA RESPUESTA DE DANIELA — un solo lugar para el webhook y para la
@@ -25,12 +30,14 @@ export interface DepsGenerar {
   llamarModelo: (system: string, history: Conversation[], opts: { temperature: number; model?: string }) => Promise<string>
   juez: (prompt: string, model?: string) => Promise<string>
   ahora: () => number
+  /** Nivel del tope de gasto diario. Opcional: sin él (tests, batería) todo queda como siempre. */
+  presupuesto?: (presupuestoUsd: number) => Promise<{ nivel: NivelPresupuesto; gastoUsd: number }>
 }
 
 export interface ArgsGenerar {
   systemPrompt: string
   history: Conversation[]
-  settings: Pick<AgentSettings, 'llm_temperature' | 'sales_critic_enabled'> & Partial<Pick<AgentSettings, 'llm_model' | 'sales_critic_model'>>
+  settings: Pick<AgentSettings, 'llm_temperature' | 'sales_critic_enabled'> & Partial<Pick<AgentSettings, 'llm_model' | 'sales_critic_model' | 'daily_budget_usd'>>
   mensajeCliente: string
   /** Momento en que llegó el mensaje del cliente (ms) — el presupuesto corre desde ahí */
   inicioMs: number
@@ -58,16 +65,28 @@ ${v.sugerencia ? `Qué faltó: ${v.sugerencia}\n` : ''}
 Reescribe el JSON COMPLETO corrigiendo eso. Conserva los datos correctos, el material (send_media) y las acciones que ya tenías. No agregues datos que no estén en este prompt.`
 }
 
-export function depsReales(): DepsGenerar {
+export function depsReales(medidor?: Medidor): DepsGenerar {
+  // La batería mide la calidad con la revisión completa: no la degrada el tope (el gasto sí se cuenta)
+  const esEvaluacion = !!(process.env.RUN_EVAL || process.env.RUN_EVAL_VISUAL)
   return {
-    llamarModelo: (system, history, opts) => callClaude(system, history, opts),
+    llamarModelo: (system, history, opts) => callClaude(system, history, { ...opts, medidor }),
     juez: (prompt, model) => callClaude(
       prompt,
       [{ id: 'juez', lead_id: 'juez', role: 'user', content: 'Evalúa la respuesta y devuelve el JSON.', wa_message_id: null, sent_by: null, created_at: new Date().toISOString() }],
       // o4-mini razona antes de responder: necesita más margen que el juez rápido
-      { model: model ?? MODELO_JUEZ, temperature: 0, timeoutMs: /^o\d/.test(model ?? '') ? 20_000 : 8_000 },
+      { model: model ?? MODELO_JUEZ, temperature: 0, timeoutMs: /^o\d/.test(model ?? '') ? 20_000 : 8_000, medidor },
     ),
     ahora: () => Date.now(),
+    presupuesto: esEvaluacion ? undefined : async presupuestoUsd => {
+      const e = await estadoPresupuesto(presupuestoUsd)
+      const ceo = process.env.CEO_PHONE_NUMBER
+      if (ceo) {
+        await avisarSiCorresponde(e.nivel, e.gastoUsd, presupuestoUsd, {
+          enviar: async texto => { await sendText(ceo, texto, { typingDelay: false }) },
+        })
+      }
+      return e
+    },
   }
 }
 
@@ -82,9 +101,32 @@ function esSaturacion(err: unknown): boolean {
   return status === 429 || /\b429\b|rate limit/i.test(err instanceof Error ? err.message : String(err))
 }
 
-export async function generarRespuesta(args: ArgsGenerar, deps: DepsGenerar = depsReales()): Promise<ResultadoGenerar> {
+export async function generarRespuesta(args: ArgsGenerar, depsInyectadas?: DepsGenerar): Promise<ResultadoGenerar> {
+  // Con dependencias inyectadas (tests, batería) no se mide nada; en producción el
+  // medidor junta las llamadas del mensaje (respuesta + votos + reescritura) y guarda una vez.
+  const medidor = depsInyectadas ? null : crearMedidor()
+  try {
+    return await generar(args, depsInyectadas ?? depsReales(medidor ?? undefined))
+  } finally {
+    if (medidor) await medidor.guardar().catch(() => {})
+  }
+}
+
+async function generar(args: ArgsGenerar, deps: DepsGenerar): Promise<ResultadoGenerar> {
   const { systemPrompt, history, settings } = args
-  const opts = { temperature: settings.llm_temperature, model: settings.llm_model }
+
+  // Tope de gasto diario: Daniela se degrada por escalones y nunca deja de responder.
+  // Un error al leer el gasto se trata como "normal" (no se recorta por una falla de lectura).
+  let nivel: NivelPresupuesto = 'normal'
+  if (deps.presupuesto) {
+    try {
+      nivel = (await deps.presupuesto(settings.daily_budget_usd ?? TOPE_DIARIO_USD_DEFAULT)).nivel
+    } catch (err) {
+      console.warn('[generar-respuesta] no se pudo leer el tope de gasto — sigo normal:', err instanceof Error ? err.message : err)
+    }
+  }
+  const modelo = nivel === 'tope' ? MODELO_TOPE : settings.llm_model
+  const opts = { temperature: settings.llm_temperature, model: modelo }
 
   // 1-2. Modelo, con un reintento si el JSON viene sin reply. Si falla dos
   // veces, lanza: el webhook tiene el mensaje de respaldo para no dejar en visto.
@@ -109,6 +151,9 @@ export async function generarRespuesta(args: ArgsGenerar, deps: DepsGenerar = de
   if (saturado) {
     // Reescribir usaría otra vez el modelo saturado
     revision.motivoOmitida = 'saturado'
+  } else if (nivel === 'ahorro' || nivel === 'tope') {
+    // Modo ahorro: sin votos del crítico ni reescrituras (~40 % menos gasto por mensaje)
+    revision.motivoOmitida = 'presupuesto'
   } else if (!settings.sales_critic_enabled) {
     revision.motivoOmitida = 'apagada'
   } else if (deps.ahora() - args.inicioMs > PRESUPUESTO_REVISION_MS) {

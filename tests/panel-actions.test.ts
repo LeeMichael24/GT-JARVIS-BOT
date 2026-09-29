@@ -43,7 +43,7 @@ vi.mock('@/services/whatsapp/client', () => wa)
 
 vi.mock('next/cache', () => ({ refresh: vi.fn(), revalidatePath: vi.fn() }))
 
-import { sendHumanMessage, assignLead, setBotActive, addLeadTag, addNote, updateLeadStage, deleteTag, setMemberActive, setMemberPhone, createProjectScript, updateProjectScript, saveAgentSettings, createProjectMediaItem, createPlaybookEntry } from '@/app/panel/actions'
+import { sendHumanMessage, assignLead, setBotActive, addLeadTag, addNote, updateLeadStage, deleteTag, setMemberActive, setMemberPhone, createProjectScript, updateProjectScript, saveAgentSettings, getAgentSettingsPanel, createProjectMediaItem, createPlaybookEntry } from '@/app/panel/actions'
 
 const admin = { id: 'adm1', name: 'Michael', email: 'm@gt.com', role: 'admin' }
 const asesor = { id: 'ase1', name: 'Ana', email: 'a@gt.com', role: 'asesor' }
@@ -266,6 +266,23 @@ describe('guiones por proyecto (project_scripts)', () => {
 })
 
 describe('ajustes vivos (agent_settings)', () => {
+  // El editor reenvía TODAS las filas al guardar; una fila desconocida haría fallar
+  // "Guardar" con INVALID_KEY. Los contadores del tope de gasto no deben llegar al panel.
+  it('el panel no lista los contadores internos _sys_*', async () => {
+    state.member = admin
+    serviceChain.order = vi.fn(async () => ({
+      error: null,
+      data: [
+        { key: 'emoji_policy', value: 'none', description: null },
+        { key: '_sys_gasto_2026-09-29', value: '{"usd":3,"calls":40}', description: 'interno' },
+        { key: '_sys_alerta_2026-09-29_aviso', value: '1', description: 'interno' },
+      ],
+    }))
+    const { rows, tableReady } = await getAgentSettingsPanel()
+    expect(tableReady).toBe(true)
+    expect(rows.map(r => r.key)).toEqual(['emoji_policy'])
+  })
+
   it('rechaza claves fuera de la whitelist', async () => {
     state.member = admin
     const res = await saveAgentSettings({ hacked_key: 'x' })
@@ -276,6 +293,10 @@ describe('ajustes vivos (agent_settings)', () => {
     state.member = admin
     expect(await saveAgentSettings({ emoji_policy: 'muchos' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
     expect(await saveAgentSettings({ reflection_enabled: 'quizas' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
+    // Tope de gasto diario: 0 = sin tope; negativo o desorbitado se rechaza
+    expect(await saveAgentSettings({ daily_budget_usd: '-1' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
+    expect(await saveAgentSettings({ daily_budget_usd: '5000' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
+    expect(await saveAgentSettings({ daily_budget_usd: 'mucho' })).toEqual({ ok: false, error: 'INVALID_VALUE' })
   })
 
   it('acepta un lote válido y upserta cada clave', async () => {

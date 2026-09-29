@@ -50,6 +50,8 @@ export interface AgentSettings {
   sales_critic_enabled: boolean
   /** Modelo que escribe las respuestas */
   llm_model: 'gpt-4o' | 'gpt-4.1' | 'gpt-5.6-terra'
+  /** Tope de gasto diario en IA (USD). 0 = sin tope. Al 100 %: modo ahorro; al 200 %: modelo barato. */
+  daily_budget_usd: number
   /** Modelo del juez de la revisión automática */
   sales_critic_model: 'gpt-4.1-mini' | 'gpt-4.1' | 'o4-mini'
 }
@@ -82,6 +84,7 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   // anuncios choca con el límite). Batería 29-sep: terra 9-11/12, gpt-4.1 7-11/12.
   llm_model: 'gpt-4.1',
   sales_critic_model: 'o4-mini',
+  daily_budget_usd: 5,
 }
 
 // Parseo numérico defensivo: valor inválido o fuera de rango → default.
@@ -168,6 +171,9 @@ export async function getAgentSettings(): Promise<AgentSettings> {
             break
           case 'sales_critic_model':
             if (v === 'gpt-4.1-mini' || v === 'gpt-4.1' || v === 'o4-mini') settings.sales_critic_model = v
+            break
+          case 'daily_budget_usd':
+            settings.daily_budget_usd = num(v, 0, 1_000, d.daily_budget_usd)
             break
           case 'sales_critic_enabled':
             settings.sales_critic_enabled = v !== 'false'

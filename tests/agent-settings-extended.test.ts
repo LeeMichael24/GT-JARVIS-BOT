@@ -40,6 +40,20 @@ describe('agent settings — perillas nuevas (migración 012)', () => {
     expect((await getAgentSettings()).llm_model).toBe(DEFAULT_SETTINGS.llm_model)
   })
 
+  it('daily_budget_usd: default $5; acepta 0 (sin tope) y decimales; fuera de rango vuelve al default', async () => {
+    expect(DEFAULT_SETTINGS.daily_budget_usd).toBe(5)
+    for (const [valor, esperado] of [['0', 0], ['12.5', 12.5], ['5000', 5], ['-3', 5], ['abc', 5]] as const) {
+      _clearSettingsCache()
+      db.rows = [{ key: 'daily_budget_usd', value: valor }]
+      expect((await getAgentSettings()).daily_budget_usd).toBe(esperado)
+    }
+  })
+
+  it('las filas internas _sys_* (contadores de gasto) no alteran ningún ajuste', async () => {
+    db.rows = [{ key: '_sys_gasto_2026-09-29', value: '{"usd":3.2,"calls":40}' }, { key: '_sys_alerta_2026-09-29_aviso', value: '1' }]
+    expect(await getAgentSettings()).toEqual(DEFAULT_SETTINGS)
+  })
+
   it('agent_enabled=false pausa globalmente', async () => {
     db.rows = [{ key: 'agent_enabled', value: 'false' }]
     const s = await getAgentSettings()

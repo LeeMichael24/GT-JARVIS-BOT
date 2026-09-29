@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { registrarUso, type Medidor } from '@/lib/llm-budget'
 import type {
   ClaudeResponse, Conversation, LeadStage, MeetingRequest, QualificationData,
   AgentAction, AgentActionType, DealSummary, DealSignals,
@@ -23,6 +24,8 @@ export interface CallClaudeOptions {
   model?: string
   /** Tiempo máximo de la llamada; default 30 s */
   timeoutMs?: number
+  /** Acumula el costo de varias llamadas de un mismo mensaje (tope de gasto diario). Sin él, cada llamada se registra sola. */
+  medidor?: Medidor
 }
 
 export async function callClaude(
@@ -55,6 +58,14 @@ export async function callClaude(
     messages,
     response_format: { type: 'json_object' },
   })
+
+  // Tope de gasto diario: medir nunca puede tumbar una respuesta
+  try {
+    if (opts.medidor) opts.medidor.add(modelo, response.usage ?? undefined)
+    else await registrarUso(modelo, response.usage ?? undefined)
+  } catch (err) {
+    console.warn('[claude] no se pudo registrar el uso:', err instanceof Error ? err.message : err)
+  }
 
   const choice = response.choices[0]
   // 'length' = JSON truncado; cualquier cosa distinta de 'stop' es sospechosa

@@ -583,6 +583,7 @@ const SETTINGS_WHITELIST: Record<string, (v: string) => boolean> = {
   sales_critic_enabled: v => ['true', 'false'].includes(v),
   llm_model: v => ['gpt-4o', 'gpt-4.1', 'gpt-5.6-terra'].includes(v),
   sales_critic_model: v => ['gpt-4.1-mini', 'gpt-4.1', 'o4-mini'].includes(v),
+  daily_budget_usd: inRange(0, 1_000),
   agent_enabled: v => ['true', 'false'].includes(v),
   ceo_name: v => v.length > 0 && v.length <= 80,
   escalation_budget_usd: inRange(1_000, 100_000_000),
@@ -615,7 +616,9 @@ export async function getAgentSettingsPanel(): Promise<{ rows: AgentSettingRow[]
     console.warn('[panel] agent_settings no disponible:', error.message)
     return { rows: [], tableReady: false }
   }
-  return { rows: (data as AgentSettingRow[]) ?? [], tableReady: true }
+  // Los contadores internos (_sys_*) no son ajustes: el editor reenvía todas sus filas al guardar
+  const rows = ((data as AgentSettingRow[]) ?? []).filter(r => !r.key.startsWith('_sys_'))
+  return { rows, tableReady: true }
 }
 
 export async function saveAgentSettings(updates: Record<string, string>): Promise<ActionResult> {

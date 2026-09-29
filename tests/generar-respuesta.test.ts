@@ -113,3 +113,62 @@ describe('generarRespuesta', () => {
     expect(r.respuesta.reply).toBe('Te paso el link.')
   })
 })
+
+// 29-sep-2026: tope de gasto diario. Daniela se degrada por escalones y NUNCA deja de responder.
+describe('generarRespuesta — tope de gasto diario', () => {
+  const conNivel = (nivel: 'normal' | 'aviso' | 'ahorro' | 'tope' | 'falla') => ({
+    presupuesto: vi.fn(async () => {
+      if (nivel === 'falla') throw new Error('bd caída')
+      return { nivel, gastoUsd: 1 }
+    }),
+  })
+
+  it('normal y aviso: revisión completa como siempre', async () => {
+    for (const nivel of ['normal', 'aviso'] as const) {
+      const { deps } = armar([json({ reply: 'Respuesta.' })])
+      const r = await generarRespuesta(args(), { ...deps, ...conNivel(nivel) })
+      expect(deps.juez).toHaveBeenCalledTimes(3)
+      expect(r.revision.motivoOmitida).toBeNull()
+    }
+  })
+
+  it('ahorro: NO consulta al crítico ni reescribe, pero responde con el mismo modelo', async () => {
+    const { deps } = armar([json({ reply: 'Respuesta.' })], '{"aprobada":false,"fallas":["x"]}')
+    const r = await generarRespuesta(args({ settings: { ...settings, llm_model: 'gpt-4.1' } }), { ...deps, ...conNivel('ahorro') })
+    expect(deps.juez).not.toHaveBeenCalled()
+    expect(deps.llamarModelo).toHaveBeenCalledTimes(1)
+    expect(r.respuesta.reply).toBe('Respuesta.')
+    expect(r.revision.motivoOmitida).toBe('presupuesto')
+    expect((deps.llamarModelo.mock.calls[0] as unknown[])[2]).toMatchObject({ model: 'gpt-4.1' })
+  })
+
+  it('tope: además responde con el modelo barato', async () => {
+    const { deps } = armar([json({ reply: 'Respuesta.' })])
+    const r = await generarRespuesta(args({ settings: { ...settings, llm_model: 'gpt-4.1' } }), { ...deps, ...conNivel('tope') })
+    expect(deps.juez).not.toHaveBeenCalled()
+    expect((deps.llamarModelo.mock.calls[0] as unknown[])[2]).toMatchObject({ model: 'gpt-4.1-mini' })
+    expect(r.respuesta.reply).toBe('Respuesta.')
+    expect(r.revision.motivoOmitida).toBe('presupuesto')
+  })
+
+  it('si leer el gasto falla, se trabaja como normal: nunca se recorta a Daniela por un error de lectura', async () => {
+    const { deps } = armar([json({ reply: 'Respuesta.' })])
+    const r = await generarRespuesta(args(), { ...deps, ...conNivel('falla') })
+    expect(deps.juez).toHaveBeenCalledTimes(3)
+    expect(r.respuesta.reply).toBe('Respuesta.')
+  })
+
+  it('sin la dependencia de presupuesto (tests, batería) todo queda igual', async () => {
+    const { deps } = armar([json({ reply: 'Respuesta.' })])
+    const r = await generarRespuesta(args(), deps)
+    expect(deps.juez).toHaveBeenCalledTimes(3)
+    expect(r.revision.motivoOmitida).toBeNull()
+  })
+
+  it('el tope de presupuesto en 0 desde los ajustes = sin tope (lo resuelve estadoPresupuesto)', async () => {
+    const { deps } = armar([json({ reply: 'Respuesta.' })])
+    await generarRespuesta(args({ settings: { ...settings, daily_budget_usd: 0 } }), { ...deps, ...conNivel('normal') })
+    expect(deps.juez).toHaveBeenCalledTimes(3)
+  })
+})
+
