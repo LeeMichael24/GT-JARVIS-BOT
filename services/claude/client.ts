@@ -6,7 +6,9 @@ import type {
   BrainObservation, InteractiveButton, SendMedia, TurnMoment, TurnPlan,
 } from '@/types'
 
-const MODEL = 'gpt-4o'
+// Modelo por defecto de seguimientos, reflexión y entrenamiento (las respuestas usan
+// llm_model de los ajustes). gpt-4.1: más barato por token que gpt-4o y mejor en la batería.
+const MODEL = 'gpt-4.1'
 const MAX_TOKENS = 2048
 const MAX_TOKENS_RAZONAMIENTO = 6000
 

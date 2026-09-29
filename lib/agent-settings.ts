@@ -79,11 +79,10 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   auto_promote_enabled: true,
   auto_promote_threshold: 3,
   sales_critic_enabled: true,
-  // 29-sep-2026: por decisión de Mike se vuelve al modelo original, gpt-4o. Ojo: por
-  // token cuesta ~25 % más que gpt-4.1 ($2.50/$10 vs $2.00/$8 por millón) y en la
-  // batería del 13-sep sacó 3-4/12 contra 5-9/12 de gpt-4.1 (con el prompt de entonces).
-  // Terra y gpt-4.1 siguen disponibles en el panel.
-  llm_model: 'gpt-4o',
+  // 29-sep-2026, decisión de Mike tras revisar la factura real: gpt-4.1. El 13-sep
+  // corrieron gpt-4o y gpt-4.1 la misma batería: gpt-4.1 salió ~14 % más barato por
+  // llamada (hasta ~33 % con el mismo caché), aunque escribe el doble, y mejor calidad.
+  llm_model: 'gpt-4.1',
   sales_critic_model: 'o4-mini',
   monthly_budget_usd: 20,
   daily_budget_usd: 0,

@@ -168,12 +168,14 @@ describe('callClaude — parámetros según el modelo', () => {
     expect(p).not.toHaveProperty('temperature')
   })
 
-  it('gpt-4o por defecto: max_tokens y temperature como siempre', async () => {
+  // 29-sep-2026: seguimientos, reflexión y entrenamiento usaban gpt-4o por defecto;
+  // gpt-4.1 es más barato por token y mejor en la batería.
+  it('gpt-4.1 por defecto: max_tokens y temperature como siempre', async () => {
     process.env.OPENAI_API_KEY = 'sk-test'
     openaiSpy.create.mockClear()
     await callClaude('system', [], { temperature: 0.85 })
     const p = (openaiSpy.create.mock.calls[0] as unknown as [Record<string, unknown>])[0]
-    expect(p.model).toBe('gpt-4o')
+    expect(p.model).toBe('gpt-4.1')
     expect(p.max_tokens).toBe(2048)
     expect(p.temperature).toBe(0.85)
   })

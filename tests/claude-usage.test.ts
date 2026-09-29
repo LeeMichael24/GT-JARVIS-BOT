@@ -39,7 +39,7 @@ describe('callClaude — registra lo que cuesta cada llamada (tope de gasto diar
 
   it('usa el modelo por defecto cuando no se pide otro', async () => {
     await callClaude('system', [])
-    expect(budget.registrarUso).toHaveBeenCalledWith('gpt-4o', expect.anything())
+    expect(budget.registrarUso).toHaveBeenCalledWith('gpt-4.1', expect.anything())
   })
 
   it('si registrar falla, la respuesta igual sale (medir nunca tumba a Daniela)', async () => {
