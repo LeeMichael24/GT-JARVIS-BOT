@@ -32,6 +32,14 @@ describe('agent settings — perillas nuevas (migración 012)', () => {
     expect(s.ceo_name).toBe('Michael Narváez')
   })
 
+  it('llm_model acepta gpt-5.6-terra y descarta valores desconocidos', async () => {
+    db.rows = [{ key: 'llm_model', value: 'gpt-5.6-terra' }]
+    expect((await getAgentSettings()).llm_model).toBe('gpt-5.6-terra')
+    _clearSettingsCache()
+    db.rows = [{ key: 'llm_model', value: 'gpt-9-inventado' }]
+    expect((await getAgentSettings()).llm_model).toBe(DEFAULT_SETTINGS.llm_model)
+  })
+
   it('agent_enabled=false pausa globalmente', async () => {
     db.rows = [{ key: 'agent_enabled', value: 'false' }]
     const s = await getAgentSettings()

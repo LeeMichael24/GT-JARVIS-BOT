@@ -49,7 +49,7 @@ export interface AgentSettings {
   /** Revisión automática de venta: un juez rápido revisa cada respuesta y, si falla, se reescribe */
   sales_critic_enabled: boolean
   /** Modelo que escribe las respuestas */
-  llm_model: 'gpt-4o' | 'gpt-4.1'
+  llm_model: 'gpt-4o' | 'gpt-4.1' | 'gpt-5.6-terra'
   /** Modelo del juez de la revisión automática */
   sales_critic_model: 'gpt-4.1-mini' | 'gpt-4.1' | 'o4-mini'
 }
@@ -75,9 +75,11 @@ export const DEFAULT_SETTINGS: AgentSettings = {
   auto_promote_enabled: true,
   auto_promote_threshold: 3,
   sales_critic_enabled: true,
-  // Medido 13-sep-2026 con el mismo juez (mayoría de 3): gpt-4.1 + crítico
-  // o4-mini 9/12 vs gpt-4o 3/12. Mismo límite de tokens/min que gpt-4o.
-  llm_model: 'gpt-4.1',
+  // Batería de ventas 29-sep-2026, mismo día y mismo juez (o4-mini): gpt-5.6-terra
+  // 9/12 (pasa el candado de 0.75, mediana 25.8 s) vs gpt-4.1 7/12 (no lo pasa,
+  // 29.4 s). Además su límite es 500K tokens/min contra 30K de gpt-4.1: se acaba
+  // el cuello de botella de capacidad. Antes: gpt-4.1 9/12 vs gpt-4o 3/12 (13-sep).
+  llm_model: 'gpt-5.6-terra',
   sales_critic_model: 'o4-mini',
 }
 
@@ -161,7 +163,7 @@ export async function getAgentSettings(): Promise<AgentSettings> {
             settings.auto_promote_enabled = v !== 'false'
             break
           case 'llm_model':
-            if (v === 'gpt-4o' || v === 'gpt-4.1') settings.llm_model = v
+            if (v === 'gpt-4o' || v === 'gpt-4.1' || v === 'gpt-5.6-terra') settings.llm_model = v
             break
           case 'sales_critic_model':
             if (v === 'gpt-4.1-mini' || v === 'gpt-4.1' || v === 'o4-mini') settings.sales_critic_model = v

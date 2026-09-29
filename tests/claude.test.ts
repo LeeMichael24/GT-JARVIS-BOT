@@ -186,4 +186,18 @@ describe('callClaude — parámetros según el modelo', () => {
     expect(p.model).toBe('gpt-4.1')
     expect(p.temperature).toBe(0.7)
   })
+
+  // gpt-5.6-terra (probado contra la API el 29-sep-2026): rechaza max_tokens
+  // ("use max_completion_tokens") y cualquier temperature distinta de 1.
+  it('gpt-5.6-terra: max_completion_tokens, sin max_tokens ni temperature', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test'
+    openaiSpy.create.mockClear()
+    await callClaude('system', [], { model: 'gpt-5.6-terra', temperature: 0.85 })
+    const p = (openaiSpy.create.mock.calls[0] as unknown as [Record<string, unknown>])[0]
+    expect(p.model).toBe('gpt-5.6-terra')
+    expect(p).toHaveProperty('max_completion_tokens')
+    expect(p).not.toHaveProperty('max_tokens')
+    expect(p).not.toHaveProperty('temperature')
+    expect(p.response_format).toEqual({ type: 'json_object' })
+  })
 })

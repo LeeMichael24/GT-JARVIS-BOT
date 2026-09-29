@@ -33,6 +33,7 @@ const OPTION_LABELS: Record<string, { value: string; label: string; hint: string
   llm_model: [
     { value: 'gpt-4o', label: 'GPT-4o', hint: 'El modelo con el que Daniela respondió hasta septiembre' },
     { value: 'gpt-4.1', label: 'GPT-4.1', hint: 'Más reciente; sigue mejor instrucciones largas. Probarlo con la batería antes de dejarlo' },
+    { value: 'gpt-5.6-terra', label: 'GPT-5.6 Terra (recomendado)', hint: 'Buen razonamiento a mejor precio; límite de 500K tokens/min (GPT-4.1: 30K). Ignora la temperatura: siempre responde con la suya' },
   ],
   sales_critic_model: [
     { value: 'gpt-4.1-mini', label: 'Rápido', hint: 'gpt-4.1-mini: el más veloz, pero blando — en la batería aprobó respuestas que el juez fuerte reprueba' },
