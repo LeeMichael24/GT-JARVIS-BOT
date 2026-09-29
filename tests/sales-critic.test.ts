@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { parsearVeredicto, construirPromptJuez, revisarRespuesta, type EntradaRevision } from '@/lib/sales-critic'
+import { parsearVeredicto, construirPromptJuez, revisarRespuesta, RUBRICA_VENTA, type EntradaRevision } from '@/lib/sales-critic'
 
 // La revisión automática: un modelo rápido juzga la respuesta contra la rúbrica
 // de venta ANTES de enviarla. Nació del caso real "Hola, me interesa Portacelli,
@@ -142,5 +142,34 @@ describe('revisarRespuesta — voto por mayoría', () => {
     const v = await revisarRespuesta(base, { juez }, { votos: 1 })
     expect(juez).toHaveBeenCalledTimes(1)
     expect(v.aprobada).toBe(false)
+  })
+})
+
+// 29-sep-2026: A1, A2 y B2 de la batería de ventas reprobaron por lo mismo — no
+// concretaban un siguiente paso — y el crítico las dejó pasar sin reescribir.
+describe('RUBRICA_VENTA — siguiente paso concreto solo con señal explícita de avance', () => {
+  it('exige paso concreto cuando el CLIENTE dice que le gustó, quiere apartar, no puede visitar, está fuera del país u ocupado', () => {
+    expect(RUBRICA_VENTA).toMatch(/señal expl[íi]cita de avance en SU mensaje/i)
+    expect(RUBRICA_VENTA).toMatch(/visita o videollamada con d[íi]a/i)
+    expect(RUBRICA_VENTA).toMatch(/brochure o un precio solos no cuentan/i)
+    expect(RUBRICA_VENTA).toMatch(/fuera del pa[íi]s/i)
+    expect(RUBRICA_VENTA).toMatch(/ocupado/i)
+    expect(RUBRICA_VENTA).toMatch(/quiere apartar/i)
+  })
+
+  // 29-sep: con la regla amplia, 10 de 12 reescrituras eran preguntas informativas
+  // y cada reescritura suma 12-15 s de latencia.
+  it('NO aplica a preguntas informativas: no dispara una reescritura de 12-15 s por pedir precio, foto o plano', () => {
+    expect(RUBRICA_VENTA).toMatch(/NO aplica a preguntas informativas/i)
+    expect(RUBRICA_VENTA).toMatch(/precio, plan de pago, ubicaci[óo]n, material, entrega/i)
+  })
+
+  it('las excepciones de pidio_tiempo y tramite siguen vigentes', () => {
+    expect(RUBRICA_VENTA).toMatch(/momento pidio_tiempo/)
+    expect(RUBRICA_VENTA).toMatch(/momento tramite/)
+  })
+
+  it('la pregunta de calificación con motivo sigue siendo siguiente paso válido', () => {
+    expect(RUBRICA_VENTA).toMatch(/SIGUIENTE PASO VÁLIDO/)
   })
 })

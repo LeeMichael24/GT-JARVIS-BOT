@@ -556,3 +556,16 @@ describe('prompt — piensa antes de escribir', () => {
     expect(p()).toContain('PIENSA ANTES DE ESCRIBIR')
   })
 })
+
+// 29-sep-2026: Daniela proponía citas ("martes 29", "jueves 1") calculando los
+// días por su cuenta. Ahora el prompt trae el calendario ya resuelto.
+describe('buildSystemPrompt — calendario para proponer citas', () => {
+  it('incluye hora actual, el calendario de los próximos días y el horario para proponer', () => {
+    const p = buildSystemPrompt({ lead: { id: 'l', phone: '503', name: 'Ana', stage: 'warm', qualification_data: null } as never })
+    expect(p).toMatch(/Hora actual \(El Salvador\): \d{2}:\d{2}/)
+    expect(p).toMatch(/Calendario/)
+    expect(p).toMatch(/hoy \w+ \d{1,2} de \w+/)
+    expect(p).toMatch(/mañana \w+ \d{1,2} de \w+/)
+    expect(p).toMatch(/nunca calcules un día de la semana/i)
+  })
+})

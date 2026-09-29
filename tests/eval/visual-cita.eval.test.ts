@@ -19,6 +19,7 @@ import { seleccionarConocimiento, construirConsulta } from '@/lib/contexto-recup
 import type { AgentSettings } from '@/lib/agent-settings'
 import type { Conversation, Lead, SendMedia, TurnPlan } from '@/types'
 import { ESCENARIOS_VISUAL, type EscenarioVisual, type TipoMaterial } from './escenarios-visual'
+import { PROMESA_MATERIAL, CIFRAS_DE_REFERENCIA, pideCita as detectaCita, esCitaConcreta } from './detectores'
 
 /**
  * BATERÍA VISUAL Y DE CITA — mide las tres cosas que deciden si Daniela cierra:
@@ -44,11 +45,6 @@ const LABEL = process.env.EVAL_LABEL ?? new Date().toISOString().slice(0, 16).re
 
 // Frases de call center que el reply-guard ya debería haber limpiado
 const PROHIBIDAS = /\bestoy aqu[ií] para\b|\bno dudes? en\b|en qu[eé] (m[aá]s )?(te |le )?puedo (ayudar|asistir)|\bgarantiz(a|ado|ada)\b(?![^.]*no garantiz)/i
-// "te lo envío / se lo comparto / se lo mando" — promesa de material en el texto
-const PROMESA_MATERIAL = /\b(te|le|se lo|se la|ya te|ya le|ahorita te|ahorita le)\s+(lo\s+|la\s+|los\s+|las\s+)?(env[íi]o|enviar[ée]|mando|mandar[ée]|comparto|compartir[ée]|paso|pasar[ée]|adjunto)\b|\baqu[íi] (te|le) (va|dejo|comparto)\b/i
-// Empuje a cita: modalidad o momento concreto, no "¿le interesa conocerlo?"
-const CITA = /\b(visita|visitar|cita|reuni[óo]n|videollamada|video llamada|virtual|zoom|meet|recorrido|tour|sala de ventas|showroom)\b/i
-const CITA_CONCRETA = /\b(lunes|martes|mi[ée]rcoles|jueves|viernes|s[áa]bado|domingo|ma[ñn]ana|pasado ma[ñn]ana|esta semana|pr[óo]xima semana|\d{1,2}\s?(am|pm|:\d{2}))\b/i
 
 const RUBRICA = `Eres el director comercial de Grupo Terranova. Estás revisando el mensaje de WhatsApp que Daniela, la asesora, le va a mandar a un cliente de bienes raíces. No reescribes: calificas.
 
@@ -74,6 +70,7 @@ Calificas CUATRO cosas, cada una de 0 a 2:
   1 = menciona la posibilidad de conocerlo sin concretar nada.
   0 = no hay ningún avance hacia la cita.
   Si el cliente pidió tiempo explícitamente o el mensaje es puro trámite, califica "cita" con 2 cuando la respuesta respeta ese momento sin empujar.
+  El dato "ESTE TURNO DEBE EMPUJAR CITA" al final te dice si aplica: si dice "no", el turno es solo de información y NO se espera cita — califica "cita" con 2 salvo que presione de forma torpe; no bajes puntos por no proponer visita.
 
 Además devuelves:
 "errores": lista de datos equivocados, inventados o contradictorios (vacía si no hay).
@@ -197,12 +194,16 @@ it.skipIf(!process.env.RUN_EVAL_VISUAL)('batería visual y de cita', async () =>
       ? entregado.piezas.length === 0 && !prometioSinAdjuntar
       : entregado.tipo === e.espera_material
     const datosFaltantes = (e.datos ?? []).filter(d => !d.re.test(texto)).map(d => d.nombre)
-    const pideCita = CITA.test(texto)
-    const citaConcreta = pideCita && CITA_CONCRETA.test(texto)
+    const pideCita = detectaCita(texto)
+    const citaConcreta = esCitaConcreta(texto)
     const fraseProhibida = PROHIBIDAS.test(texto)
 
     // ── Juez ──
     const promptJuez = `${RUBRICA}
+
+${CIFRAS_DE_REFERENCIA}
+
+ESTE TURNO DEBE EMPUJAR CITA: ${e.debe_pedir_cita ? 'sí' : 'no'}
 
 INVENTARIO DE MATERIAL QUE EXISTE DE VERDAD (no hay nada más):
 ${inventario.map(i => `- ${i}`).join('\n')}
@@ -258,6 +259,7 @@ MATERIAL QUE DE VERDAD LE HABRÍA LLEGADO AL CLIENTE: ${entregado.piezas.length 
     visual: prom(filas.map(f => f.nota.visual)),
     conduce: prom(filas.map(f => f.nota.conduce)),
     cita: prom(filas.map(f => f.nota.cita)),
+    cita_en_escenarios_que_tocan: prom(filas.filter(f => f.debe_pedir_cita).map(f => f.nota.cita)),
     material_correcto: `${filas.filter(f => f.material_correcto).length}/${filas.length}`,
     promesas_rotas: filas.filter(f => f.prometio_sin_adjuntar).length,
     escenarios_con_datos_faltantes: filas.filter(f => f.datos_faltantes.length).length,

@@ -234,3 +234,55 @@ describe('decision_framework — no re-escalar en cada turno', () => {
     expect(bloque).toContain('sigue en curso')
   })
 })
+
+// 29-sep-2026: la batería visual dio 0/4 en "cita concreta cuando tocaba". El
+// bloque solo pedía cita "con señal de avance" y Terra, que sigue las reglas al
+// pie de la letra, no la proponía nunca (ni al cliente en el extranjero).
+describe('closing_techniques — siguiente paso concreto sin presionar', () => {
+  const bloque = DEFAULT_PROMPT_BLOCKS.closing_techniques
+
+  it('define qué es señal de avance y pide UN paso concreto con dos opciones', () => {
+    expect(bloque).toMatch(/SEÑAL DE AVANCE/)
+    expect(bloque).toMatch(/precio, plan de pago, disponibilidad, ubicaci[óo]n o material/i)
+    expect(bloque).toMatch(/jueves por la tarde o s[áa]bado/i)
+  })
+
+  it('se propone UNA vez por conversación, no en cada turno', () => {
+    expect(bloque).toMatch(/UNA vez por conversaci[óo]n/i)
+    expect(bloque).toMatch(/no lo repitas/i)
+  })
+
+  it('cliente fuera del país o que no puede visitar → videollamada, nunca solo el brochure', () => {
+    expect(bloque).toMatch(/FUERA DEL PA[ÍI]S/)
+    expect(bloque).toMatch(/videollamada/i)
+    expect(bloque).toMatch(/hora de El Salvador/i)
+  })
+
+  it('quiere apartar → paso concreto, y la cuenta bancaria sigue siendo del equipo', () => {
+    expect(bloque).toMatch(/QUIERE APARTAR/)
+    expect(bloque).toMatch(/cuenta bancaria nunca la das t[úu]/i)
+  })
+
+  it('conserva el respeto al cliente que pide tiempo o al trámite puro', () => {
+    expect(bloque).toMatch(/PIDI[ÓO] TIEMPO/)
+    expect(bloque).toMatch(/no propongas nada/i)
+  })
+
+  it('sigue sin cerrar contrato: el cierre es el siguiente paso', () => {
+    expect(bloque).toMatch(/NUNCA EL CONTRATO/)
+  })
+
+  // 29-sep, medición 3: 5 de 9 reescrituras eran "dos preguntas seguidas": el paso
+  // concreto + la pregunta de calificación en el mismo mensaje. Cada reescritura
+  // suma 12-15 s. Un solo pedido por mensaje evita el choque con el crítico.
+  it('UN solo pedido por mensaje: o califica, o propone el paso — nunca los dos', () => {
+    expect(bloque).toMatch(/UN solo pedido por mensaje/)
+    expect(bloque).toMatch(/nunca las dos|nunca los dos/i)
+    expect(bloque).toMatch(/ya sabes si es para vivir o invertir/i)
+  })
+
+  it('cliente fuera del país u ocupado: es obligatorio, con horarios concretos en el mismo mensaje', () => {
+    expect(bloque).toMatch(/FUERA DEL PA[ÍI]S[^\n]*OBLIGATORIO/)
+    expect(bloque).toMatch(/en ese mismo mensaje/i)
+  })
+})

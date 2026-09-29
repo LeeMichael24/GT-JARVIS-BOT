@@ -1,3 +1,4 @@
+import { calendarioProximo, horaActualSV } from '@/lib/calendario'
 import type { Lead, GTProject, GTSubInvestment, DealSignals } from '@/types'
 import type { MessageIntent } from './intent'
 import { DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
@@ -231,7 +232,8 @@ ${inventario}
     : `- "send_media": SIEMPRE null — todavía no hay documentos cargados en el sistema. NUNCA ofrezcas enviar fichas, PDFs, brochures ni planos. Si el cliente pide un documento, responde: "Te lo comparto en cuanto lo tenga a mano, pero te adelanto lo importante:" y da los datos clave en texto corto.`}
 `
 
-  const today = new Date().toLocaleDateString('es-SV', {
+  const ahora = new Date()
+  const today = ahora.toLocaleDateString('es-SV', {
     timeZone: 'America/El_Salvador',
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
@@ -269,6 +271,9 @@ ${inventario}
 ${noticesBlock ?? ''}${projectScript ? '\n' + projectScript + '\n' : ''}${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${investableBlock ?? ''}${objectivesSection}${decisionSection}
 ${settings.custom_instructions ? '# INSTRUCCIONES DEL EQUIPO (configuración viva — prioridad alta)\n' + settings.custom_instructions + '\n\n' : ''}# PERFIL DEL CLIENTE
 Fecha actual (zona horaria El Salvador): ${today}
+Hora actual (El Salvador): ${horaActualSV(ahora)}
+Calendario (usa SOLO estas fechas al proponer una cita; nunca calcules un día de la semana por tu cuenta): ${calendarioProximo(ahora)}
+Al proponer una cita: desde mañana en adelante (hoy solo con 3 horas o más de margen); visita al proyecto de 9 am a 5 pm; videollamada de 8 am a 8 pm, siempre "hora de El Salvador" y, si el cliente vive fuera, también su hora.
 Nombre: ${lead.name ?? 'desconocido'}
 Etapa: ${lead.stage}
 ${qualBlock}
