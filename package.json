@@ -11,6 +11,7 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "eval:ventas": "RUN_EVAL=1 node --env-file=.env ./node_modules/.bin/vitest run tests/eval",
+    "eval:visual": "RUN_EVAL_VISUAL=1 node --env-file=.env ./node_modules/.bin/vitest run tests/eval/visual-cita.eval.test.ts",
     "hooks:install": "git config core.hooksPath scripts/hooks && chmod +x scripts/hooks/pre-push"
   },
   "dependencies": {
