@@ -28,17 +28,18 @@ export interface UsoLLM {
 interface Tarifa { entrada: number; cacheada: number; salida: number }
 
 /**
- * USD por millón de tokens. gpt-4.1, gpt-4.1-mini, gpt-4o y o4-mini son la lista
- * pública. gpt-5.6-terra se calibró con la factura real del 29-sep (entrada
- * ≈ $2.1/M cobrada casi toda como "cache writes", salida ≈ $11/M): es una
- * estimación. En o4-mini y gpt-5.x, `completion_tokens` ya incluye el razonamiento.
+ * USD por millón de tokens, de la página oficial de precios de OpenAI
+ * (developers.openai.com/api/docs/pricing, verificada el 29-sep-2026).
+ * gpt-5.6-terra cobra $2.00 de entrada, pero además "cache writes" a $2.50: en la
+ * factura real casi toda la entrada salió como cache write, así que se usa $2.50.
+ * En o4-mini y gpt-5.x, `completion_tokens` ya incluye el razonamiento.
  */
 export const TARIFAS: Record<string, Tarifa> = {
   'gpt-4.1': { entrada: 2.0, cacheada: 0.5, salida: 8.0 },
   'gpt-4.1-mini': { entrada: 0.4, cacheada: 0.1, salida: 1.6 },
   'gpt-4o': { entrada: 2.5, cacheada: 1.25, salida: 10.0 },
   'o4-mini': { entrada: 1.1, cacheada: 0.275, salida: 4.4 },
-  'gpt-5.6-terra': { entrada: 2.1, cacheada: 0.2, salida: 11.0 },
+  'gpt-5.6-terra': { entrada: 2.5, cacheada: 0.2, salida: 12.0 },
 }
 
 /** Modelo desconocido: se cobra a la tarifa más cara conocida — el error debe pecar de prudente. */
