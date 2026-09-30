@@ -42,3 +42,21 @@ export function limpiarFrasesProhibidas(texto: string): string {
   // cliente sin respuesta
   return limpio || texto
 }
+
+/**
+ * "Fíjate que" / "Fíjese que" una vez suena humano; en cada mensaje suena a
+ * robot. 30-sep-2026: 5 de 6 respuestas seguidas a un mismo cliente empezaban
+ * así. Si ya lo dijo en la conversación, se quita del arranque de la oración
+ * (el resto de la frase se conserva y se capitaliza).
+ */
+const MULETILLA = /(^|[.!?…]\s+|\n)(f[ií]j(?:ate|ese)\s+(?:que\s+)?(?:,\s*)?)(\S)/gi
+
+export function quitarMuletillaRepetida(texto: string, anteriores: string[]): string {
+  const yaLaUso = anteriores.some(t => /\bf[ií]j(ate|ese)\s+que\b/i.test(t))
+  let usada = yaLaUso
+  return texto.replace(MULETILLA, (todo, antes: string, _m: string, letra: string) => {
+    // La primera vez en toda la charla se respeta; de ahí en adelante, fuera
+    if (!usada) { usada = true; return todo }
+    return antes + letra.toUpperCase()
+  })
+}

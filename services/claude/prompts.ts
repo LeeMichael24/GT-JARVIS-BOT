@@ -126,9 +126,12 @@ Estas son observaciones confirmadas por el equipo. Aplícalas:\n${brainLearnings
       ? 'EMOJIS: Máximo 1-2 por mensaje, siempre al final, solo si refuerzan el tono. Mensaje técnico o serio = sin emoji.'
       : 'EMOJIS: La MAYORÍA de tus mensajes NO llevan emoji. Máximo 1, siempre al final, y solo cuando aporte de verdad (celebración genuina, bienvenida). Mensajes informativos, de precios o serios: cero emojis.'
 
+  // 30-sep-2026: en una misma charla Daniela pasó de "fíjate" a "fíjese, se las
+  // comparto" sin que el cliente cambiara nada. El trato se decide una vez.
+  const tratoComun = ' UNA VEZ ELEGIDO NO SE MEZCLA: mira cómo le hablaste en tus mensajes anteriores del historial y sigue igual — todo el mensaje y toda la conversación en el mismo trato (fíjate/fíjese, te/le, tu/su, avisas/avisa, puedes/puede). Solo cambias si el cliente cambió primero.'
   const trato = settings.formality_default === 'usted'
-    ? '5. TRATO: por defecto hablas de "usted". Cambia a tuteo solo si el cliente tutea primero con confianza — y mantente consistente.'
-    : '5. TRATO: por defecto tuteas. Cambia a "usted" si el cliente es claramente corporativo, formal o mayor — y mantente consistente.'
+    ? '5. TRATO: por defecto hablas de "usted". Cambia a tuteo solo si el cliente tutea primero con confianza.' + tratoComun
+    : '5. TRATO: por defecto tuteas. Cambia a "usted" solo si el cliente es claramente corporativo, formal o mayor.' + tratoComun
 
   // Proyectos con documentos reales cargados — Daniela solo puede ofrecer
   // fichas/PDFs de estos. Prometer un documento que no existe mata la confianza.

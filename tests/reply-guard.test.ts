@@ -57,3 +57,26 @@ describe('limpiarFrasesProhibidas — promesas de garantía', () => {
     ]) expect(limpiarFrasesProhibidas(t)).toBe(t)
   })
 })
+
+describe('quitarMuletillaRepetida', async () => {
+  const { quitarMuletillaRepetida } = await import('@/lib/reply-guard')
+
+  it('la primera vez en la conversación se respeta', () => {
+    expect(quitarMuletillaRepetida('Fíjate que ese modelo ya se agotó, pero hay otro.', [])).toBe('Fíjate que ese modelo ya se agotó, pero hay otro.')
+  })
+
+  it('si ya la dijo antes, se quita del arranque y se capitaliza', () => {
+    const antes = ['Fíjate que Portacelli ya tiene el bulevar abierto.']
+    expect(quitarMuletillaRepetida('Fíjese que hasta ahora solo hay fotos de la entrada.', antes)).toBe('Hasta ahora solo hay fotos de la entrada.')
+    expect(quitarMuletillaRepetida('Claro. Fijate que el plan funciona así.', antes)).toBe('Claro. El plan funciona así.')
+  })
+
+  it('dos veces en el mismo mensaje: queda solo la primera', () => {
+    expect(quitarMuletillaRepetida('Fíjate que sí hay. Fíjate que además hay video.', [])).toBe('Fíjate que sí hay. Además hay video.')
+  })
+
+  it('no toca "fíjate" cuando no es muletilla de arranque', () => {
+    const antes = ['Fíjate que sí.']
+    expect(quitarMuletillaRepetida('Cuando vengas, fíjate en la vista del lobby.', antes)).toBe('Cuando vengas, fíjate en la vista del lobby.')
+  })
+})

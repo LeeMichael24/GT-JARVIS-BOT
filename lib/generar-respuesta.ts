@@ -2,7 +2,7 @@ import type { AgentSettings } from '@/lib/agent-settings'
 import type { ClaudeResponse, Conversation } from '@/types'
 import { callClaude, parseClaudeResponse } from '@/services/claude/client'
 import { revisarRespuesta, type Veredicto } from '@/lib/sales-critic'
-import { limpiarFrasesProhibidas } from '@/lib/reply-guard'
+import { limpiarFrasesProhibidas, quitarMuletillaRepetida } from '@/lib/reply-guard'
 import {
   crearMedidor, estadoPresupuesto, avisarSiCorresponde, MODELO_TOPE, TOPE_MENSUAL_USD_DEFAULT,
   type Medidor, type NivelPresupuesto,
@@ -196,5 +196,10 @@ async function generar(args: ArgsGenerar, deps: DepsGenerar): Promise<ResultadoG
   // 4. Lo que el prompt no garantiza lo garantiza el código
   respuesta.reply = limpiarFrasesProhibidas(respuesta.reply)
   respuesta.extra_messages = (respuesta.extra_messages ?? []).map(limpiarFrasesProhibidas)
+  // Muletilla repetida: cuenta lo que Daniela ya dijo antes y lo de este mismo turno
+  const dichos = history.filter(m => m.role !== 'user').map(m => m.content)
+  respuesta.reply = quitarMuletillaRepetida(respuesta.reply, dichos)
+  respuesta.extra_messages = respuesta.extra_messages.map((extra, i) =>
+    quitarMuletillaRepetida(extra, [...dichos, respuesta.reply, ...respuesta.extra_messages!.slice(0, i)]))
   return { respuesta, revision }
 }
