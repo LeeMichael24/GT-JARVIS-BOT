@@ -169,6 +169,20 @@ export interface ClaudeResponse {
   // null solo si el cliente pidió tiempo, se despidió o es un mensaje de trámite.
   // Si no quedó escrita en reply ni en extra_messages, el webhook la entrega.
   lazo_abierto?: string | null
+  // Oportunidad fuera del catálogo: propietario que quiere vender/rentar con
+  // nosotros, o cliente que busca algo que no tenemos (ver lib/solicitudes.ts)
+  solicitud?: SolicitudInmueble | null
+}
+
+export interface SolicitudInmueble {
+  tipo: 'captacion' | 'busqueda'
+  operacion: 'venta' | 'alquiler' | null
+  tipo_inmueble: string | null
+  zona: string | null
+  presupuesto: string | null
+  caracteristicas: string | null
+  plazo: string | null
+  notas: string | null
 }
 
 // ── SDR Agent types ──────────────────────────────────────────

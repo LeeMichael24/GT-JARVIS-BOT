@@ -219,7 +219,8 @@ Observaciones del equipo sobre CÓMO vender. No son fuente de datos de proyectos
   "interactive_buttons": [],
   "send_media": null,
   "lazo_abierto": "la frase exacta de tu reply o extra_messages que deja el lazo abierto, o null",
-  "extra_messages": []
+  "extra_messages": [],
+  "solicitud": null
 }
 - "agent_action": SIEMPRE incluir. Es tu decisión como SDR.
 - "deal_summary": SIEMPRE incluir. Resume el estado del deal para tu yo futuro.
@@ -228,6 +229,7 @@ ${settings.learning_sensitivity === 'high'
     : '- "brain_observations": solo cuando detectes algo interesante (patrón, técnica que funcionó, objeción nueva). Array vacío si nada notable.'}
 - "interactive_buttons": máximo 3 botones, títulos de máximo 20 caracteres. Úsalos solo en momentos clave: después de presentar opciones, al ofrecer visita, al confirmar interés. Array vacío la mayoría de veces.
 - "opt_out": boolean — true SOLO si el cliente pide explícitamente no ser contactado.
+- "solicitud": null salvo en SOLICITUDES DE INMUEBLES. Entonces: { "tipo": "captacion" | "busqueda", "operacion": "venta" (vender o comprar) | "alquiler" | null, "tipo_inmueble": "…", "zona": "…", "presupuesto": "lo que puede pagar, o el precio que espera el propietario", "caracteristicas": "…", "plazo": "…", "notas": "…" } — lo que no sepas va en null.
 - "extra_messages": burbujas ADICIONALES que se envían DESPUÉS del reply (máx 2). Así textea la gente real: mensajes separados, no un bloque. Úsalo cuando el guion pida doble mensaje, o cuando dividir en 2 burbujas cortas sea más natural que una larga. Vacío la mayoría de veces. Orden de envío: reply → media (si hay) → extra_messages.
 - "lazo_abierto": copia EXACTA de la frase de tu reply o de extra_messages que deja al cliente con ganas del siguiente paso (ver VENTA GUIADA). null SOLO si el cliente pidió tiempo, se despidió, o el mensaje es de trámite (confirmar una cita, escalar al equipo). Si no encuentras esa frase en lo que escribiste, te faltó el lazo: escríbelo en el reply o en extra_messages y cópialo aquí. El lazo no puede ser una pregunta ni el precio a secas: es la frase que anticipa, recomienda, prepara o invita a ver algo.
 ${hasMedia
@@ -278,6 +280,7 @@ ${inventario}
   const objectivesSection = objectivesBlock ?? ''
   const missionBlock = r('qualification_mission')
   const schedulingBlock = r('scheduling')
+  const solicitudesBlock = r('solicitudes')
 
   // El marco de decisión va DESPUÉS del contexto a propósito. 29-sep-2026: se probó
   // subirlo al inicio fijo para aprovechar el caché (54 % → 64 % reutilizable) y la
@@ -297,7 +300,7 @@ ${dealBlock}${memoriaCliente ? '\n' + memoriaCliente + '\n' : ''}
 ${missionBlock}
 
 ${schedulingBlock}
-
+${solicitudesBlock ? '\n' + solicitudesBlock + '\n' : ''}
 ${PIENSA_ANTES_DE_ESCRIBIR}
 
 ${CHEQUEO_ANTES_DE_ENVIAR}

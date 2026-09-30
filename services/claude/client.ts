@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { registrarUso, type Medidor } from '@/lib/llm-budget'
+import { parseSolicitud } from '@/lib/solicitudes'
 import type {
   ClaudeResponse, Conversation, LeadStage, MeetingRequest, QualificationData,
   AgentAction, AgentActionType, DealSummary, DealSignals,
@@ -160,6 +161,7 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     send_media: parseSendMedia((parsed as Record<string, unknown>).send_media),
     extra_messages: parseExtraMessages((parsed as Record<string, unknown>).extra_messages),
     lazo_abierto: parseLazo((parsed as Record<string, unknown>).lazo_abierto),
+    solicitud: parseSolicitud((parsed as Record<string, unknown>).solicitud),
   }
 }
 

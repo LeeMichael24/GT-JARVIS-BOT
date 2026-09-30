@@ -108,6 +108,14 @@ const media = vi.hoisted(() => ({
   pickMediaToSend: vi.fn((): unknown[] => []),
   inventarioDeMaterial: vi.fn((): string[] => []),
 }))
+const solicitudes = vi.hoisted(() => ({
+  registrarSolicitud: vi.fn(async (): Promise<unknown> => ({ solicitud: null, completa: false, avisar: false, id: null })),
+  marcarNotificada: vi.fn(async () => {}),
+}))
+vi.mock('@/lib/solicitudes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/solicitudes')>()),
+  ...solicitudes,
+}))
 vi.mock('@/lib/project-media', async (importOriginal) => ({
   paqueteDeImagenes: (await importOriginal<typeof import('@/lib/project-media')>()).paqueteDeImagenes,
   ...media,
@@ -565,6 +573,34 @@ describe('webhook con bot activo', () => {
     const linkSend = wa.sendText.mock.calls.find(c => String(c[1]).includes('earth.google.com'))
     expect(linkSend).toBeDefined()
     expect(String(linkSend![1])).toContain('Ubicación exacta 🌍')
+  })
+
+  it('solicitud completa: avisa al equipo UNA vez y deja la nota en el historial', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'Quiero vender mi casa en Santa Tecla', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    const sol = { tipo: 'captacion', operacion: 'venta', tipo_inmueble: 'casa', zona: 'Santa Tecla', presupuesto: null, caracteristicas: null, plazo: null, notas: null }
+    solicitudes.registrarSolicitud.mockResolvedValueOnce({ solicitud: sol, completa: true, avisar: true, id: 'sol-1' })
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Qué bueno que nos escribes. Ya le pasé los datos de tu casa al equipo.', stage: 'warm', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      schedule_meeting: null, opt_out: false,
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
+      send_media: null, extra_messages: [], solicitud: sol,
+    })
+
+    await POST(buildRequest())
+    await flush()
+
+    expect(solicitudes.registrarSolicitud).toHaveBeenCalledWith('lead-1', sol)
+    const aviso = (wa.sendInternalNotification.mock.calls as unknown as [{ action: { reason: string } }][]).find(c => c[0].action.reason.includes('Santa Tecla'))
+    expect(aviso).toBeDefined()
+    expect(aviso![0].action.reason).not.toContain('\n')
+    expect(solicitudes.marcarNotificada).toHaveBeenCalledWith('sol-1')
+    const nota = db.saveConversation.mock.calls.map(c => (c as unknown as [{ content: string }])[0].content).find(t => t.startsWith('[Solicitud enviada'))
+    expect(nota).toContain('Propietario quiere VENDER')
   })
 
   // 30-sep-2026: tres fotos del mismo avance llegaban con el mismo texto tres veces

@@ -39,6 +39,7 @@ import { getActiveObjectives, formatObjectivesForPrompt } from '@/lib/objectives
 import { generarRespuesta } from '@/lib/generar-respuesta'
 import { seleccionarConocimiento, construirConsulta, recuerdosDelCliente, formatRecuerdosParaPrompt, fichasRelevantes } from '@/lib/contexto-recuperado'
 import { almacenSupabase } from '@/lib/almacen-vectores'
+import { registrarSolicitud, marcarNotificada, describirSolicitud } from '@/lib/solicitudes'
 
 // Con Fluid compute, Hobby permite hasta 300 s (Pro 800 s). Medido 13-sep-2026:
 // una respuesta con revisión y reescritura llega a ~52 s; con 60 s de tope
@@ -725,6 +726,38 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
         `[processMessage] saveConversation failed — history will miss this reply:`,
         err instanceof Error ? err.message : err
       )
+    }
+
+    // 13-bis. Solicitud de inmueble (captación o búsqueda sin match): se guarda y,
+    // cuando tiene lo mínimo, el equipo recibe UN aviso. Va después de guardar
+    // el reply para que la nota quede en su lugar en el historial.
+    if (claudeResponse.solicitud) {
+      try {
+        const r = await registrarSolicitud(lead.id, claudeResponse.solicitud)
+        console.log(`[processMessage] Solicitud ${r.solicitud.tipo} — completa: ${r.completa} | avisar: ${r.avisar}`)
+        if (r.avisar) {
+          const detalle = describirSolicitud(r.solicitud)
+          const asignado = freshLead?.assigned_to ?? lead.assigned_to
+          await sendInternalNotification({
+            leadName: lead.name ?? claudeResponse.name_captured ?? 'Cliente',
+            leadPhone: lead.phone,
+            // Las plantillas de WhatsApp no aceptan saltos de línea en un parámetro
+            action: { type: 'consult_team', reason: detalle.split('\n').join(' · '), urgency: 'normal', client_type: 'individual', follow_up_hint: null },
+            botReply: claudeResponse.reply,
+            dealSummary: claudeResponse.deal_summary?.summary ?? null,
+            toPhone: pickAlertRecipient('consult_team', asignado, process.env.CEO_PHONE_NUMBER, team),
+          })
+          await marcarNotificada(r.id).catch(() => {})
+          await logActivity({
+            actorType: 'bot', action: 'solicitud_inmueble', entityType: 'lead', entityId: lead.id,
+            details: { ...r.solicitud, solicitud_id: r.id },
+          }).catch(() => {})
+          await saveConversation({ leadId: lead.id, role: 'assistant', content: `[Solicitud enviada al equipo: ${detalle.split('\n').join(' · ')}]` })
+            .catch(() => {})
+        }
+      } catch (err) {
+        console.error('[processMessage] No se pudo registrar la solicitud:', err instanceof Error ? err.message : err)
+      }
     }
 
     // 14. Send media attachment if GPT-4o requested it (from project_media DB)
