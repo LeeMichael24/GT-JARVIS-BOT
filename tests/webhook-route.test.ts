@@ -19,6 +19,7 @@ const db = vi.hoisted(() => ({
   getLeadById: vi.fn(async () => null as unknown),
   getDealSummary: vi.fn(async () => null as unknown),
   upsertDealSummary: vi.fn(async () => {}),
+  getOlderConversation: vi.fn(async (): Promise<unknown[]> => []),
 }))
 vi.mock('@/lib/supabase', () => db)
 
@@ -107,7 +108,10 @@ const media = vi.hoisted(() => ({
   pickMediaToSend: vi.fn((): unknown[] => []),
   inventarioDeMaterial: vi.fn((): string[] => []),
 }))
-vi.mock('@/lib/project-media', () => media)
+vi.mock('@/lib/project-media', async (importOriginal) => ({
+  paqueteDeImagenes: (await importOriginal<typeof import('@/lib/project-media')>()).paqueteDeImagenes,
+  ...media,
+}))
 
 const scripts = vi.hoisted(() => ({
   getActiveProjectScripts: vi.fn(async (): Promise<unknown[]> => []),
@@ -561,6 +565,37 @@ describe('webhook con bot activo', () => {
     const linkSend = wa.sendText.mock.calls.find(c => String(c[1]).includes('earth.google.com'))
     expect(linkSend).toBeDefined()
     expect(String(linkSend![1])).toContain('Ubicación exacta 🌍')
+  })
+
+  // 30-sep-2026: tres fotos del mismo avance llegaban con el mismo texto tres veces
+  it('send_media image: manda el paquete de fotos SIN pie y UN solo texto para el conjunto', async () => {
+    db.upsertLead.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getLeadById.mockResolvedValue({ ...baseLead, bot_active: true })
+    db.getUnprocessedUserMessages.mockResolvedValue([
+      { id: 'c1', lead_id: 'lead-1', role: 'user', content: 'tienes fotos del avance?', wa_message_id: 'wamid.in1', sent_by: null, created_at: '' },
+    ])
+    const foto = (n: number) => ({ id: `i${n}`, project_key: 'portacelli', media_type: 'image', url: `https://x/${n}.jpg`, caption: 'Avances de entrada Portacelli', sort_order: n, active: true })
+    const fotos = [1, 2, 3, 4, 5].map(foto)
+    media.mediaForProject.mockReturnValueOnce(fotos)
+    media.pickMediaToSend.mockReturnValueOnce(fotos)
+    ai.parseClaudeResponse.mockReturnValueOnce({
+      reply: 'Mira cómo va la entrada:', stage: 'warm', name_captured: null,
+      qualification_data: { purpose: null, budget_ok: null, timeline: null, financing_needed: null, decision_maker: null },
+      schedule_meeting: null, opt_out: false,
+      agent_action: null, deal_summary: null, brain_observations: [], interactive_buttons: [],
+      send_media: { type: 'image', project: 'Portacelli', description: 'avances' },
+      extra_messages: [],
+    })
+
+    await POST(buildRequest())
+    await flush()
+
+    expect(wa.sendImage).toHaveBeenCalledTimes(5)
+    for (const c of wa.sendImage.mock.calls as unknown[][]) expect(c[2]).toBeUndefined()
+    const pies = wa.sendText.mock.calls.filter(c => String(c[1]).includes('Avances de entrada'))
+    expect(pies).toHaveLength(1)
+    const nota = db.saveConversation.mock.calls.map(c => (c as unknown as [{ content: string }])[0].content).find(t => t.startsWith('[Material enviado'))
+    expect(nota).toBe('[Material enviado al cliente: 5× image — Avances de entrada Portacelli]')
   })
 })
 

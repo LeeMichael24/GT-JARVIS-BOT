@@ -103,6 +103,19 @@ export async function getConversationHistory(leadId: string, limit = 15): Promis
   return ((data as Conversation[]) ?? []).reverse()
 }
 
+/** Mensajes anteriores a la ventana del historial (los `saltar` más recientes quedan fuera) — para la memoria del cliente */
+export async function getOlderConversation(leadId: string, saltar: number, limit = 150): Promise<Conversation[]> {
+  const { data, error } = await getServiceClient()
+    .from('conversations')
+    .select('*')
+    .eq('lead_id', leadId)
+    .order('created_at', { ascending: false })
+    .range(saltar, saltar + limit - 1)
+
+  if (error) throw new Error(`getOlderConversation: ${error.message}`)
+  return (data as Conversation[]) ?? []
+}
+
 export async function isMessageProcessed(waMessageId: string): Promise<boolean> {
   const supabase = getServiceClient()
   const { data } = await supabase

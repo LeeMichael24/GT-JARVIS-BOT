@@ -105,13 +105,41 @@ export function inventarioDeMaterial(
   items: ProjectMediaItem[],
   projects: { slug: string; name: string }[],
 ): string[] {
-  const grupos = new Map<string, string[]>()
+  // destino → pieza → cuántas. Cinco fotos con el mismo pie iban cinco veces
+  // al prompt en cada mensaje; ahora van como "5 imágenes (…)".
+  const grupos = new Map<string, Map<string, number>>()
   for (const i of items) {
     const listing = i.project_slug ? projects.find(p => p.slug === i.project_slug) : null
     const key = i.project_key.charAt(0).toUpperCase() + i.project_key.slice(1)
     const destino = listing?.name ?? (i.project_slug ? i.project_slug : `${key} (común a todos sus listings)`)
-    const pieza = `${TIPO_ES[i.media_type] ?? i.media_type}${i.caption ? ` ("${i.caption}")` : ''}`
-    grupos.set(destino, [...(grupos.get(destino) ?? []), pieza])
+    const pieza = `${i.media_type}\u0000${i.caption ?? ''}`
+    const piezas = grupos.get(destino) ?? new Map<string, number>()
+    piezas.set(pieza, (piezas.get(pieza) ?? 0) + 1)
+    grupos.set(destino, piezas)
   }
-  return Array.from(grupos, ([destino, piezas]) => `${destino}: ${piezas.join(', ')}`)
+  return Array.from(grupos, ([destino, piezas]) => {
+    const texto = Array.from(piezas, ([pieza, n]) => {
+      const [tipo, caption] = pieza.split('\u0000')
+      const nombre = TIPO_ES[tipo] ?? tipo
+      const plural = nombre === 'imagen' ? 'imágenes' : nombre.endsWith('s') ? nombre : nombre + 's'
+      const cuantas = n > 1 ? `${n} ${plural}` : nombre
+      return `${cuantas}${caption ? ` ("${caption}")` : ''}`
+    })
+    return `${destino}: ${texto.join(', ')}`
+  })
+}
+
+/** Cuántas imágenes salen como máximo en un paquete. WhatsApp agrupa 4 o más seguidas en un álbum. */
+export const MAX_IMAGENES_PAQUETE = 6
+
+/**
+ * Las imágenes salen como UN paquete: todas sin pie de foto y después UN solo
+ * texto que describe el conjunto. Antes cada imagen llevaba su caption y, como
+ * las fotos de un mismo avance comparten descripción, el cliente recibía tres
+ * fotos con el mismo texto repetido tres veces (30-sep-2026).
+ */
+export function paqueteDeImagenes(items: ProjectMediaItem[], max = MAX_IMAGENES_PAQUETE): { imagenes: ProjectMediaItem[]; texto: string | null } {
+  const imagenes = items.slice(0, max)
+  const captions = [...new Set(imagenes.map(i => i.caption?.trim()).filter((c): c is string => !!c))]
+  return { imagenes, texto: captions.length ? captions.join('\n') : null }
 }

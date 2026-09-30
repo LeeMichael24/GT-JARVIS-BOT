@@ -3,11 +3,11 @@
 # Candado de calidad de Daniela.
 #
 # Push a main = deploy a producción (Vercel). Si el push toca cómo Daniela
-# piensa o habla, antes de subir corre la batería de venta con el modelo real
-# (npm run eval:ventas). Si no llega al umbral del juez o aparece una frase
+# piensa o habla, antes de subir corre la batería de venta con la IA local
+# gratis (npm run eval:ventas con LLM_PRUEBAS_URL). Si no llega al umbral del juez o aparece una frase
 # prohibida, el push se cancela.
 #
-# Tarda unos minutos y cuesta centavos. Emergencia real: git push --no-verify
+# Tarda unos minutos y no cuesta nada. Emergencia real: git push --no-verify
 # Instalación (una vez por máquina): npm run hooks:install
 # ────────────────────────────────────────────────────────────────────
 zero=0000000000000000000000000000000000000000
@@ -24,6 +24,16 @@ $(git diff --name-only "$rango" 2>/dev/null)"
 done
 
 cerebro='^(services/claude/|lib/(prompt-blocks|knowledge-base|sales-critic|generar-respuesta|reply-guard|project-scripts|project-media|notices|projects-registry)\.ts|app/api/webhook/whatsapp/route\.ts|tests/eval/)'
+
+# 30-sep-2026, decisión de Mike: la batería NO se corre contra OpenAI (gasta la
+# cuenta). Solo corre con una IA local gratis (LLM_PRUEBAS_URL en .env, p. ej.
+# Ollama en http://localhost:11434/v1). Sin ella, el push sigue y avisa.
+pruebas_url=$(grep -E '^LLM_PRUEBAS_URL=' .env 2>/dev/null | cut -d= -f2-)
+if [ -z "$pruebas_url" ] && printf '%s\n' "$cambios" | grep -qE "$cerebro"; then
+  echo "⚠ Este push cambia el cerebro de Daniela, pero no hay IA de pruebas gratis (LLM_PRUEBAS_URL)."
+  echo "  La batería NO se corre para no gastar OpenAI. Sube sin candado de calidad."
+  exit 0
+fi
 
 if printf '%s\n' "$cambios" | grep -qE "$cerebro"; then
   echo "▶ Este push cambia el cerebro de Daniela — corriendo la batería de venta (unos minutos)…"

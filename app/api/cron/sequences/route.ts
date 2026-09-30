@@ -23,6 +23,14 @@ import { sendText, sendTemplate } from '@/services/whatsapp/client'
 import { getAgentSettings } from '@/lib/agent-settings'
 import { recordCronRun } from '@/lib/cron-log'
 import type { SequenceType } from '@/types'
+import { getPlaybook, filterPlaybookByProject, type KBEntry } from '@/lib/knowledge-base'
+import { recuperar } from '@/lib/memoria'
+import { almacenSupabase } from '@/lib/almacen-vectores'
+
+/** Datos reales del proyecto que entran a un recontacto: un gancho nuevo, no "¿sigues interesado?" */
+const K_DATOS_RECONTACTO = 3
+/** Historial que lee el recontacto: lo último de la charla basta; el resumen del caso trae lo anterior */
+const HISTORIAL_RECONTACTO = 10
 
 // Hobby permite hasta 300 s. Con 60 s la corrida se cortaba antes de llegar al
 // registro final: cron_runs no tuvo ni una fila de 'sequences' del 2 al 13-sep.
@@ -55,6 +63,11 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const due = await getDueSequences(now)
+  // Una vez por corrida, no una por cliente
+  const proyectos = due.length ? await getAllProjects().catch(() => []) : []
+  const conocimiento: KBEntry[] = due.length ? await getPlaybook().catch(() => []) : []
+  let almacen: ReturnType<typeof almacenSupabase> | null = null
+  try { almacen = almacenSupabase() } catch { almacen = null }
   let sent = 0
   let skipped = 0
   let errors = 0
@@ -112,11 +125,10 @@ export async function GET(request: Request): Promise<Response> {
       // Historial real de la charla: sin esto el modelo no sabe qué pidió el
       // cliente y el seguimiento sale genérico o de otro tema. Antes se
       // mandaba [] a callClaude — el bug de "recontacto sin contexto".
-      const history = await getConversationHistory(seq.lead_id, settings.history_window)
+      const history = await getConversationHistory(seq.lead_id, Math.min(settings.history_window, HISTORIAL_RECONTACTO))
 
       // Tema del recontacto = lo que de verdad se habló. NO lead.project_interest:
       // es un campo que puede quedar mal fijado (lead 31204ec5, 29-sep-2026).
-      const proyectos = await getAllProjects().catch(() => [])
       const temaVerificado = temaDeConversacion(history, proyectos)
       const proyectoDelContexto = (seq.context as Record<string, string>).project ?? temaVerificado
 
@@ -174,15 +186,41 @@ export async function GET(request: Request): Promise<Response> {
         ''
       const projectInterest = proyectoDelContexto
 
+      // RAG: 2-3 datos reales del proyecto relacionados con lo último que dijo el
+      // cliente, para que el seguimiento aporte algo nuevo. Si falla, sale sin ellos.
+      let datosReales = ''
+      try {
+        const proyecto = projectInterest ? proyectos.find(p => p.name === projectInterest) ?? null : null
+        const ultimoCliente = [...history].reverse().find(m => m.role === 'user')?.content ?? ''
+        const candidatos = proyecto ? filterPlaybookByProject(conocimiento, proyecto.slug, proyecto.name) : []
+        if (candidatos.length && ultimoCliente) {
+          const sel = await recuperar({
+            consulta: ultimoCliente,
+            candidatos: candidatos.filter(e => e.topic !== 'ficha_limites'),
+            textoDe: e => `${e.title}: ${e.content}`,
+            k: K_DATOS_RECONTACTO,
+            alFallar: 'nada',
+            almacen,
+            fuente: 'conocimiento',
+          })
+          datosReales = sel.elegidos
+            .map(e => `- ${e.title}: ${e.content.replace(/\s+/g, ' ').slice(0, 280)}`)
+            .join('\n')
+        }
+      } catch (err) {
+        console.warn(`[cron/sequences] Sin datos del proyecto para lead ${seq.lead_id}:`, err instanceof Error ? err.message : err)
+      }
+
       // Ask for JSON with a "message" field so callClaude (which forces JSON mode) works
       const followUpPrompt = `Eres Daniela, de Grupo Terranova. Arriba tienes la conversación real que ya tuviste con ${lead.name ?? 'este cliente'} — LÉELA antes de escribir: el seguimiento debe retomar lo último que el cliente preguntó o dijo, nunca un tema aparte o genérico.
 ${dealContext ? `Resumen del caso: ${dealContext}` : ''}
 ${projectInterest ? `Proyecto de interés: ${projectInterest}` : ''}
-Propósito de este seguimiento: ${step.purpose}
+${datosReales ? `Datos reales del proyecto que puedes usar como gancho (usa uno solo, y solo si conecta con lo que habló el cliente; no inventes nada fuera de esto):\n${datosReales}\n` : ''}Propósito de este seguimiento: ${step.purpose}
 Paso ${seq.current_step + 1} de ${def.steps.length} (${step.purpose === 'last_chance' ? 'último intento' : 'seguimiento normal'}).
 
 Reglas:
 - Conecta con el hilo real de la conversación de arriba, nunca con un tema distinto
+- Si arriba ya hay un seguimiento tuyo sin respuesta, no lo repitas: aporta un ángulo nuevo
 - Máximo 400 caracteres
 - Tono cálido y natural, como si fueras Daniela de Grupo Terranova
 - No presiones. Sé útil y genuina.
@@ -191,7 +229,7 @@ Reglas:
 - Responde SOLO con un JSON: {"message": "<el texto del mensaje aquí>"}`
 
       // 20 s por intento: con el reintento del SDK, un cliente no se come la corrida
-      const rawReply = await callClaude(followUpPrompt, history, { timeoutMs: 20_000 })
+      const rawReply = await callClaude(followUpPrompt, history, { timeoutMs: 20_000, cacheKey: 'daniela-recontacto' })
 
       // Extract message from JSON response
       let reply: string

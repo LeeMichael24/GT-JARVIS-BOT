@@ -69,12 +69,13 @@ export function depsReales(medidor?: Medidor): DepsGenerar {
   // La batería mide la calidad con la revisión completa: no la degrada el tope (el gasto sí se cuenta)
   const esEvaluacion = !!(process.env.RUN_EVAL || process.env.RUN_EVAL_VISUAL)
   return {
-    llamarModelo: (system, history, opts) => callClaude(system, history, { ...opts, medidor }),
+    // Mismo inicio de prompt para todos los clientes: una sola clave de caché
+    llamarModelo: (system, history, opts) => callClaude(system, history, { ...opts, medidor, cacheKey: 'daniela-respuesta' }),
     juez: (prompt, model, effort) => callClaude(
       prompt,
       [{ id: 'juez', lead_id: 'juez', role: 'user', content: 'Evalúa la respuesta y devuelve el JSON.', wa_message_id: null, sent_by: null, created_at: new Date().toISOString() }],
       // o4-mini razona antes de responder: necesita más margen que el juez rápido
-      { model: model ?? MODELO_JUEZ, temperature: 0, timeoutMs: /^o\d/.test(model ?? '') ? 20_000 : 8_000, medidor, reasoningEffort: effort },
+      { model: model ?? MODELO_JUEZ, temperature: 0, timeoutMs: /^o\d/.test(model ?? '') ? 20_000 : 8_000, medidor, reasoningEffort: effort, cacheKey: 'daniela-juez' },
     ),
     ahora: () => Date.now(),
     presupuesto: esEvaluacion ? undefined : async cfg => {

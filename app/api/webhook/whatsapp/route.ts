@@ -21,6 +21,7 @@ import {
   getLeadById,
   getDealSummary,
   upsertDealSummary,
+  getOlderConversation,
 } from '@/lib/supabase'
 import { calculateAdaptiveDebounce, computeBurstPattern } from '@/lib/debounce'
 import { createSequence, pauseLeadSequences, cancelSequencesForLead, pickHoraActiva } from '@/lib/sequences'
@@ -30,13 +31,14 @@ import { logActivity } from '@/lib/activity-log'
 import { autoTagProject, autoTagSource } from '@/lib/auto-tag'
 import { getActiveEscalationRules, matchKeywordRules, formatEscalationRulesForPrompt, formatConditionalRulesForPrompt } from '@/lib/escalation-rules'
 import { getActiveTeamMembers, isInternal, pickAlertRecipient, shouldSuppressAlert } from '@/lib/team-routing'
-import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, inventarioDeMaterial, type ProjectMediaItem } from '@/lib/project-media'
+import { getAllProjectMediaItems, mediaForProject, mediaProjectKeys, pickMediaToSend, inventarioDeMaterial, paqueteDeImagenes, type ProjectMediaItem } from '@/lib/project-media'
 import { getActiveProjectScripts, matchProjectScript, formatScriptForPrompt } from '@/lib/project-scripts'
 import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/agent-settings'
 import { getEffectivePromptBlocks, DEFAULT_PROMPT_BLOCKS } from '@/lib/prompt-blocks'
 import { getActiveObjectives, formatObjectivesForPrompt } from '@/lib/objectives'
 import { generarRespuesta } from '@/lib/generar-respuesta'
-import { seleccionarConocimiento, construirConsulta } from '@/lib/contexto-recuperado'
+import { seleccionarConocimiento, construirConsulta, recuerdosDelCliente, formatRecuerdosParaPrompt } from '@/lib/contexto-recuperado'
+import { almacenSupabase } from '@/lib/almacen-vectores'
 
 // Con Fluid compute, Hobby permite hasta 300 s (Pro 800 s). Medido 13-sep-2026:
 // una respuesta con revisión y reescritura llega a ~52 s; con 60 s de tope
@@ -398,12 +400,26 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // Memoria recuperada: del conocimiento y del cerebro entra solo lo relevante
     // a ESTE mensaje. Antes entraba todo (~18K tokens por respuesta) con la
     // cuenta de OpenAI a 30K tokens/min: dos clientes en el mismo minuto chocaban.
+    // Los vectores viven en Supabase (migración 023): cada texto se vectoriza una
+    // vez en la vida y Postgres elige; sin la migración se calcula aquí como antes.
+    let almacen: ReturnType<typeof almacenSupabase> | null = null
+    try { almacen = almacenSupabase() } catch { almacen = null }
+    const consulta = construirConsulta({ mensajeCliente: combinedBody, ultimaRespuestaBot: lastBotMessage })
+    // Mensajes de este cliente que ya no caben en la ventana del historial
+    const anterioresP = (async () => getOlderConversation(lead.id, agentSettings.history_window))().catch(err => {
+      console.warn('[processMessage] No se pudieron leer mensajes anteriores — sigo sin recuerdos:', err instanceof Error ? err.message : err)
+      return []
+    })
     const seleccion = await seleccionarConocimiento({
-      consulta: construirConsulta({ mensajeCliente: combinedBody, ultimaRespuestaBot: lastBotMessage }),
+      consulta,
       playbook: filterPlaybookByProject(playbookEntries, project?.slug ?? null, project?.name ?? lead.project_interest),
       cerebro: brainEntries,
+      almacen,
     })
-    console.log(`[processMessage] Memoria recuperada — conocimiento: ${seleccion.playbook.length} (${seleccion.modo.playbook}) | cerebro: ${seleccion.cerebro.length} (${seleccion.modo.cerebro})`)
+    // En serie a propósito: la consulta ya quedó vectorizada en cache
+    const recuerdos = await recuerdosDelCliente({ consulta, anteriores: await anterioresP, almacen })
+      .catch(() => [])
+    console.log(`[processMessage] Memoria recuperada — conocimiento: ${seleccion.playbook.length} (${seleccion.modo.playbook}) | cerebro: ${seleccion.cerebro.length} (${seleccion.modo.cerebro}) | recuerdos del cliente: ${recuerdos.length}`)
     const salesPlaybook = formatPlaybookForPrompt(seleccion.playbook)
     const brainLearnings = formatLearningsForPrompt(seleccion.cerebro)
 
@@ -440,6 +456,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       objectivesBlock,
       noticesBlock,
       investableBlock,
+      memoriaCliente: formatRecuerdosParaPrompt(recuerdos) || null,
     })
     let claudeResponse: ReturnType<typeof parseClaudeResponse>
     try {
@@ -720,10 +737,21 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       const entregados: ProjectMediaItem[] = []
       try {
         if (type === 'image') {
-          // Galería: hasta 3 imágenes en ráfaga
-          for (const img of toSend.slice(0, 3)) {
-            await sendImage(parsed.from, img.url, img.caption ?? undefined)
-            entregados.push(img)
+          // Paquete: todas las fotos seguidas SIN pie (WhatsApp las agrupa en
+          // álbum) y después UN texto para el conjunto. Antes cada foto llevaba
+          // su caption: tres fotos del mismo avance = el mismo texto tres veces.
+          const paquete = paqueteDeImagenes(toSend)
+          for (const img of paquete.imagenes) {
+            try {
+              await sendImage(parsed.from, img.url)
+              entregados.push(img)
+            } catch (err) {
+              // Una foto rota no tumba el resto del paquete
+              console.error('[processMessage] Falló una imagen del paquete:', err instanceof Error ? err.message : err)
+            }
+          }
+          if (entregados.length && paquete.texto) {
+            await sendText(parsed.from, paquete.texto, { typingDelay: false })
           }
         } else if (toSend[0]) {
           const item = toSend[0]
@@ -745,7 +773,13 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       // cumplida de una rota y la repite turno tras turno. Lo que de verdad pasó
       // queda escrito y el prompt le enseña a leerlo.
       if (entregados.length > 0) {
-        const detalle = entregados.map(i => `${i.media_type}${i.caption ? ` — ${i.caption}` : ''}`).join('; ')
+        // Una línea por pieza distinta: cinco fotos con el mismo pie no se repiten en el historial
+        const piezas = new Map<string, number>()
+        for (const i of entregados) {
+          const k = `${i.media_type}${i.caption ? ` — ${i.caption}` : ''}`
+          piezas.set(k, (piezas.get(k) ?? 0) + 1)
+        }
+        const detalle = Array.from(piezas, ([k, n]) => (n > 1 ? `${n}× ${k}` : k)).join('; ')
         console.log(`[processMessage] Sent ${type} (${entregados.length} item/s) for "${pedido?.name ?? nombrePedido}"`)
         await saveConversation({ leadId: lead.id, role: 'assistant', content: `[Material enviado al cliente: ${detalle}]` })
           .catch(() => {})

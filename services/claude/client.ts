@@ -17,6 +17,36 @@ export function esModeloRazonamiento(modelo: string): boolean {
   return /^(o\d|gpt-5)/.test(modelo)
 }
 
+/**
+ * Caché de prompt de OpenAI: el inicio fijo del prompt (personalidad, reglas,
+ * ~7.5K tokens) es igual para todos los clientes y se cobra a 1/4 si se repite.
+ * Por defecto el caché dura 5-10 min; con '24h' sobrevive entre clientes todo el
+ * día, sin costo extra (documentación de OpenAI, verificado el 30-sep-2026).
+ * Solo en los modelos que OpenAI lista para retención extendida.
+ */
+export function soportaCache24h(modelo: string): boolean {
+  return /^(gpt-4\.1$|gpt-5(\.\d+)?$)/.test(modelo)
+}
+
+/** Un 400 que habla del caché: el modelo no acepta el parámetro — se reintenta sin él */
+function esRechazoDeCache(err: unknown): boolean {
+  const status = (err as { status?: unknown } | null)?.status
+  return status === 400 && /prompt_cache/i.test(err instanceof Error ? err.message : String(err))
+}
+
+/**
+ * IA GRATIS PARA PRUEBAS — la batería no debe gastar la cuenta de OpenAI.
+ * Con RUN_EVAL/RUN_EVAL_VISUAL y LLM_PRUEBAS_URL, toda llamada va a un servidor
+ * compatible con la API de OpenAI (Ollama local: http://localhost:11434/v1) con
+ * el modelo LLM_PRUEBAS_MODELO. En producción esas variables no hacen nada.
+ * Ojo: un modelo local mide que el flujo funciona, no la calidad de gpt-4.1.
+ */
+export function llmDePruebas(): { baseURL: string; modelo: string; apiKey: string } | null {
+  const url = process.env.LLM_PRUEBAS_URL
+  if (!url || !(process.env.RUN_EVAL || process.env.RUN_EVAL_VISUAL)) return null
+  return { baseURL: url, modelo: process.env.LLM_PRUEBAS_MODELO ?? 'llama3.1:8b', apiKey: process.env.LLM_PRUEBAS_KEY ?? 'local' }
+}
+
 export interface CallClaudeOptions {
   /** Temperatura del modelo — configurable desde agent_settings.
    *  Respuestas: llm_temperature (default 0.85). Reflexión/entrenamiento:
@@ -30,6 +60,11 @@ export interface CallClaudeOptions {
   reasoningEffort?: 'low' | 'medium'
   /** Acumula el costo de varias llamadas de un mismo mensaje (tope de gasto diario). Sin él, cada llamada se registra sola. */
   medidor?: Medidor
+  /**
+   * Agrupa en OpenAI las llamadas que comparten el mismo inicio de prompt (todas
+   * las respuestas de Daniela, todos los jueces…) para que caigan en el mismo caché.
+   */
+  cacheKey?: string
 }
 
 export async function callClaude(
@@ -39,7 +74,11 @@ export async function callClaude(
 ): Promise<string> {
   // timeout 30s: sin esto una llamada colgada consume los 60s de maxDuration
   // y el cliente queda sin respuesta. 1 retry automático del SDK.
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: opts.timeoutMs ?? 30_000, maxRetries: 1 })
+  const pruebas = llmDePruebas()
+  const openai = pruebas
+    // Un modelo local es más lento: más margen
+    ? new OpenAI({ apiKey: pruebas.apiKey, baseURL: pruebas.baseURL, timeout: 180_000, maxRetries: 0 })
+    : new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: opts.timeoutMs ?? 30_000, maxRetries: 1 })
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
     ...history.map(msg => ({
@@ -52,19 +91,32 @@ export async function callClaude(
 
   // Los modelos de razonamiento (o4-mini, o3…, gpt-5.x) rechazan max_tokens y
   // temperature: piden max_completion_tokens, que además incluye su razonamiento.
-  const modelo = opts.model ?? MODEL
+  const modelo = pruebas ? pruebas.modelo : (opts.model ?? MODEL)
   const esRazonamiento = esModeloRazonamiento(modelo)
-  const response = await openai.chat.completions.create({
+  const base = {
     model: modelo,
     ...(esRazonamiento
       ? { max_completion_tokens: MAX_TOKENS_RAZONAMIENTO, ...(opts.reasoningEffort ? { reasoning_effort: opts.reasoningEffort } : {}) }
       : { max_tokens: MAX_TOKENS, temperature: opts.temperature ?? 0.85 }),
     messages,
-    response_format: { type: 'json_object' },
-  })
-
-  // Tope de gasto diario: medir nunca puede tumbar una respuesta
+    response_format: { type: 'json_object' as const },
+  }
+  const cache = pruebas ? {} : {
+    ...(opts.cacheKey ? { prompt_cache_key: opts.cacheKey } : {}),
+    ...(soportaCache24h(modelo) ? { prompt_cache_retention: '24h' as const } : {}),
+  }
+  let response: OpenAI.Chat.ChatCompletion
   try {
+    response = await openai.chat.completions.create({ ...base, ...cache })
+  } catch (err) {
+    // Nunca se pierde una respuesta por el caché: sin él cuesta más, pero sale
+    if (!Object.keys(cache).length || !esRechazoDeCache(err)) throw err
+    console.warn(`[claude] ${modelo} rechazó el caché de prompt — sigo sin él`)
+    response = await openai.chat.completions.create(base)
+  }
+
+  // Tope de gasto diario: medir nunca puede tumbar una respuesta (la IA de pruebas es gratis)
+  if (!pruebas) try {
     if (opts.medidor) opts.medidor.add(modelo, response.usage ?? undefined)
     else await registrarUso(modelo, response.usage ?? undefined)
   } catch (err) {

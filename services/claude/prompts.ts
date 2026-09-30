@@ -37,6 +37,8 @@ interface PromptContext {
   noticesBlock?: string | null
   /** Dónde se está recibiendo inversión hoy (tabla projects), ya formateado */
   investableBlock?: string | null
+  /** Mensajes viejos de este cliente recuperados por relevancia (RAG), ya formateados */
+  memoriaCliente?: string | null
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -85,6 +87,7 @@ export function buildSystemPrompt({
   objectivesBlock = null,
   noticesBlock = null,
   investableBlock = null,
+  memoriaCliente = null,
 }: PromptContext): string {
   const intentBlock = buildIntentInstruction(intent, lastBotMessage, gtUrlSection)
   const catalogBlock = buildCatalogSection(projects, project, intent, settings.rental_threshold_usd)
@@ -281,7 +284,7 @@ Al proponer una cita: desde mañana en adelante (hoy solo con 3 horas o más de 
 Nombre: ${lead.name ?? 'desconocido'}
 Etapa: ${lead.stage}
 ${qualBlock}
-${dealBlock}
+${dealBlock}${memoriaCliente ? '\n' + memoriaCliente + '\n' : ''}
 ${missionBlock}
 
 ${schedulingBlock}
