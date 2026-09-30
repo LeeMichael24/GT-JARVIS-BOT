@@ -1,6 +1,6 @@
 import type { KBEntry } from '@/lib/knowledge-base'
 import { recuperar, type AlmacenVectores, type Embedder, type ModoRecuperacion } from '@/lib/memoria'
-import type { Conversation } from '@/types'
+import type { Conversation, GTProject } from '@/types'
 
 /**
  * Qué conocimiento y qué aprendizajes entran al prompt en ESTE turno.
@@ -117,4 +117,43 @@ export function formatRecuerdosParaPrompt(recuerdos: Conversation[]): string {
   return `# RECUERDOS DE ESTE CLIENTE — MENSAJES ANTERIORES RELACIONADOS CON LO QUE PREGUNTA HOY
 Son de conversaciones pasadas (no están en el historial de abajo). Úsalos para no volver a preguntar lo que ya te dijo ni repetir lo que ya le enviaste.
 ${lineas.join('\n')}`
+}
+
+/** Fichas del sitio que entran completas además del proyecto actual */
+export const K_FICHAS = 2
+/** Una ficha que casi no tiene que ver con la pregunta no vale sus tokens */
+export const MIN_SIMILITUD_FICHA = 0.35
+
+/**
+ * FICHAS DEL SITIO WEB — la fuente de verdad de cada proyecto. El catálogo de
+ * alternativas va en una línea por listing (nombre, zona, precio); cuando el
+ * cliente pregunta algo que coincide con otra propiedad ("¿tienen algo en la
+ * playa?"), su ficha completa entra para que Daniela responda con lo que dice
+ * el sitio y no con lo que suena lógico (30-sep-2026: "Foresta se renta en
+ * Airbnb", cuando la ficha no lo dice y no se permite).
+ * La descripción se vectoriza por su contenido: si el equipo la edita en el
+ * sitio, cambia el hash y se vuelve a vectorizar sola.
+ */
+export async function fichasRelevantes(o: {
+  consulta: string
+  proyectos: GTProject[]
+  embedder?: Embedder
+  cache?: Map<string, number[]>
+  almacen?: AlmacenVectores | null
+}): Promise<GTProject[]> {
+  const candidatos = o.proyectos.filter(p => (p.description ?? '').trim().length > 0)
+  if (!candidatos.length) return []
+  const r = await recuperar({
+    consulta: o.consulta,
+    candidatos,
+    textoDe: p => `${p.name}. ${p.location}. ${p.description}`,
+    k: K_FICHAS,
+    minSimilitud: MIN_SIMILITUD_FICHA,
+    alFallar: 'nada',
+    almacen: o.almacen,
+    fuente: 'sitio_web',
+    embedder: o.embedder,
+    cache: o.cache,
+  })
+  return r.elegidos
 }

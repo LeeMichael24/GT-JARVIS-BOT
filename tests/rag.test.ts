@@ -151,3 +151,26 @@ describe('IA gratis para pruebas', () => {
     }
   })
 })
+
+describe('fichas del sitio web por relevancia', () => {
+  it('trae la ficha que tiene que ver con la pregunta y deja fuera las que no', async () => {
+    const { fichasRelevantes } = await import('@/lib/contexto-recuperado')
+    const p = (slug: string, description: string) => ({ slug, name: slug, location: 'SV', description, type: 'Casa', status: 'active' }) as never
+    const r = await fichasRelevantes({
+      consulta: '¿tienen algo con vista al valle?',
+      proyectos: [p('a', 'Casa con vista al valle y jardín'), p('b', 'Reserva de $3,000 en oficina'), p('c', '')],
+      embedder: emb(), cache: new Map(),
+    })
+    expect(r.map((x: { slug: string }) => x.slug)).toEqual(['a'])
+  })
+
+  it('el prompt pone la ficha completa del sitio, sin repetir el proyecto actual', async () => {
+    const { buildSystemPrompt } = await import('@/services/claude/prompts')
+    const lead = { id: 'l', phone: '1', name: null, stage: 'new', project_interest: null, qualification_data: null, bot_active: true } as never
+    const ficha = { slug: 'casa-playa', name: 'Casa en Costa del Sol', location: 'La Paz', type: 'Casa', status: 'active', priceFrom: 250000, description: 'Frente al mar, amueblada, piscina privada.' } as never
+    const prompt = buildSystemPrompt({ lead, project: null, fichasRelevantes: [ficha] })
+    expect(prompt).toContain('FICHAS DEL SITIO WEB RELACIONADAS')
+    expect(prompt).toContain('Frente al mar, amueblada, piscina privada.')
+    expect(buildSystemPrompt({ lead, project: ficha, fichasRelevantes: [ficha] })).not.toContain('FICHAS DEL SITIO WEB RELACIONADAS')
+  })
+})

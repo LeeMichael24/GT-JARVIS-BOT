@@ -39,6 +39,8 @@ interface PromptContext {
   investableBlock?: string | null
   /** Mensajes viejos de este cliente recuperados por relevancia (RAG), ya formateados */
   memoriaCliente?: string | null
+  /** Fichas completas del sitio web de otras propiedades relacionadas con la pregunta (RAG) */
+  fichasRelevantes?: GTProject[]
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -88,9 +90,13 @@ export function buildSystemPrompt({
   noticesBlock = null,
   investableBlock = null,
   memoriaCliente = null,
+  fichasRelevantes = [],
 }: PromptContext): string {
   const intentBlock = buildIntentInstruction(intent, lastBotMessage, gtUrlSection)
-  const catalogBlock = buildCatalogSection(projects, project, intent, settings.rental_threshold_usd)
+  const fichasExtra = fichasRelevantes.filter(f => f.slug !== project?.slug)
+  const catalogBlock = buildCatalogSection(projects, project, intent, settings.rental_threshold_usd) + (fichasExtra.length
+    ? `\n# FICHAS DEL SITIO WEB RELACIONADAS CON LO QUE PREGUNTA — datos oficiales, úsalos tal cual\n${fichasExtra.map(f => formatProjectFull(f, settings.rental_threshold_usd)).join('\n\n')}\n`
+    : '')
   const qualBlock = buildQualSection(lead)
   const playbookBlock = salesPlaybook ? `\n# BASE DE CONOCIMIENTO — PLAYBOOK DE VENTAS\nUsa esta información para responder con autoridad. Son datos reales del equipo de Grupo Terranova.\n\n${salesPlaybook}\n` : ''
 
@@ -117,7 +123,7 @@ REGLA: No repitas lo que ya se dijo. Avanza la conversación desde este punto.\n
 
   const brainBlock = brainLearnings
     ? `\n# APRENDIZAJES — COMPORTAMIENTOS VALIDADOS
-Estas son observaciones confirmadas por el equipo. Aplícalas:\n${brainLearnings}\n`
+Observaciones del equipo sobre CÓMO vender. No son fuente de datos de proyectos: precios, permisos (Airbnb, renta corta), ROI y amenidades salen solo de la ficha.\n${brainLearnings}\n`
     : ''
 
   const emojiRule = settings.emoji_policy === 'none'

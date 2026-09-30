@@ -215,7 +215,16 @@ describe('buildSystemPrompt — history poisoning guard', () => {
   it('always includes FUENTE DE VERDAD disclaimer', () => {
     const prompt = buildSystemPrompt({ lead: mockLead, project: null })
     expect(prompt).toContain('FUENTE DE VERDAD')
-    expect(prompt).toContain('ÚNICA fuente válida')
+    expect(prompt).toContain('salen SOLO de')
+    expect(prompt).toContain('sitio web de Grupo Terranova')
+  })
+
+  // 30-sep-2026: la guía decía "Airbnb → Foresta" y Foresta NO permite Airbnb
+  it('ningún bloque fijo asigna Airbnb ni ROI a un proyecto por su cuenta', () => {
+    const prompt = buildSystemPrompt({ lead: mockLead, project: null })
+    expect(prompt).not.toMatch(/Airbnb\s*→\s*Foresta/i)
+    expect(prompt).not.toMatch(/ROI anual[^\n]*→[^\n]*Foresta/i)
+    expect(prompt).toContain('NO permiten Airbnb')
   })
 
   it('instructs to ignore history inaccuracies', () => {

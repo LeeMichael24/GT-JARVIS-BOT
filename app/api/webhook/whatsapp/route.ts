@@ -37,7 +37,7 @@ import { getAgentSettings, DEFAULT_SETTINGS, type AgentSettings } from '@/lib/ag
 import { getEffectivePromptBlocks, DEFAULT_PROMPT_BLOCKS } from '@/lib/prompt-blocks'
 import { getActiveObjectives, formatObjectivesForPrompt } from '@/lib/objectives'
 import { generarRespuesta } from '@/lib/generar-respuesta'
-import { seleccionarConocimiento, construirConsulta, recuerdosDelCliente, formatRecuerdosParaPrompt } from '@/lib/contexto-recuperado'
+import { seleccionarConocimiento, construirConsulta, recuerdosDelCliente, formatRecuerdosParaPrompt, fichasRelevantes } from '@/lib/contexto-recuperado'
 import { almacenSupabase } from '@/lib/almacen-vectores'
 
 // Con Fluid compute, Hobby permite hasta 300 s (Pro 800 s). Medido 13-sep-2026:
@@ -419,7 +419,13 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // En serie a propósito: la consulta ya quedó vectorizada en cache
     const recuerdos = await recuerdosDelCliente({ consulta, anteriores: await anterioresP, almacen })
       .catch(() => [])
-    console.log(`[processMessage] Memoria recuperada — conocimiento: ${seleccion.playbook.length} (${seleccion.modo.playbook}) | cerebro: ${seleccion.cerebro.length} (${seleccion.modo.cerebro}) | recuerdos del cliente: ${recuerdos.length}`)
+    // Fichas del sitio web relacionadas con la pregunta (en una charla de inversión, solo inversiones)
+    const fichas = await fichasRelevantes({
+      consulta,
+      proyectos: projects.filter(p => p.slug !== project?.slug && (intent !== 'investment_query' || p.entityType === 'investment')),
+      almacen,
+    }).catch(() => [])
+    console.log(`[processMessage] Memoria recuperada — conocimiento: ${seleccion.playbook.length} (${seleccion.modo.playbook}) | cerebro: ${seleccion.cerebro.length} (${seleccion.modo.cerebro}) | recuerdos del cliente: ${recuerdos.length} | fichas del sitio: ${fichas.map(f => f.slug).join(', ') || 'ninguna'}`)
     const salesPlaybook = formatPlaybookForPrompt(seleccion.playbook)
     const brainLearnings = formatLearningsForPrompt(seleccion.cerebro)
 
@@ -457,6 +463,7 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       noticesBlock,
       investableBlock,
       memoriaCliente: formatRecuerdosParaPrompt(recuerdos) || null,
+      fichasRelevantes: fichas,
     })
     let claudeResponse: ReturnType<typeof parseClaudeResponse>
     try {
