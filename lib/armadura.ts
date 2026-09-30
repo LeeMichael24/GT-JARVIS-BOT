@@ -27,7 +27,6 @@ export const MAX_MENSAJES_POR_HORA = 30
 const NOTAS_INTERNAS = /^\s*\[(Material (NO )?enviado|Solicitud enviada|Plantilla|Foto del cliente|El cliente (envió|compartió)|Reaccionó|Respondiendo a)/i
 
 // Zero-width, bidi y caracteres de control (menos salto de línea y tab)
-// eslint-disable-next-line no-control-regex
 const INVISIBLES = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F​-‏‪-‮⁠-⁤﻿]/g
 
 export function sanitizarEntrada(texto: string): string {
