@@ -9,7 +9,10 @@ import { createCalendarEvent } from '@/services/google/calendar'
 import { getPlaybook, formatPlaybookForPrompt, filterPlaybookByProject } from '@/lib/knowledge-base'
 import { getActiveNotices, noticesForProject, formatNoticesForPrompt } from '@/lib/notices'
 import { getInvestableProjects, formatInvestableForPrompt, familiaDeSlug } from '@/lib/projects-registry'
-import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendVideo, sendInternalNotification, markAsRead, sendTypingIndicator } from '@/services/whatsapp/client'
+import { downloadMedia, sendText, sendInteractiveButtons, sendDocument, sendImage, sendVideo, sendInternalNotification, markAsRead, sendTypingIndicator, sendReaction } from '@/services/whatsapp/client'
+import { describirImagen } from '@/services/openai/vision'
+import { esAtendible, resolverCuerpo } from '@/lib/mensaje-entrante'
+import { detectarManipulacion, bloqueAlertaSeguridad, MAX_MENSAJES_POR_HORA } from '@/lib/armadura'
 import { transcribeAudio } from '@/services/openai/whisper'
 import {
   upsertLead,
@@ -22,6 +25,8 @@ import {
   getDealSummary,
   upsertDealSummary,
   getOlderConversation,
+  getConversationByWaId,
+  countUserMessagesSince,
 } from '@/lib/supabase'
 import { calculateAdaptiveDebounce, computeBurstPattern } from '@/lib/debounce'
 import { createSequence, pauseLeadSequences, cancelSequencesForLead, pickHoraActiva } from '@/lib/sequences'
@@ -113,16 +118,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     // 1. Filtro rápido de tipos NO soportados — lo barato primero; el trabajo
     //    caro (descargar/transcribir audio) va DESPUÉS del dedup para no
     //    pagarlo dos veces en entregas duplicadas del webhook.
-    const isAudio = parsed.messageType === 'audio' && !!parsed.mediaId
-    const isImage = parsed.messageType === 'image' && !!parsed.mediaId
-    if (!isAudio && !isImage) {
-      if (parsed.messageType === 'interactive') {
-        // Button reply — body was already extracted by parseWebhook; skip if somehow empty
-        if (!parsed.body.trim()) return
-      } else if (parsed.messageType !== 'text' || !parsed.body.trim()) {
-        return
-      }
-    }
+    //    Una reacción del cliente (👍 a un mensaje de Daniela) no se contesta.
+    if (!esAtendible(parsed)) return
 
     // 2. Deduplicate + equipo en paralelo: ambas son lecturas independientes y
     //    el equipo se necesita enseguida, así no se suma un viaje a la BD al
@@ -157,20 +154,14 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       return
     }
 
-    // 2b. Resolve message body — transcribe audio or describe image
-    let messageBody = parsed.body
-    if (isAudio) {
-      try {
-        const { buffer, mimeType } = await downloadMedia(parsed.mediaId!)
-        messageBody = await transcribeAudio(buffer, mimeType)
-        console.log(`[processMessage] Transcribed audio: "${messageBody.slice(0, 100)}..."`)
-      } catch (err) {
-        console.error('[processMessage] Audio transcription failed:', err instanceof Error ? err.message : err)
-        messageBody = '[Nota de voz — no se pudo transcribir]'
-      }
-    } else if (isImage) {
-      messageBody = '[El cliente envió una imagen]'
-    }
+    // 2b. Qué dijo el cliente, en texto: audio transcrito, foto descrita,
+    //     ubicación, documento, contacto… y el mensaje citado si respondió a uno
+    const messageBody = await resolverCuerpo(parsed, {
+      descargar: downloadMedia,
+      transcribir: transcribeAudio,
+      describirImagen,
+      buscarCitado: getConversationByWaId,
+    })
 
     // 3. Upsert lead — create if new, update last_message_at if existing
     const lead = await upsertLead(parsed.from)
@@ -242,6 +233,21 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       return
     }
 
+    // 4c-bis. Anti-flood: cientos de mensajes para quemar el presupuesto. Los
+    //     mensajes quedan guardados (el equipo los ve); Daniela deja de responder.
+    try {
+      const enLaHora = await countUserMessagesSince(lead.id, new Date(Date.now() - 60 * 60 * 1000))
+      if (enLaHora > MAX_MENSAJES_POR_HORA) {
+        console.warn(`[processMessage] Anti-flood: lead ${lead.id} lleva ${enLaHora} mensajes en una hora — sin respuesta de IA`)
+        if (enLaHora === MAX_MENSAJES_POR_HORA + 1) {
+          await logActivity({ actorType: 'system', action: 'flood_bloqueado', entityType: 'lead', entityId: lead.id, details: { mensajes_hora: enLaHora } }).catch(() => {})
+        }
+        return
+      }
+    } catch (err) {
+      console.warn('[processMessage] No se pudo contar mensajes (anti-flood) — sigo:', err instanceof Error ? err.message : err)
+    }
+
     // ── ADAPTIVE DEBOUNCE ──────────────────────────────────────────
     // Use learned typing pattern for this lead, fall back to env/default.
     // Fetch existing deal signals BEFORE sleeping so we can learn from them.
@@ -273,6 +279,17 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
 
     // Combine all pending messages into a single body for intent/project detection
     const combinedBody = pending.map(m => m.content).join('\n')
+
+    // Armadura de entrada: un intento de cambiarle las reglas o sacarle datos
+    // se registra y el modelo recibe el aviso para no seguirlo
+    const manipulacion = detectarManipulacion(combinedBody)
+    if (manipulacion.length) {
+      console.warn(`[processMessage] Armadura: intento de manipulación (${manipulacion.join(', ')}) del lead ${lead.id}`)
+      await logActivity({
+        actorType: 'system', action: 'intento_manipulacion', entityType: 'lead', entityId: lead.id,
+        details: { tipos: manipulacion, mensaje: combinedBody.slice(0, 500) },
+      }).catch(() => {})
+    }
     console.log(`[processMessage] Processing burst of ${pending.length} message(s) for lead ${lead.id}`)
 
     // Record burst pattern for adaptive debounce learning
@@ -465,12 +482,13 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       investableBlock,
       memoriaCliente: formatRecuerdosParaPrompt(recuerdos) || null,
       fichasRelevantes: fichas,
+      alertaSeguridad: bloqueAlertaSeguridad(manipulacion) || null,
     })
     let claudeResponse: ReturnType<typeof parseClaudeResponse>
     try {
       // Misma función que usa la batería de evaluación: reintento si el JSON
       // viene inválido, revisión del director comercial y filtro de frases.
-      const { respuesta, revision } = await generarRespuesta({
+      const { respuesta, revision, salidaBloqueada } = await generarRespuesta({
         systemPrompt,
         history,
         settings: agentSettings,
@@ -478,6 +496,12 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
         inicioMs: parsed.timestamp * 1000,
       })
       claudeResponse = respuesta
+      if (salidaBloqueada) {
+        await logActivity({
+          actorType: 'system', action: 'salida_bloqueada', entityType: 'lead', entityId: lead.id,
+          details: { mensaje_cliente: combinedBody.slice(0, 300) },
+        }).catch(() => {})
+      }
       console.log('[processMessage] Plan del turno:', JSON.stringify(respuesta.plan ?? null))
       console.log('[processMessage] Revisión de venta:', JSON.stringify(revision))
     } catch (err) {
@@ -693,11 +717,30 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
     let waMessageId: string | null = null
     let replySent = false
     const buttons = claudeResponse.interactive_buttons
+
+    // 12-a. Reacción al último mensaje del cliente (👍 a un "gracias", ❤️ a una foto)
+    if (claudeResponse.reaccion) {
+      await sendReaction(parsed.from, parsed.messageId, claudeResponse.reaccion)
+        .catch(err => console.warn('[processMessage] No se pudo reaccionar:', err instanceof Error ? err.message : err))
+    }
+    // Solo reacción: un "gracias" que cierra la charla no se contesta con texto.
+    // Si el cliente preguntó algo, igual va el texto (si lo hay).
+    const soloReaccion = !!claudeResponse.solo_reaccion && !!claudeResponse.reaccion &&
+      (!claudeResponse.reply || !combinedBody.includes('?'))
+
     try {
-      waMessageId = buttons.length > 0
-        ? await sendInteractiveButtons(parsed.from, claudeResponse.reply, buttons)
-        : await sendText(parsed.from, claudeResponse.reply)
-      replySent = true
+      if (soloReaccion) {
+        replySent = true
+      } else {
+        // Si el cliente respondió citando un mensaje, Daniela cita el suyo
+        const responderA = parsed.contextId ? parsed.messageId : null
+        waMessageId = buttons.length > 0
+          ? await sendInteractiveButtons(parsed.from, claudeResponse.reply, buttons)
+          : responderA
+            ? await sendText(parsed.from, claudeResponse.reply, { responderA })
+            : await sendText(parsed.from, claudeResponse.reply)
+        replySent = true
+      }
     } catch (err) {
       console.error(`[processMessage] Failed to send WA reply to ${parsed.from}:`, err instanceof Error ? err.message : err)
     }
@@ -718,7 +761,8 @@ async function processMessage(parsed: ParsedWebhook): Promise<void> {
       await saveConversation({
         leadId: lead.id,
         role: 'assistant',
-        content: claudeResponse.reply,
+        // La reacción sola también queda: así Daniela sabe que ya cerró ese "gracias"
+        content: soloReaccion ? `[Reaccionó con ${claudeResponse.reaccion} al mensaje del cliente]` : claudeResponse.reply,
         waMessageId: waMessageId ?? undefined,
       })
     } catch (err) {

@@ -1,3 +1,4 @@
+import { quitarLinksAjenos } from '@/lib/armadura'
 import type { AgentAction } from '@/types'
 
 // v23.0: v19 ya expiró (Meta la sirve con fallback) y el typing_indicator
@@ -76,24 +77,28 @@ export async function sendTypingIndicator(messageId: string): Promise<void> {
   return markAsRead(messageId, { typing: true })
 }
 
-export function calculateTypingDelay(text: string): number {
+export function calculateTypingDelay(text: string, azar?: () => number): number {
   // Ágil pero humano: los clientes reportaban esperas largas con 30ms/char y
   // techo de 4s. Los puntos de "escribiendo..." cubren la espera de GPT.
-  return Math.min(Math.max(text.length * 22, 1200), 2600)
+  const base = Math.min(Math.max(text.length * 22, 1200), 2600)
+  // Una persona no tarda siempre lo mismo: ±30 % para que el ritmo no sea de reloj
+  return azar ? Math.round(base * (0.75 + azar() * 0.55)) : base
 }
 
 export async function sendText(
   to: string,
   body: string,
-  opts: { typingDelay?: boolean } = {}
+  opts: { typingDelay?: boolean; responderA?: string | null } = {}
 ): Promise<string | null> {
   if (opts.typingDelay !== false) {
-    await new Promise(r => setTimeout(r, calculateTypingDelay(body)))
+    await new Promise(r => setTimeout(r, calculateTypingDelay(body, Math.random)))
   }
   const response = await postWithRetry({
     messaging_product: 'whatsapp',
     recipient_type: 'individual',
     to,
+    // Citar el mensaje del cliente, como cuando uno responde deslizando en WhatsApp
+    ...(opts.responderA ? { context: { message_id: opts.responderA } } : {}),
     type: 'text',
     text: { body, preview_url: false },
   }) as { messages?: { id?: string }[] } | null
@@ -156,6 +161,8 @@ export async function sendInternalNotification(params: NotificationParams): Prom
     console.warn('[notification] Sin destinatario (toPhone y CEO_PHONE_NUMBER vacíos) — alerta omitida')
     return
   }
+  // La razón la escribe el modelo: un link ajeno ahí sería phishing dirigido al equipo
+  params = { ...params, action: { ...params.action, reason: params.action.reason ? quitarLinksAjenos(params.action.reason) : params.action.reason } }
   const message = formatNotification(params)
 
   // PLANTILLA PRIMERO. Fuera de la ventana de 24h Meta acepta el texto libre
@@ -204,6 +211,17 @@ export async function sendDocument(
     document,
   }) as { messages?: { id?: string }[] } | null
   return response?.messages?.[0]?.id ?? null
+}
+
+/** Reacción (👍 ❤️ 😄…) a un mensaje del cliente. No cuesta tokens y es lo más humano de WhatsApp. */
+export async function sendReaction(to: string, messageId: string, emoji: string): Promise<void> {
+  await postWithRetry({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'reaction',
+    reaction: { message_id: messageId, emoji },
+  })
 }
 
 export async function sendImage(

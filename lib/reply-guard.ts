@@ -60,3 +60,17 @@ export function quitarMuletillaRepetida(texto: string, anteriores: string[]): st
     return antes + letra.toUpperCase()
   })
 }
+
+/**
+ * La raya "—" y el punto y coma son firmas de texto escrito por IA: nadie los
+ * teclea en WhatsApp. Se cambian por coma y punto antes de enviar.
+ */
+export function naturalizarPuntuacion(texto: string): string {
+  return texto
+    // Solo la raya larga: el guion corto va en rangos de precio ("$576,200 – $704,000")
+    .replace(/(\p{L})\s*—\s*/gu, '$1, ')
+    .replace(/\s*—\s*/g, ' ')
+    .replace(/;\s+(\p{L})/gu, (_m, letra: string) => '. ' + letra.toUpperCase())
+    .replace(/;$/gm, '.')
+    .replace(/,\s*,/g, ',')
+}

@@ -137,7 +137,18 @@ export function permitidoHoy(o: {
 
 // ── Contadores (día y mes) ─────────────────────────────────────
 
-export interface GastoDia { usd: number; calls: number; mensajes: number }
+export interface GastoDia {
+  usd: number; calls: number; mensajes: number
+  /** Tokens de entrada y cuántos salieron a precio de caché — para medir el ahorro real del caché */
+  tokens_entrada?: number; tokens_cacheados?: number
+}
+
+export interface TokensUso { entrada: number; cacheados: number }
+
+export function tokensDe(uso: UsoLLM | undefined): TokensUso {
+  const entrada = uso?.prompt_tokens ?? 0
+  return { entrada, cacheados: Math.min(uso?.prompt_tokens_details?.cached_tokens ?? 0, entrada) }
+}
 
 const CERO: GastoDia = { usd: 0, calls: 0, mensajes: 0 }
 const redondear = (n: number) => Math.round(n * 1e6) / 1e6
@@ -154,7 +165,10 @@ function parsear(raw: string | undefined | null): GastoDia {
   try {
     const o = JSON.parse(raw) as Partial<GastoDia>
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0)
-    return { usd: num(o.usd), calls: num(o.calls), mensajes: num(o.mensajes) }
+    const g: GastoDia = { usd: num(o.usd), calls: num(o.calls), mensajes: num(o.mensajes) }
+    if (o.tokens_entrada !== undefined) g.tokens_entrada = num(o.tokens_entrada)
+    if (o.tokens_cacheados !== undefined) g.tokens_cacheados = num(o.tokens_cacheados)
+    return g
   } catch {
     return { ...CERO }
   }
@@ -188,12 +202,16 @@ export const leerGastoHoy = (ahora: Date = new Date()): Promise<GastoDia> => lee
 /** Gasto acumulado del mes en curso. Ante cualquier error: 0 (fail-open). */
 export const leerGastoMes = (ahora: Date = new Date()): Promise<GastoDia> => leerCacheado(claveMes(ahora))
 
-async function sumarEn(clave: string, usd: number, calls: number, mensajes: number, descripcion: string): Promise<void> {
+async function sumarEn(clave: string, usd: number, calls: number, mensajes: number, descripcion: string, tokens?: TokensUso): Promise<void> {
   const previo = await leerFila(clave)
   const nuevo: GastoDia = {
     usd: redondear(previo.usd + usd),
     calls: previo.calls + calls,
     mensajes: previo.mensajes + mensajes,
+  }
+  if (tokens || previo.tokens_entrada !== undefined) {
+    nuevo.tokens_entrada = (previo.tokens_entrada ?? 0) + (tokens?.entrada ?? 0)
+    nuevo.tokens_cacheados = (previo.tokens_cacheados ?? 0) + (tokens?.cacheados ?? 0)
   }
   await getServiceClient()
     .from('agent_settings')
@@ -202,11 +220,11 @@ async function sumarEn(clave: string, usd: number, calls: number, mensajes: numb
 }
 
 /** Suma al día y al mes. Nunca lanza: medir no puede tumbar una respuesta. */
-export async function sumarGasto(usd: number, calls: number, ahora: Date = new Date(), mensajes = 0): Promise<void> {
+export async function sumarGasto(usd: number, calls: number, ahora: Date = new Date(), mensajes = 0, tokens?: TokensUso): Promise<void> {
   if (!(usd > 0) && calls <= 0 && mensajes <= 0) return
   try {
-    await sumarEn(claveDia(ahora), usd, calls, mensajes, 'Contador interno del gasto diario en IA (no editar).')
-    await sumarEn(claveMes(ahora), usd, calls, mensajes, 'Contador interno del gasto mensual en IA (no editar).')
+    await sumarEn(claveDia(ahora), usd, calls, mensajes, 'Contador interno del gasto diario en IA (no editar).', tokens)
+    await sumarEn(claveMes(ahora), usd, calls, mensajes, 'Contador interno del gasto mensual en IA (no editar).', tokens)
   } catch (err) {
     console.warn('[llm-budget] no se pudo registrar el gasto:', err instanceof Error ? err.message : err)
   }
@@ -214,7 +232,7 @@ export async function sumarGasto(usd: number, calls: number, ahora: Date = new D
 
 /** Una llamada suelta (seguimientos, reflexión…): calcula el costo y lo suma. */
 export async function registrarUso(modelo: string, uso: UsoLLM | undefined, ahora: Date = new Date()): Promise<void> {
-  await sumarGasto(costoLlamada(modelo, uso), 1, ahora)
+  await sumarGasto(costoLlamada(modelo, uso), 1, ahora, 0, tokensDe(uso))
 }
 
 export interface Medidor {
@@ -230,17 +248,21 @@ export interface Medidor {
 export function crearMedidor(): Medidor {
   let usd = 0
   let calls = 0
+  let tokens: TokensUso = { entrada: 0, cacheados: 0 }
   return {
     add(modelo, uso) {
       usd += costoLlamada(modelo, uso)
       calls++
+      const t = tokensDe(uso)
+      tokens = { entrada: tokens.entrada + t.entrada, cacheados: tokens.cacheados + t.cacheados }
     },
     async guardar(ahora = new Date(), opts = {}) {
       if (calls === 0) return
-      const u = usd, c = calls
+      const u = usd, c = calls, t = tokens
       usd = 0
       calls = 0
-      await sumarGasto(u, c, ahora, opts.mensaje ? 1 : 0)
+      tokens = { entrada: 0, cacheados: 0 }
+      await sumarGasto(u, c, ahora, opts.mensaje ? 1 : 0, t)
     },
   }
 }

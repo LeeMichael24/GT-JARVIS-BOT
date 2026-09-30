@@ -116,6 +116,28 @@ export async function getOlderConversation(leadId: string, saltar: number, limit
   return (data as Conversation[]) ?? []
 }
 
+/** Texto de un mensaje por su wa_message_id — para entender a qué mensaje respondió el cliente */
+export async function getConversationByWaId(waMessageId: string): Promise<Pick<Conversation, 'role' | 'content'> | null> {
+  const { data } = await getServiceClient()
+    .from('conversations')
+    .select('role, content')
+    .eq('wa_message_id', waMessageId)
+    .maybeSingle()
+  return (data as Pick<Conversation, 'role' | 'content'> | null) ?? null
+}
+
+/** Mensajes del cliente desde `desde` — límite anti-flood */
+export async function countUserMessagesSince(leadId: string, desde: Date): Promise<number> {
+  const { count, error } = await getServiceClient()
+    .from('conversations')
+    .select('id', { count: 'exact', head: true })
+    .eq('lead_id', leadId)
+    .eq('role', 'user')
+    .gte('created_at', desde.toISOString())
+  if (error) throw new Error(`countUserMessagesSince: ${error.message}`)
+  return count ?? 0
+}
+
 export async function isMessageProcessed(waMessageId: string): Promise<boolean> {
   const supabase = getServiceClient()
   const { data } = await supabase

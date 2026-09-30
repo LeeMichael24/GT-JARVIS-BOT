@@ -142,7 +142,11 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
 
   const parsed = JSON.parse(cleaned) as Partial<ClaudeResponse>
 
-  if (!parsed.reply || typeof parsed.reply !== 'string') {
+  const reaccion = parseReaccion((parsed as Record<string, unknown>).reaccion)
+  const soloReaccion = (parsed as Record<string, unknown>).solo_reaccion === true && !!reaccion
+  // Un "gracias" que cierra la charla se contesta con una reacción y sin texto
+  if (soloReaccion && typeof parsed.reply !== 'string') parsed.reply = ''
+  if ((!parsed.reply && !soloReaccion) || typeof parsed.reply !== 'string') {
     throw new Error('Invalid Claude response: missing or invalid reply field')
   }
 
@@ -162,7 +166,16 @@ export function parseClaudeResponse(raw: string): ClaudeResponse {
     extra_messages: parseExtraMessages((parsed as Record<string, unknown>).extra_messages),
     lazo_abierto: parseLazo((parsed as Record<string, unknown>).lazo_abierto),
     solicitud: parseSolicitud((parsed as Record<string, unknown>).solicitud),
+    reaccion,
+    solo_reaccion: soloReaccion,
   }
+}
+
+/** Las reacciones que usaría una asesora; cualquier otra cosa se descarta */
+export const REACCIONES = ['👍', '❤️', '😄', '🙌', '🙏', '😂', '🎉', '👏']
+
+function parseReaccion(raw: unknown): string | null {
+  return typeof raw === 'string' && REACCIONES.includes(raw.trim()) ? raw.trim() : null
 }
 
 const MOMENTOS: TurnMoment[] = ['descubrimiento', 'presentar_valor', 'objecion', 'compromiso', 'pidio_tiempo', 'tramite']

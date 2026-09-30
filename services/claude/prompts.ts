@@ -41,6 +41,8 @@ interface PromptContext {
   memoriaCliente?: string | null
   /** Fichas completas del sitio web de otras propiedades relacionadas con la pregunta (RAG) */
   fichasRelevantes?: GTProject[]
+  /** Aviso de la armadura cuando el mensaje intenta sacar a Daniela de su papel */
+  alertaSeguridad?: string | null
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -91,6 +93,7 @@ export function buildSystemPrompt({
   investableBlock = null,
   memoriaCliente = null,
   fichasRelevantes = [],
+  alertaSeguridad = null,
 }: PromptContext): string {
   const intentBlock = buildIntentInstruction(intent, lastBotMessage, gtUrlSection)
   const fichasExtra = fichasRelevantes.filter(f => f.slug !== project?.slug)
@@ -220,7 +223,9 @@ Observaciones del equipo sobre CÓMO vender. No son fuente de datos de proyectos
   "send_media": null,
   "lazo_abierto": "la frase exacta de tu reply o extra_messages que deja el lazo abierto, o null",
   "extra_messages": [],
-  "solicitud": null
+  "solicitud": null,
+  "reaccion": null,
+  "solo_reaccion": false
 }
 - "agent_action": SIEMPRE incluir. Es tu decisión como SDR.
 - "deal_summary": SIEMPRE incluir. Resume el estado del deal para tu yo futuro.
@@ -229,6 +234,8 @@ ${settings.learning_sensitivity === 'high'
     : '- "brain_observations": solo cuando detectes algo interesante (patrón, técnica que funcionó, objeción nueva). Array vacío si nada notable.'}
 - "interactive_buttons": máximo 3 botones, títulos de máximo 20 caracteres. Úsalos solo en momentos clave: después de presentar opciones, al ofrecer visita, al confirmar interés. Array vacío la mayoría de veces.
 - "opt_out": boolean — true SOLO si el cliente pide explícitamente no ser contactado.
+- "reaccion": una reacción de WhatsApp al último mensaje del cliente, como haría una persona: "👍" "❤️" "😄" "🙌" "🙏" "😂" "🎉" "👏", o null. Úsala de vez en cuando (una buena noticia, una foto, un gracias), no en cada mensaje.
+- "solo_reaccion": true SOLO cuando el cliente cierra la charla sin nada pendiente ("gracias", "perfecto, gracias", "👍", un sticker) y no hay nada que agregar: entonces reply va vacío y solo se manda la reacción. Si hizo una pregunta o hay algo pendiente, false.
 - "solicitud": null salvo en SOLICITUDES DE INMUEBLES. Entonces: { "tipo": "captacion" | "busqueda", "operacion": "venta" (vender o comprar) | "alquiler" | null, "tipo_inmueble": "…", "zona": "…", "presupuesto": "lo que puede pagar, o el precio que espera el propietario", "caracteristicas": "…", "plazo": "…", "notas": "…" } — lo que no sepas va en null.
 - "extra_messages": burbujas ADICIONALES que se envían DESPUÉS del reply (máx 2). Así textea la gente real: mensajes separados, no un bloque. Úsalo cuando el guion pida doble mensaje, o cuando dividir en 2 burbujas cortas sea más natural que una larga. Vacío la mayoría de veces. Orden de envío: reply → media (si hay) → extra_messages.
 - "lazo_abierto": copia EXACTA de la frase de tu reply o de extra_messages que deja al cliente con ganas del siguiente paso (ver VENTA GUIADA). null SOLO si el cliente pidió tiempo, se despidió, o el mensaje es de trámite (confirmar una cita, escalar al equipo). Si no encuentras esa frase en lo que escribiste, te faltó el lazo: escríbelo en el reply o en extra_messages y cópialo aquí. El lazo no puede ser una pregunta ni el precio a secas: es la frase que anticipa, recomienda, prepara o invita a ver algo.
@@ -287,7 +294,7 @@ ${inventario}
   // batería bajó de 10/12 a 8/12 en los "siguiente paso concreto". Con el volumen
   // actual el caché casi no se reutiliza entre clientes: el ahorro no vale el riesgo.
   return `${header}
-${noticesBlock ?? ''}${projectScript ? '\n' + projectScript + '\n' : ''}${intentBlock}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${investableBlock ?? ''}${objectivesSection}${decisionSection}
+${noticesBlock ?? ''}${projectScript ? '\n' + projectScript + '\n' : ''}${intentBlock}${alertaSeguridad ?? ''}${playbookBlock}${brainBlock}${adContext ? '\n' + adContext + '\n' : ''}${escalationOverride ? '\n' + escalationOverride + '\n' : ''}${catalogBlock}${investableBlock ?? ''}${objectivesSection}${decisionSection}
 ${settings.custom_instructions ? '# INSTRUCCIONES DEL EQUIPO (configuración viva — prioridad alta)\n' + settings.custom_instructions + '\n\n' : ''}# PERFIL DEL CLIENTE
 Fecha actual (zona horaria El Salvador): ${today}
 Hora actual (El Salvador): ${horaActualSV(ahora)}

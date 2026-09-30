@@ -2,7 +2,8 @@ import type { AgentSettings } from '@/lib/agent-settings'
 import type { ClaudeResponse, Conversation } from '@/types'
 import { callClaude, parseClaudeResponse } from '@/services/claude/client'
 import { revisarRespuesta, type Veredicto } from '@/lib/sales-critic'
-import { limpiarFrasesProhibidas, quitarMuletillaRepetida } from '@/lib/reply-guard'
+import { limpiarFrasesProhibidas, quitarMuletillaRepetida, naturalizarPuntuacion } from '@/lib/reply-guard'
+import { revisarSalida } from '@/lib/armadura'
 import {
   crearMedidor, estadoPresupuesto, avisarSiCorresponde, MODELO_TOPE, TOPE_MENSUAL_USD_DEFAULT,
   type Medidor, type NivelPresupuesto,
@@ -46,6 +47,8 @@ export interface ArgsGenerar {
 export interface ResultadoGenerar {
   respuesta: ClaudeResponse
   revision: { veredicto: Veredicto | null; reescrita: boolean; motivoOmitida: string | null }
+  /** true si la armadura detuvo una respuesta que filtraba instrucciones o traía links ajenos */
+  salidaBloqueada?: boolean
 }
 
 const AVISO_REINTENTO = '\n\n# ATENCIÓN — REINTENTO\nTu respuesta anterior fue un JSON vacío o inválido. Responde AHORA con el JSON COMPLETO del formato especificado arriba. El campo "reply" es OBLIGATORIO: contiene tu mensaje de WhatsApp para el cliente, con tu personalidad de siempre.'
@@ -161,6 +164,9 @@ async function generar(args: ArgsGenerar, deps: DepsGenerar): Promise<ResultadoG
   } else if (nivel === 'ahorro' || nivel === 'tope') {
     // Modo ahorro: sin votos del crítico ni reescrituras (~40 % menos gasto por mensaje)
     revision.motivoOmitida = 'presupuesto'
+  } else if (respuesta.solo_reaccion) {
+    // Solo una reacción a un "gracias": no hay texto que revisar
+    revision.motivoOmitida = 'solo_reaccion'
   } else if (!settings.sales_critic_enabled) {
     revision.motivoOmitida = 'apagada'
   } else if (deps.ahora() - args.inicioMs > PRESUPUESTO_REVISION_MS) {
@@ -201,5 +207,21 @@ async function generar(args: ArgsGenerar, deps: DepsGenerar): Promise<ResultadoG
   respuesta.reply = quitarMuletillaRepetida(respuesta.reply, dichos)
   respuesta.extra_messages = respuesta.extra_messages.map((extra, i) =>
     quitarMuletillaRepetida(extra, [...dichos, respuesta.reply, ...respuesta.extra_messages!.slice(0, i)]))
-  return { respuesta, revision }
+  respuesta.reply = naturalizarPuntuacion(respuesta.reply)
+  respuesta.extra_messages = respuesta.extra_messages.map(naturalizarPuntuacion)
+
+  // 5. Armadura de salida: si la respuesta filtra el prompt o el JSON interno, no
+  // sale; los links que no son nuestros se quitan (phishing a nombre de GT)
+  let salidaBloqueada = false
+  if (respuesta.reply) {
+    const r = revisarSalida(respuesta.reply)
+    respuesta.reply = r.texto
+    salidaBloqueada = r.bloqueada
+  }
+  respuesta.extra_messages = respuesta.extra_messages
+    .map(e => revisarSalida(e))
+    .filter(r => { if (r.bloqueada) salidaBloqueada = true; return !r.bloqueada })
+    .map(r => r.texto)
+  if (salidaBloqueada) console.warn('[generar-respuesta] armadura: respuesta con fuga de instrucciones o links ajenos — se envió la versión segura')
+  return { respuesta, revision, salidaBloqueada }
 }

@@ -31,25 +31,29 @@ export function parseWebhook(raw: unknown): ParsedWebhook | null {
   return parseWebhookMessages(raw)[0] ?? null
 }
 
+function texto(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() ? v.trim() : null
+}
+
 function parseSingleMessage(msg: Record<string, unknown>): ParsedWebhook | null {
   try {
-    const type = (msg.type as string) as MessageType
+    const conocidos: MessageType[] = ['text', 'image', 'audio', 'document', 'video', 'interactive', 'location', 'sticker', 'reaction', 'contacts']
+    const type: MessageType = conocidos.includes(msg.type as MessageType) ? (msg.type as MessageType) : 'unknown'
+    const interactive = msg.interactive as Record<string, Record<string, string>> | undefined
     const body = type === 'text'
       ? ((msg.text as Record<string, string>)?.body ?? '')
       : type === 'interactive'
-      ? ((msg.interactive as Record<string, Record<string, string>>)?.button_reply?.title ?? '')
+      ? (interactive?.button_reply?.title ?? interactive?.list_reply?.title ?? '')
       : ''
 
-    let mediaId: string | null = null
-    if (type === 'audio') {
-      mediaId = (msg.audio as Record<string, string>)?.id ?? null
-    } else if (type === 'image') {
-      mediaId = (msg.image as Record<string, string>)?.id ?? null
-    } else if (type === 'video') {
-      mediaId = (msg.video as Record<string, string>)?.id ?? null
-    } else if (type === 'document') {
-      mediaId = (msg.document as Record<string, string>)?.id ?? null
-    }
+    const media = (type === 'audio' || type === 'image' || type === 'video' || type === 'document' || type === 'sticker')
+      ? (msg[type] as Record<string, string> | undefined)
+      : undefined
+    const mediaId = media?.id ?? null
+
+    const loc = msg.location as Record<string, unknown> | undefined
+    const reaction = msg.reaction as Record<string, string> | undefined
+    const contacts = msg.contacts as { name?: { formatted_name?: string }; phones?: { phone?: string }[] }[] | undefined
 
     const rawReferral = msg.referral as Record<string, string> | undefined
     const referral: WaReferral | null = rawReferral
@@ -72,6 +76,15 @@ function parseSingleMessage(msg: Record<string, unknown>): ParsedWebhook | null 
       timestamp: parseInt(msg.timestamp as string, 10),
       mediaId,
       referral,
+      caption: texto(media?.caption),
+      filename: texto(media?.filename),
+      mimeType: texto(media?.mime_type),
+      contextId: texto((msg.context as Record<string, string> | undefined)?.id),
+      location: loc && typeof loc.latitude === 'number' && typeof loc.longitude === 'number'
+        ? { latitude: loc.latitude, longitude: loc.longitude, name: texto(loc.name), address: texto(loc.address) }
+        : null,
+      reaction: reaction ? { messageId: reaction.message_id ?? null, emoji: texto(reaction.emoji) } : null,
+      contacts: (contacts ?? []).map(c => ({ name: texto(c.name?.formatted_name), phone: texto(c.phones?.[0]?.phone) })),
     }
   } catch {
     return null

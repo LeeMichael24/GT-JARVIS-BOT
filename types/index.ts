@@ -1,7 +1,7 @@
 export type LeadStage = 'new' | 'warm' | 'hot' | 'cold'
 export type ConversationRole = 'user' | 'assistant' | 'human'
 export type TeamRole = 'admin' | 'asesor'
-export type MessageType = 'text' | 'image' | 'audio' | 'document' | 'video' | 'interactive' | 'unknown'
+export type MessageType = 'text' | 'image' | 'audio' | 'document' | 'video' | 'interactive' | 'location' | 'sticker' | 'reaction' | 'contacts' | 'unknown'
 
 export interface QualificationData {
   purpose: 'vivienda_propia' | 'inversion' | 'ambos' | null
@@ -46,6 +46,15 @@ export interface ParsedWebhook {
   timestamp: number
   mediaId: string | null
   referral: WaReferral | null
+  /** Pie de foto/video/documento que escribió el cliente */
+  caption?: string | null
+  filename?: string | null
+  mimeType?: string | null
+  /** wa_message_id del mensaje que el cliente citó al responder */
+  contextId?: string | null
+  location?: { latitude: number; longitude: number; name: string | null; address: string | null } | null
+  reaction?: { messageId: string | null; emoji: string | null } | null
+  contacts?: { name: string | null; phone: string | null }[]
 }
 
 export interface GTSubInvestment {
@@ -172,6 +181,10 @@ export interface ClaudeResponse {
   // Oportunidad fuera del catálogo: propietario que quiere vender/rentar con
   // nosotros, o cliente que busca algo que no tenemos (ver lib/solicitudes.ts)
   solicitud?: SolicitudInmueble | null
+  // Reacción de WhatsApp al último mensaje del cliente (👍 ❤️ 😄…)
+  reaccion?: string | null
+  // true = solo se reacciona, sin texto (un "gracias" que cierra la charla)
+  solo_reaccion?: boolean
 }
 
 export interface SolicitudInmueble {
